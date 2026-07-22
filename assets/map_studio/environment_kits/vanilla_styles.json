@@ -1,0 +1,163 @@
+{
+  "games": [
+    "K1",
+    "K2"
+  ],
+  "schema": "ghostrigger.map-building-style-vanilla/v1",
+  "style_count": 9,
+  "styles": [
+    {
+      "ceiling_texture": "lhr_tech01",
+      "floor_texture": "lhr_flr01",
+      "game": "K1",
+      "label": "K1 \u00b7 m01aa \u00b7 Interior",
+      "source_module": "m01aa",
+      "source_room": "m01aa_08c",
+      "style_id": "vanilla_k1_m01aa_m01aa_08c",
+      "tags": [
+        "k1",
+        "m01aa",
+        "m01aa_08c",
+        "vanilla",
+        "interior"
+      ],
+      "wall_texture": "lhr_wall01"
+    },
+    {
+      "ceiling_texture": "lda_sky0005",
+      "floor_texture": "lda_sky0003",
+      "game": "K1",
+      "label": "K1 \u00b7 m13aa \u00b7 Exterior",
+      "source_module": "m13aa",
+      "source_room": "m13aa_99z",
+      "style_id": "vanilla_k1_m13aa_m13aa_99z",
+      "tags": [
+        "k1",
+        "m13aa",
+        "m13aa_99z",
+        "vanilla",
+        "exterior"
+      ],
+      "wall_texture": "lda_sky0003"
+    },
+    {
+      "ceiling_texture": "lta_sky0005",
+      "floor_texture": "lta_wall02",
+      "game": "K1",
+      "label": "K1 \u00b7 m17aa \u00b7 Exterior",
+      "source_module": "m17aa",
+      "source_room": "m17aa_54",
+      "style_id": "vanilla_k1_m17aa_m17aa_54",
+      "tags": [
+        "k1",
+        "m17aa",
+        "m17aa_54",
+        "vanilla",
+        "exterior"
+      ],
+      "wall_texture": "lta_wall02"
+    },
+    {
+      "ceiling_texture": "lma_ocean",
+      "floor_texture": "lma_ocean",
+      "game": "K1",
+      "label": "K1 \u00b7 m26aa \u00b7 Exterior",
+      "source_module": "m26aa",
+      "source_room": "m26aa_se2",
+      "style_id": "vanilla_k1_m26aa_m26aa_se2",
+      "tags": [
+        "k1",
+        "m26aa",
+        "m26aa_se2",
+        "vanilla",
+        "exterior"
+      ],
+      "wall_texture": "lma_ocean"
+    },
+    {
+      "ceiling_texture": "per_pipe",
+      "floor_texture": "tmp_ground_01",
+      "game": "K2",
+      "label": "K2 \u00b7 101per \u00b7 Interior",
+      "source_module": "101per",
+      "source_room": "101perz",
+      "style_id": "vanilla_k2_101per_101perz",
+      "tags": [
+        "k2",
+        "101per",
+        "101perz",
+        "vanilla",
+        "interior"
+      ],
+      "wall_texture": "per_tr02"
+    },
+    {
+      "ceiling_texture": "tel_hcl1",
+      "floor_texture": "tel_hf2",
+      "game": "K2",
+      "label": "K2 \u00b7 201tel \u00b7 Interior",
+      "source_module": "201tel",
+      "source_room": "201tel05",
+      "style_id": "vanilla_k2_201tel_201tel05",
+      "tags": [
+        "k2",
+        "201tel",
+        "201tel05",
+        "vanilla",
+        "interior"
+      ],
+      "wall_texture": "tel_hbms"
+    },
+    {
+      "ceiling_texture": "tel_nshtl",
+      "floor_texture": "tel_rock02",
+      "game": "K2",
+      "label": "K2 \u00b7 231tel \u00b7 Exterior",
+      "source_module": "231tel",
+      "source_room": "231tela",
+      "style_id": "vanilla_k2_231tel_231tela",
+      "tags": [
+        "k2",
+        "231tel",
+        "231tela",
+        "vanilla",
+        "exterior"
+      ],
+      "wall_texture": "tel_nshtl"
+    },
+    {
+      "ceiling_texture": "nar_lt01",
+      "floor_texture": "nar_wl07",
+      "game": "K2",
+      "label": "K2 \u00b7 301nar \u00b7 Interior",
+      "source_module": "301nar",
+      "source_room": "301narj",
+      "style_id": "vanilla_k2_301nar_301narj",
+      "tags": [
+        "k2",
+        "301nar",
+        "301narj",
+        "vanilla",
+        "interior"
+      ],
+      "wall_texture": "nar_tr01"
+    },
+    {
+      "ceiling_texture": "dxn_flora1",
+      "floor_texture": "dxn_grs5",
+      "game": "K2",
+      "label": "K2 \u00b7 401dxn \u00b7 Exterior",
+      "source_module": "401dxn",
+      "source_room": "401dxnj",
+      "style_id": "vanilla_k2_401dxn_401dxnj",
+      "tags": [
+        "k2",
+        "401dxn",
+        "401dxnj",
+        "vanilla",
+        "exterior"
+      ],
+      "wall_texture": "dxn_flora1"
+    }
+  ]
+}

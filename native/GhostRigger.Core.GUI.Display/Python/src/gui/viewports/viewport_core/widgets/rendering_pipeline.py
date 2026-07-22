@@ -374,12 +374,13 @@ class ViewportRenderingPipelineMixin:
         if img is None:
             return None
         try:
-            from PIL import ImageDraw
+            from PIL import Image, ImageDraw
 
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
-            self._renderer._draw_grid(ImageDraw.Draw(img, "RGBA"), w, h)
-            return img
+            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            self._renderer._draw_grid(ImageDraw.Draw(overlay, "RGBA"), w, h)
+            return Image.alpha_composite(img, overlay)
         except Exception as exc:
             log.debug("X-Ray grid overlay draw failed: %s", exc)
             return img
@@ -632,10 +633,18 @@ class ViewportRenderingPipelineMixin:
             return None
         overlay_started = time_module.perf_counter()
         try:
-            from PIL import ImageDraw
+            from PIL import Image, ImageDraw
 
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
+            # Every editor guide is transient.  Keep brushes, placement ghosts,
+            # selections, gizmos, helpers, walkmesh guides, and future building
+            # previews on a disposable transparent layer instead of mutating the
+            # renderer's scene image.  Retained backends may reuse their last
+            # readback for overlay-only frames; direct drawing then leaves old
+            # guides behind as cyan/selection "paint" trails.
+            scene_img = img
+            overlay_img = Image.new("RGBA", scene_img.size, (0, 0, 0, 0))
             self._renderer._last_W = w
             self._renderer._last_H = h
             try:
@@ -644,7 +653,7 @@ class ViewportRenderingPipelineMixin:
                 self._renderer._frame_norms_cache = {}
             except Exception:
                 pass
-            draw = ImageDraw.Draw(img, "RGBA")
+            draw = ImageDraw.Draw(overlay_img, "RGBA")
             # Map Studio camera navigation is a latency-sensitive interaction.
             # The final mouse-release frame restores every authoring guide, but
             # orbit/pan/zoom frames retain only feedback needed to understand
@@ -664,13 +673,13 @@ class ViewportRenderingPipelineMixin:
             if self._renderer.show_bones and not native_skeleton:
                 self._renderer._draw_bones(draw, w, h)
                 if self._locomotion_disc_enabled:
-                    self._draw_locomotion_discs(img, w, h)
+                    self._draw_locomotion_discs(overlay_img, w, h)
                 # T401: paint AccuRig-style color-coded joint dots on top.
                 # Runs only when the skeleton is visible — the dots are
                 # meant to make joints clickable/identifiable during rig
                 # editing.  Cheap (one pass over `_bone_screen_positions`).
                 if self._joint_dot_enabled:
-                    self._draw_joint_dots(img, w, h)
+                    self._draw_joint_dots(overlay_img, w, h)
             if getattr(self._renderer, "_ext_skeleton", None) is not None:
                 self._renderer._draw_ext_skeleton(draw, w, h)
             if getattr(self._renderer, "_character_fit_overlay", None):
@@ -688,6 +697,7 @@ class ViewportRenderingPipelineMixin:
             self._draw_map_studio_texture_paint_cursor(draw, w, h)
             if not map_interaction_lod:
                 self._draw_map_studio_room_outlines(draw, w, h)
+            self._draw_map_studio_building_preview(draw, w, h)
             self._draw_map_studio_universal_transform_overlay(draw, w, h)
             self._draw_map_studio_placement_markers(draw, w, h)
             if not map_interaction_lod:
@@ -707,7 +717,7 @@ class ViewportRenderingPipelineMixin:
             if not map_interaction_lod:
                 self._draw_active_camera_overlays(draw, w, h)
             self._record_overlay_rebuild(time_module.perf_counter() - overlay_started)
-            return img
+            return Image.alpha_composite(scene_img, overlay_img)
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
@@ -824,18 +834,20 @@ class ViewportRenderingPipelineMixin:
         if img is None:
             return None
         try:
-            from PIL import ImageDraw
+            from PIL import Image, ImageDraw
 
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
+            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
             self._renderer._last_W = w
             self._renderer._last_H = h
             self._renderer._frame_view = self._renderer._cam_view_matrix()
-            self._draw_camera_helpers(ImageDraw.Draw(img, "RGBA"), w, h)
-            self._draw_transform_gizmo(ImageDraw.Draw(img, "RGBA"), w, h)
-            self._draw_measurement_overlay(ImageDraw.Draw(img, "RGBA"), w, h)
-            self._draw_active_camera_overlays(ImageDraw.Draw(img, "RGBA"), w, h)
-            return img
+            draw = ImageDraw.Draw(overlay, "RGBA")
+            self._draw_camera_helpers(draw, w, h)
+            self._draw_transform_gizmo(draw, w, h)
+            self._draw_measurement_overlay(draw, w, h)
+            self._draw_active_camera_overlays(draw, w, h)
+            return Image.alpha_composite(img, overlay)
         except Exception as exc:
             log.debug("Transform gizmo overlay draw failed: %s", exc)
             return img

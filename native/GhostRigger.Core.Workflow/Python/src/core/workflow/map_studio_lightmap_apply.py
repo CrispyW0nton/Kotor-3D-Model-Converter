@@ -234,6 +234,19 @@ def apply_imported_surface_lightmap(
         if len(mapping) != len(mesh.vertices):
             raise ValueError("Lightmap vertex source mapping does not match the remapped vertex count.")
 
+        # Shadow intent is room-wide even though the edit transaction applies
+        # one surface at a time.  Reuse the remapped target object so its
+        # rasterized mesh/triangle identifiers match the shadow solver, and
+        # adapt every sibling surface as an occluder in the same room space.
+        room_occluders = (
+            tuple(
+                mesh if index == surface_index else _surface_bake_mesh(surface, room.position)
+                for index, surface in enumerate(primitive.surfaces)
+            )
+            if bake_settings.use_shadows
+            else ()
+        )
+
         applied_surface = replace(
             source_surface,
             vertices=_vec3_tuple(mesh.vertices),
@@ -274,6 +287,7 @@ def apply_imported_surface_lightmap(
             mesh,
             active_lights,
             bake_settings,
+            occluder_meshes=room_occluders,
         )
         warnings.extend(bake_warnings)
         tpc_bytes = encode_kotor_lightmap_tpc_rgba(
@@ -310,6 +324,10 @@ def apply_imported_surface_lightmap(
             "lights": {
                 "active_room_light_count": len(active_lights),
                 "ignored_other_room_light_count": ignored_light_count,
+            },
+            "shadows": {
+                "room_occluder_surface_count": len(room_occluders) if bake_settings.use_shadows else 0,
+                "source_rejection": "exact_mesh_triangle",
             },
             "structural_preservation": {
                 "stable_surface_role": imported_mesh_surface_role(surface_index) == surface_role,
@@ -582,6 +600,8 @@ def _bake_surface_bytes(
     mesh: _SurfaceBakeMesh,
     lights: Sequence[_AuthoredBakeLight],
     settings: LightmapBakeSettings,
+    *,
+    occluder_meshes: Sequence[_SurfaceBakeMesh] | None = None,
 ) -> tuple[bytes, bytes, tuple[str, ...]]:
     """Run the existing renderer bake stages without invoking file output."""
 
@@ -590,7 +610,7 @@ def _bake_surface_bytes(
         raise ValueError("; ".join(validation.errors))
     shadow_solver = None
     if settings.use_shadows:
-        baker.shadow_solver.build_acceleration_structure([mesh])
+        baker.shadow_solver.build_acceleration_structure(tuple(occluder_meshes or (mesh,)))
         shadow_solver = baker.shadow_solver
     buffer = baker.rasterizer.rasterize_mesh(mesh, 1, settings.resolution)
     if not buffer.valid_mask.any():

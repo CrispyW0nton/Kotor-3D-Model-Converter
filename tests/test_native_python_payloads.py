@@ -111,7 +111,16 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # (adapters/rendering/moderngl_bloom.py).
     # 2026-07-21: retail particle-placeable compilation adds the Workflow
     # owner that bakes emitters into MDL/MDX and allocates placeables.2da.
-    assert len(payload_files) == 1366
+    # Custom-map authoring adds the reviewed OBJ parser/import service and UI,
+    # plus the panorama/HDR conversion adapter and its compact options dialog.
+        # The focused terrain sculpt shelf ships through Tools and GUI Display;
+        # the terrain-kit catalog/compiler ships through Scene and its visual
+        # browser ships through Tools and GUI Display, adding five payload rows.
+        # Pascal-style direct building and learned retail environment palettes
+        # ship through Scene and the embedded Tools consumer. The typed vanilla
+        # environment-kit catalog and its visual room-piece browser add paired
+        # Scene/Tools and GUI Display/Tools payload rows.
+    assert len(payload_files) == 1382
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

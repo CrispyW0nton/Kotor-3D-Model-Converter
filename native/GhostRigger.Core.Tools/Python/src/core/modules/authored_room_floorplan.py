@@ -42,7 +42,10 @@ class FloorPlanRoomPrimitive:
     wall_height: float = 3.0
     floor_surface_id: int | str = 4
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+    wall_material: PrimitiveMaterial | None = None
+    ceiling_material: PrimitiveMaterial | None = None
     include_walls: bool = True
+    include_ceiling: bool = False
     openings: tuple[FloorPlanWallOpening, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -176,6 +179,102 @@ def _fan_faces(point_count: int) -> tuple[Face, ...]:
     return tuple((0, index, index + 1) for index in range(1, point_count - 1))
 
 
+def _orientation(a: Vec2, b: Vec2, c: Vec2) -> float:
+    return ((b[0] - a[0]) * (c[1] - a[1])) - ((b[1] - a[1]) * (c[0] - a[0]))
+
+
+def _point_on_segment(point: Vec2, start: Vec2, end: Vec2) -> bool:
+    if abs(_orientation(start, end, point)) > 1.0e-8:
+        return False
+    return (
+        min(start[0], end[0]) - 1.0e-8 <= point[0] <= max(start[0], end[0]) + 1.0e-8
+        and min(start[1], end[1]) - 1.0e-8 <= point[1] <= max(start[1], end[1]) + 1.0e-8
+    )
+
+
+def _segments_intersect(first_a: Vec2, first_b: Vec2, second_a: Vec2, second_b: Vec2) -> bool:
+    o1 = _orientation(first_a, first_b, second_a)
+    o2 = _orientation(first_a, first_b, second_b)
+    o3 = _orientation(second_a, second_b, first_a)
+    o4 = _orientation(second_a, second_b, first_b)
+    if ((o1 > 1.0e-8 and o2 < -1.0e-8) or (o1 < -1.0e-8 and o2 > 1.0e-8)) and (
+        (o3 > 1.0e-8 and o4 < -1.0e-8) or (o3 < -1.0e-8 and o4 > 1.0e-8)
+    ):
+        return True
+    return any(
+        (
+            abs(value) <= 1.0e-8
+            and _point_on_segment(point, start, end)
+        )
+        for value, point, start, end in (
+            (o1, second_a, first_a, first_b),
+            (o2, second_b, first_a, first_b),
+            (o3, first_a, second_a, second_b),
+            (o4, first_b, second_a, second_b),
+        )
+    )
+
+
+def _has_self_intersections(points: tuple[Vec2, ...]) -> bool:
+    count = len(points)
+    for first_index in range(count):
+        first_next = (first_index + 1) % count
+        for second_index in range(first_index + 1, count):
+            second_next = (second_index + 1) % count
+            if first_index in {second_index, second_next} or first_next in {second_index, second_next}:
+                continue
+            if _segments_intersect(
+                points[first_index],
+                points[first_next],
+                points[second_index],
+                points[second_next],
+            ):
+                return True
+    return False
+
+
+def _point_in_triangle(point: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool:
+    first = _orientation(a, b, point)
+    second = _orientation(b, c, point)
+    third = _orientation(c, a, point)
+    return first >= -1.0e-8 and second >= -1.0e-8 and third >= -1.0e-8
+
+
+def triangulate_floor_plan_points(points: tuple[Vec2, ...]) -> tuple[Face, ...]:
+    """Ear-clip one simple footprint into engine-safe floor triangles."""
+
+    source = _ccw_points(_normalise_points(points))
+    if len(source) < 3:
+        return ()
+    remaining = list(range(len(source)))
+    faces: list[Face] = []
+    guard = len(source) * len(source)
+    while len(remaining) > 3 and guard > 0:
+        guard -= 1
+        clipped = False
+        for offset, current in enumerate(tuple(remaining)):
+            previous = remaining[(offset - 1) % len(remaining)]
+            following = remaining[(offset + 1) % len(remaining)]
+            a, b, c = source[previous], source[current], source[following]
+            if _orientation(a, b, c) <= 1.0e-8:
+                continue
+            if any(
+                _point_in_triangle(source[candidate], a, b, c)
+                for candidate in remaining
+                if candidate not in {previous, current, following}
+            ):
+                continue
+            faces.append((previous, current, following))
+            remaining.pop(offset)
+            clipped = True
+            break
+        if not clipped:
+            raise ValueError("Floor-plan footprint could not be triangulated; remove crossing or overlapping wall segments.")
+    if len(remaining) == 3:
+        faces.append((remaining[0], remaining[1], remaining[2]))
+    return tuple(faces)
+
+
 def _mesh_uvs(points: tuple[Vec2, ...]) -> tuple[Vec2, ...]:
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
@@ -261,8 +360,13 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
     area = abs(polygon_signed_area(points))
     if area <= 1.0e-7:
         blocking.append("Floor-plan room footprint must have non-zero area.")
-    if points and not _is_convex(points):
-        blocking.append("Floor-plan room currently supports convex footprints only; split concave rooms into multiple primitives.")
+    if len(points) >= 4 and _has_self_intersections(points):
+        blocking.append("Floor-plan walls cannot cross or overlap; move the crossing corner before closing the room.")
+    elif len(points) >= 3:
+        try:
+            triangulate_floor_plan_points(points)
+        except ValueError as exc:
+            blocking.append(str(exc))
     if float(primitive.wall_height) <= 0.0:
         blocking.append("Floor-plan room wall height must be positive.")
     openings_by_edge: set[int] = set()
@@ -359,7 +463,10 @@ def apply_floor_plan_inset(primitive: FloorPlanRoomPrimitive, operation: FloorPl
         wall_height=primitive.wall_height,
         floor_surface_id=primitive.floor_surface_id,
         material=primitive.material,
+        wall_material=primitive.wall_material,
+        ceiling_material=primitive.ceiling_material,
         include_walls=primitive.include_walls,
+        include_ceiling=primitive.include_ceiling,
         openings=(),
         metadata=metadata,
     )
@@ -423,7 +530,10 @@ def apply_floor_plan_bevel(primitive: FloorPlanRoomPrimitive, operation: FloorPl
         wall_height=primitive.wall_height,
         floor_surface_id=primitive.floor_surface_id,
         material=primitive.material,
+        wall_material=primitive.wall_material,
+        ceiling_material=primitive.ceiling_material,
         include_walls=primitive.include_walls,
+        include_ceiling=primitive.include_ceiling,
         openings=(),
         metadata=metadata,
     )
@@ -492,7 +602,10 @@ def apply_floor_plan_edge_extrude(
         wall_height=primitive.wall_height,
         floor_surface_id=primitive.floor_surface_id,
         material=primitive.material,
+        wall_material=primitive.wall_material,
+        ceiling_material=primitive.ceiling_material,
         include_walls=primitive.include_walls,
+        include_ceiling=primitive.include_ceiling,
         openings=(),
         metadata=metadata,
     )
@@ -532,8 +645,12 @@ def _require_union_compatible_primitives(first: FloorPlanRoomPrimitive, second: 
         raise ValueError("Floor-plan rectangular union requires matching walkmesh surface types.")
     if first.material != second.material:
         raise ValueError("Floor-plan rectangular union requires matching room materials.")
+    if first.wall_material != second.wall_material or first.ceiling_material != second.ceiling_material:
+        raise ValueError("Floor-plan rectangular union requires matching wall and ceiling materials.")
     if bool(first.include_walls) != bool(second.include_walls):
         raise ValueError("Floor-plan rectangular union requires matching wall generation settings.")
+    if bool(first.include_ceiling) != bool(second.include_ceiling):
+        raise ValueError("Floor-plan rectangular union requires matching ceiling generation settings.")
 
 
 def apply_floor_plan_rectangular_union(
@@ -577,7 +694,10 @@ def apply_floor_plan_rectangular_union(
         wall_height=first.wall_height,
         floor_surface_id=first.floor_surface_id,
         material=first.material,
+        wall_material=first.wall_material,
+        ceiling_material=first.ceiling_material,
         include_walls=first.include_walls,
+        include_ceiling=first.include_ceiling,
         openings=(),
         metadata=metadata,
     )
@@ -652,7 +772,10 @@ def apply_floor_plan_rectangular_cut(
                 wall_height=primitive.wall_height,
                 floor_surface_id=primitive.floor_surface_id,
                 material=primitive.material,
+                wall_material=primitive.wall_material,
+                ceiling_material=primitive.ceiling_material,
                 include_walls=primitive.include_walls,
+                include_ceiling=primitive.include_ceiling,
                 openings=(),
                 metadata=metadata,
             )
@@ -721,7 +844,10 @@ def apply_floor_plan_axis_split(
                 wall_height=primitive.wall_height,
                 floor_surface_id=primitive.floor_surface_id,
                 material=primitive.material,
+                wall_material=primitive.wall_material,
+                ceiling_material=primitive.ceiling_material,
                 include_walls=primitive.include_walls,
+                include_ceiling=primitive.include_ceiling,
                 openings=(),
                 metadata=metadata,
             )
@@ -730,7 +856,7 @@ def apply_floor_plan_axis_split(
 
 
 def build_floor_plan_floor_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveMesh:
-    """Build a triangulated floor mesh from a convex floor-plan footprint."""
+    """Build a triangulated floor mesh from a simple floor-plan footprint."""
 
     validation = validate_floor_plan_room_primitive(primitive)
     if not validation.ok:
@@ -743,7 +869,7 @@ def build_floor_plan_floor_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveM
     return PrimitiveMesh(
         name=f"{room_resref}_floor",
         vertices=vertices,
-        faces=_fan_faces(len(points)),
+        faces=triangulate_floor_plan_points(points),
         normals=((0.0, 0.0, 1.0),) * len(vertices),
         uvs=_mesh_uvs(points),
         texture=primitive.material.texture,
@@ -770,12 +896,31 @@ def build_floor_plan_wok(primitive: FloorPlanRoomPrimitive) -> WOKData:
     points = _ccw_points(_normalise_points(primitive.points))
     vertices: list[Vec3] = [(x, y, float(primitive.z)) for x, y in points]
     surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
-    faces: list[WOKFace] = []
-    triangle_count = len(points) - 2
-    for index in range(triangle_count):
-        prev_adj = index - 1 if index > 0 else -1
-        next_adj = index + 1 if index < triangle_count - 1 else -1
-        faces.append(WOKFace(0, index + 1, index + 2, surface=surface_id, adj1=prev_adj, adj2=-1, adj3=next_adj))
+    triangles = triangulate_floor_plan_points(points)
+    adjacency = [[-1, -1, -1] for _face in triangles]
+    edge_owners: dict[tuple[int, int], tuple[int, int]] = {}
+    for face_index, (a, b, c) in enumerate(triangles):
+        for edge_index, edge in enumerate(((a, b), (b, c), (c, a))):
+            key = tuple(sorted(edge))
+            previous = edge_owners.get(key)
+            if previous is None:
+                edge_owners[key] = (face_index, edge_index)
+                continue
+            other_face, other_edge = previous
+            adjacency[face_index][edge_index] = other_face
+            adjacency[other_face][other_edge] = face_index
+    faces = [
+        WOKFace(
+            a,
+            b,
+            c,
+            surface=surface_id,
+            adj1=adjacency[index][0],
+            adj2=adjacency[index][1],
+            adj3=adjacency[index][2],
+        )
+        for index, (a, b, c) in enumerate(triangles)
+    ]
     return WOKData(verts=vertices, faces=faces)
 
 
@@ -791,6 +936,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
     room_resref = _normalise_resref(primitive.room_resref)
     z = float(primitive.z)
     top_z = z + float(primitive.wall_height)
+    wall_material = primitive.wall_material or primitive.material
     openings_by_edge = {int(opening.edge_index): opening for opening in primitive.openings}
     meshes: list[PrimitiveMesh] = []
     for index, (x0, y0) in enumerate(points):
@@ -808,7 +954,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
                 _quad_mesh(
                     name=f"{room_resref}_wall_{index + 1:02d}",
                     vertices=((x0, y0, z), (x1, y1, z), (x1, y1, top_z), (x0, y0, top_z)),
-                    material=primitive.material,
+                    material=wall_material,
                     metadata=base_metadata,
                 )
             )
@@ -833,7 +979,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
                 _quad_mesh(
                     name=f"{room_resref}_wall_{index + 1:02d}_left",
                     vertices=((x0, y0, z), (start[0], start[1], z), (start[0], start[1], top_z), (x0, y0, top_z)),
-                    material=primitive.material,
+                    material=wall_material,
                     metadata={**opening_metadata, "wall_panel": "opening_left"},
                 )
             )
@@ -842,7 +988,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
                 _quad_mesh(
                     name=f"{room_resref}_wall_{index + 1:02d}_sill",
                     vertices=((start[0], start[1], z), (end[0], end[1], z), (end[0], end[1], opening_bottom), (start[0], start[1], opening_bottom)),
-                    material=primitive.material,
+                    material=wall_material,
                     metadata={**opening_metadata, "wall_panel": "opening_sill"},
                 )
             )
@@ -850,7 +996,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
             _quad_mesh(
                 name=f"{room_resref}_wall_{index + 1:02d}_lintel",
                 vertices=((start[0], start[1], opening_top), (end[0], end[1], opening_top), (end[0], end[1], top_z), (start[0], start[1], top_z)),
-                material=primitive.material,
+                material=wall_material,
                 metadata={**opening_metadata, "wall_panel": "opening_lintel"},
             )
         )
@@ -859,11 +1005,41 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
                 _quad_mesh(
                     name=f"{room_resref}_wall_{index + 1:02d}_right",
                     vertices=((end[0], end[1], z), (x1, y1, z), (x1, y1, top_z), (end[0], end[1], top_z)),
-                    material=primitive.material,
+                    material=wall_material,
                     metadata={**opening_metadata, "wall_panel": "opening_right"},
                 )
             )
     return tuple(meshes)
+
+
+def build_floor_plan_ceiling_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveMesh | None:
+    """Build an optional inward-facing ceiling for closed interior rooms."""
+
+    if not primitive.include_ceiling:
+        return None
+    validation = validate_floor_plan_room_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    points = _ccw_points(_normalise_points(primitive.points))
+    top_z = float(primitive.z) + float(primitive.wall_height)
+    vertices: tuple[Vec3, ...] = tuple((x, y, top_z) for x, y in points)
+    material = primitive.ceiling_material or primitive.wall_material or primitive.material
+    faces = tuple((c, b, a) for a, b, c in triangulate_floor_plan_points(points))
+    return PrimitiveMesh(
+        name=f"{_normalise_resref(primitive.room_resref)}_ceiling",
+        vertices=vertices,
+        faces=faces,
+        normals=((0.0, 0.0, -1.0),) * len(vertices),
+        uvs=_mesh_uvs(points),
+        texture=material.texture,
+        diffuse=material.diffuse,
+        ambient=material.ambient,
+        metadata={
+            "primitive": "floor_plan_ceiling",
+            "source": "map_studio:pascal_building",
+            **dict(material.metadata),
+        },
+    )
 
 
 def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> AuthoredRoomGeometry:
@@ -873,7 +1049,11 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
     floor_mesh = build_floor_plan_floor_mesh(primitive)
-    helper_meshes = build_floor_plan_wall_meshes(primitive)
+    wall_meshes = build_floor_plan_wall_meshes(primitive)
+    helper_meshes = wall_meshes
+    ceiling = build_floor_plan_ceiling_mesh(primitive)
+    if ceiling is not None:
+        helper_meshes = helper_meshes + (ceiling,)
     surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     room_resref = _normalise_resref(primitive.room_resref)
     return AuthoredRoomGeometry(
@@ -886,8 +1066,9 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
             "primitive": "floor_plan_extrusion",
             "source": "src.core.modules.authored_room_floorplan",
             "point_count": len(_normalise_points(primitive.points)),
-            "wall_count": len(helper_meshes),
+            "wall_count": len(wall_meshes),
             "opening_count": len(primitive.openings),
+            "has_ceiling": bool(ceiling is not None),
             "wall_height": float(primitive.wall_height),
             "polygon_area": validation.area,
             "floor_surface_id": surface_id,
@@ -915,11 +1096,13 @@ __all__ = [
     "apply_floor_plan_rectangular_union",
     "bevel_floor_plan_points",
     "build_floor_plan_floor_mesh",
+    "build_floor_plan_ceiling_mesh",
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",
     "compile_floor_plan_room_geometry",
     "extrude_floor_plan_edge_points",
     "inset_floor_plan_points",
+    "triangulate_floor_plan_points",
     "polygon_signed_area",
     "validate_floor_plan_room_primitive",
 ]

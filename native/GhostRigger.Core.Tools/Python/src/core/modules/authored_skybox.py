@@ -1,10 +1,11 @@
-"""Headless five-face skybox authoring for Map Studio.
+"""Headless five-sector sky-dome authoring for Map Studio.
 
-This module owns only the deterministic authored-room recipe.  Panorama and
-HDR conversion belongs in a later image/texture adapter; callers provide five
-already-imported KOTOR texture resrefs here (north, east, south, west, top).
-The resulting room is an ordinary ``ImportedMeshRoomPrimitive`` so the
-existing KMAP and module-export paths can carry it without a parallel format.
+Callers provide five imported KOTOR texture resrefs (north, east, south, west,
+top).  The sectors use a subdivided cube-to-ellipsoid projection: adjacent
+edges are coincident, the surface reads as a dome from inside, and the result
+remains an ordinary ``ImportedMeshRoomPrimitive`` that existing KMAP/MDL
+export paths can carry without a parallel runtime format.  Like retail-scale
+Odyssey backdrop rooms, it is visual-only and receives an exact empty WOK.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ SKYBOX_FACE_ORDER = ("north", "east", "south", "west", "top")
 SKYBOX_SURFACE_ROLE = "visual_only_backdrop"
 SKYBOX_ROOM_ROLE = "visual_only_backdrop"
 SKYBOX_AUTHORING_KIND = "five_face_skybox"
+SKYBOX_DOME_SUBDIVISIONS = 12
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,7 @@ class FiveFaceSkyboxTextures:
 
 @dataclass(frozen=True)
 class FiveFaceSkyboxSpec:
-    """Editable intent for a visual-only, five-face skybox room.
+    """Editable intent for a visual-only, five-sector sky-dome room.
 
     Geometry uses KOTOR's Z-up room space.  North is +Y and east is +X.
     ``bottom_z`` and ``top_z`` are room-local, while ``position`` is the LYT
@@ -132,55 +134,76 @@ def build_empty_skybox_wok(room_resref: str) -> WOKData:
     return WOKData(name=normalise_resref(room_resref), verts=[], faces=[])
 
 
-def _face_vertices(
-    face: str,
-    *,
-    half_extent: float,
-    bottom_z: float,
-    top_z: float,
-) -> tuple[Vec3, Vec3, Vec3, Vec3]:
-    e = float(half_extent)
-    b = float(bottom_z)
-    t = float(top_z)
-    # Vertex order is counter-clockwise when each panel is viewed from inside
-    # the box; (0, 1, 2) therefore points toward the room interior.
-    vertices = {
-        "north": ((-e, e, b), (e, e, b), (e, e, t), (-e, e, t)),
-        "east": ((e, e, b), (e, -e, b), (e, -e, t), (e, e, t)),
-        "south": ((e, -e, b), (-e, -e, b), (-e, -e, t), (e, -e, t)),
-        "west": ((-e, -e, b), (-e, e, b), (-e, e, t), (-e, -e, t)),
-        "top": ((-e, -e, t), (-e, e, t), (e, e, t), (e, -e, t)),
-    }
-    return vertices[face]
+def _face_direction(face: str, u: float, v: float) -> Vec3:
+    """Return the cube-map direction matching the legacy five-face UV order."""
 
-
-def _inward_normal(face: str) -> Vec3:
-    return {
-        "north": (0.0, -1.0, 0.0),
-        "east": (-1.0, 0.0, 0.0),
-        "south": (0.0, 1.0, 0.0),
-        "west": (1.0, 0.0, 0.0),
-        "top": (0.0, 0.0, -1.0),
+    a = (2.0 * float(u)) - 1.0
+    b = (2.0 * float(v)) - 1.0
+    direction = {
+        "north": (a, 1.0, b),
+        "east": (1.0, -a, b),
+        "south": (-a, -1.0, b),
+        "west": (-1.0, a, b),
+        "top": (b, a, 1.0),
     }[face]
+    length = math.sqrt(sum(component * component for component in direction))
+    return tuple(component / length for component in direction)  # type: ignore[return-value]
+
+
+def _dome_vertex(face: str, u: float, v: float, spec: FiveFaceSkyboxSpec) -> tuple[Vec3, Vec3]:
+    direction = _face_direction(face, u, v)
+    horizontal_radius = float(spec.half_extent)
+    bottom = float(spec.bottom_z)
+    top = float(spec.top_z)
+    center_z = (bottom + top) * 0.5
+    vertical_radius = (top - bottom) * 0.5
+    point = (
+        direction[0] * horizontal_radius,
+        direction[1] * horizontal_radius,
+        center_z + (direction[2] * vertical_radius),
+    )
+    # Ellipsoid gradient, negated because the sky renders from inside.
+    gradient = (
+        point[0] / (horizontal_radius * horizontal_radius),
+        point[1] / (horizontal_radius * horizontal_radius),
+        (point[2] - center_z) / (vertical_radius * vertical_radius),
+    )
+    length = math.sqrt(sum(component * component for component in gradient))
+    normal = tuple(-component / length for component in gradient)
+    return point, normal  # type: ignore[return-value]
 
 
 def _surface(face: str, texture: str, spec: FiveFaceSkyboxSpec) -> ImportedMeshSurface:
-    vertices = _face_vertices(
-        face,
-        half_extent=float(spec.half_extent),
-        bottom_z=float(spec.bottom_z),
-        top_z=float(spec.top_z),
-    )
-    normal = _inward_normal(face)
-    average = tuple(sum(vertex[axis] for vertex in vertices) / 4.0 for axis in range(3))
+    divisions = SKYBOX_DOME_SUBDIVISIONS
+    vertices: list[Vec3] = []
+    normals: list[Vec3] = []
+    uvs: list[tuple[float, float]] = []
+    for row in range(divisions + 1):
+        v = row / divisions
+        for column in range(divisions + 1):
+            u = column / divisions
+            point, normal = _dome_vertex(face, u, v, spec)
+            vertices.append(point)
+            normals.append(normal)
+            uvs.append((u, v))
+    faces: list[tuple[int, int, int]] = []
+    for row in range(divisions):
+        for column in range(divisions):
+            lower_left = (row * (divisions + 1)) + column
+            lower_right = lower_left + 1
+            upper_left = lower_left + divisions + 1
+            upper_right = upper_left + 1
+            faces.append((lower_left, lower_right, upper_right))
+            faces.append((lower_left, upper_right, upper_left))
+    average = tuple(sum(vertex[axis] for vertex in vertices) / len(vertices) for axis in range(3))
     return ImportedMeshSurface(
         name=f"sky_{face}",
         texture=normalise_resref(texture),
-        vertices=vertices,
-        faces=((0, 1, 2), (0, 2, 3)),
-        face_mats=(0, 0),
-        uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
-        normals=(normal,) * 4,
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+        face_mats=(0,) * len(faces),
+        uvs=tuple(uvs),
+        normals=tuple(normals),
         texture_names=(normalise_resref(texture),),
         tex_count=1,
         has_shadow=False,
@@ -228,6 +251,8 @@ def build_five_face_skybox_room(spec: FiveFaceSkyboxSpec) -> AuthoredRoomSpec:
         "backdrop_only": True,
         "is_backdrop": True,
         "walkmesh_policy": "exact_empty_wok",
+        "skybox_geometry": "curved_dome",
+        "skybox_subdivisions": SKYBOX_DOME_SUBDIVISIONS,
         "skybox_face_order": list(SKYBOX_FACE_ORDER),
         "surface_roles": role_rows,
         "texture_resrefs": {face: texture for face, texture in textures},
@@ -260,6 +285,7 @@ __all__ = [
     "FiveFaceSkyboxTextures",
     "FiveFaceSkyboxValidation",
     "SKYBOX_AUTHORING_KIND",
+    "SKYBOX_DOME_SUBDIVISIONS",
     "SKYBOX_FACE_ORDER",
     "SKYBOX_ROOM_ROLE",
     "SKYBOX_SURFACE_ROLE",

@@ -31,6 +31,7 @@ from core.modules.authored_imported_mesh import (  # noqa: E402
     split_imported_mesh_face,
     validate_imported_mesh_room_primitive,
 )
+import core.modules.authored_imported_mesh as authored_imported_mesh  # noqa: E402
 
 
 def _lightmapped_cube() -> ImportedMeshRoomPrimitive:
@@ -70,6 +71,53 @@ def _assert_channels_aligned(primitive: ImportedMeshRoomPrimitive) -> None:
         assert len(surface.uvs_lm) == len(surface.vertices)
         if surface.face_mats:
             assert len(surface.face_mats) == len(surface.faces)
+
+
+def test_repeated_validation_reuses_same_immutable_primitive_topology(monkeypatch) -> None:
+    primitive = _lightmapped_cube()
+    authored_imported_mesh._IMPORTED_MESH_VALIDATION_CACHE.pop(id(primitive), None)
+    topology_type = authored_imported_mesh.MeshTopology
+    original_build = topology_type.build.__func__
+    build_calls = 0
+
+    def counted_build(cls, *args, **kwargs):
+        nonlocal build_calls
+        build_calls += 1
+        return original_build(cls, *args, **kwargs)
+
+    monkeypatch.setattr(topology_type, "build", classmethod(counted_build))
+
+    first = validate_imported_mesh_room_primitive(primitive)
+    second = validate_imported_mesh_room_primitive(primitive)
+
+    assert first is second
+    assert build_calls == len(primitive.surfaces)
+
+
+def test_many_disconnected_raw_seam_boundaries_keep_deterministic_order() -> None:
+    """Heap-backed chain starts retain the historical minimum-edge order."""
+
+    island_count = 4_096
+    vertices = tuple(
+        point
+        for island in range(island_count)
+        for point in (
+            (float(island * 2), 0.0, 0.0),
+            (float(island * 2 + 1), 0.0, 0.0),
+            (float(island * 2), 1.0, 0.0),
+        )
+    )
+    faces = tuple(
+        (base, base + 1, base + 2)
+        for base in range(0, island_count * 3, 3)
+    )
+
+    topology = authored_imported_mesh.MeshTopology.build(vertices, faces)
+
+    assert len(topology.border_loops) == island_count
+    assert topology.border_loops[0] == [0, 1, 2, 0]
+    last = (island_count - 1) * 3
+    assert topology.border_loops[-1] == [last, last + 1, last + 2, last]
 
 
 def test_generated_topology_preserves_face_material_slots() -> None:

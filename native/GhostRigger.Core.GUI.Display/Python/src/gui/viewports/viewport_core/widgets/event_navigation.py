@@ -8,6 +8,52 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportEventNavigationMixin:
+    def set_map_studio_terrain_sculpt_input_lock(self, enabled: bool) -> None:
+        """Make sculpt strokes and shared viewport navigation mutually exclusive.
+
+        Map Studio supplies its own deliberate right-button orbit while this
+        lock is active.  Cancelling any generic navigation already in flight
+        prevents an Alt+left or middle-button gesture from leaking across the
+        moment Sculpt Mode is entered.
+        """
+
+        locked = bool(enabled)
+        self._gr_map_studio_terrain_sculpt_input_lock = locked
+        if not locked:
+            return
+        if getattr(self, "_nav_dragging", ""):
+            self._release_navigation(None)
+        cancel_marquee = getattr(self, "cancel_selection_marquee", None)
+        if callable(cancel_marquee):
+            cancel_marquee()
+        if bool(getattr(self, "_transform_gizmo_dragging", False)):
+            cancel_gizmo = getattr(self, "_cancel_transform_gizmo_drag", None)
+            if callable(cancel_gizmo):
+                cancel_gizmo()
+
+    def _consume_map_studio_terrain_navigation_event(self, event) -> bool:
+        """Fail closed if the Map Studio sculpt handler misses a drag event."""
+
+        if not bool(getattr(self, "_gr_map_studio_terrain_sculpt_input_lock", False)):
+            return False
+        event_type = event.type()
+        pointer_buttons = QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton | QtCore.Qt.RightButton
+        if event_type in {
+            QtCore.QEvent.MouseButtonPress,
+            QtCore.QEvent.MouseButtonDblClick,
+            QtCore.QEvent.MouseButtonRelease,
+        }:
+            consumes = bool(event.button() & pointer_buttons)
+        elif event_type == QtCore.QEvent.MouseMove:
+            consumes = bool(event.buttons() & pointer_buttons)
+        else:
+            consumes = False
+        if not consumes:
+            return False
+        if getattr(self, "_nav_dragging", ""):
+            self._release_navigation(None)
+        return True
+
     def _cycle_navigation_profile(self) -> None:
         order = ["3dsmax", "blender", "maya"]
         try:
@@ -47,6 +93,11 @@ class ViewportEventNavigationMixin:
             }:
                 map_studio_handler = getattr(self, "_gr_map_studio_viewport_input_handler", None)
                 if callable(map_studio_handler) and bool(map_studio_handler(event, obj)):
+                    return True
+                # Sculpt Mode owns pointer drags.  This fallback is deliberately
+                # after Map Studio's handler (so LMB paints and RMB orbits) but
+                # before every shared Maya/Max/Blender navigation path.
+                if self._consume_map_studio_terrain_navigation_event(event):
                     return True
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()

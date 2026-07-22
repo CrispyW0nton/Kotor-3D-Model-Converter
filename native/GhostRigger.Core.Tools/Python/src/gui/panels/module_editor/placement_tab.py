@@ -17,6 +17,7 @@ _PLACEMENT_ENTRY_ROLE = int(QtCore.Qt.ItemDataRole.UserRole) + 1
 _PLACEMENT_KIND_ROLE = _PLACEMENT_ENTRY_ROLE + 1
 _PLACEMENT_FAMILY_ROLE = _PLACEMENT_ENTRY_ROLE + 2
 _PLACEMENT_SEARCH_ROLE = _PLACEMENT_ENTRY_ROLE + 3
+_PLACEMENT_THUMBNAIL_STATE_ROLE = _PLACEMENT_ENTRY_ROLE + 4
 
 
 def _entry_value(entry: object, key: str, default: Any = "") -> Any:
@@ -52,7 +53,7 @@ def map_placement_drag_payload(entry: object, context: dict[str, Any]) -> dict[s
         "tag": tag,
         "bearing": float(context.get("bearing") or 0.0),
         "snap_to_walkmesh": bool(context.get("snap_to_walkmesh", True)),
-        "keep_placing": bool(context.get("keep_placing", True)),
+        "keep_placing": bool(context.get("keep_placing", False)),
     }
 
 
@@ -93,13 +94,23 @@ class _PlacementAssetFilterModel(QtCore.QSortFilterProxyModel):
 class _PlacementAssetListView(QtWidgets.QListView):
     """Model/view asset browser that emits the typed Map Studio drag payload."""
 
+    dragStarted = QtCore.Signal(str)
+    dragFinished = QtCore.Signal(str, bool)
+
     def __init__(
         self,
         payload_factory: Callable[[object], dict[str, Any]],
         parent: QtWidgets.QWidget | None = None,
+        *,
+        mime_type: str = MAP_PLACEMENT_MIME_TYPE,
+        required_payload_key: str = "template_resref",
     ) -> None:
         super().__init__(parent)
         self._payload_factory = payload_factory
+        self._mime_type = str(mime_type or MAP_PLACEMENT_MIME_TYPE)
+        self._required_payload_key = str(required_payload_key or "template_resref")
+        self._drag_press_pos: QtCore.QPoint | None = None
+        self._drag_press_index = QtCore.QModelIndex()
         self.setObjectName("mapStudioPlacementAssetListView")
         self.setAccessibleName("Placement asset browser")
         self.setAccessibleDescription(
@@ -111,6 +122,74 @@ class _PlacementAssetListView(QtWidgets.QListView):
         self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
         self.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setUniformItemSizes(True)
+        self.setViewMode(QtWidgets.QListView.ViewMode.IconMode)
+        self.setResizeMode(QtWidgets.QListView.ResizeMode.Adjust)
+        self.setMovement(QtWidgets.QListView.Movement.Static)
+        self.setWrapping(True)
+        self.setWordWrap(True)
+        self.setSpacing(6)
+        self.setIconSize(QtCore.QSize(88, 88))
+        self.setGridSize(QtCore.QSize(120, 126))
+        self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+        # QListView.setViewMode() resets drag state; restore it after selecting
+        # Unreal-style icon tiles so a left-button pull always starts QDrag.
+        self.setDragEnabled(True)
+        self.setDragDropMode(QtWidgets.QAbstractItemView.DragDropMode.DragOnly)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        """Remember the exact tile pressed so one pull always starts placement."""
+
+        super().mousePressEvent(event)
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
+            self._drag_press_pos = None
+            self._drag_press_index = QtCore.QModelIndex()
+            return
+        point = event.position().toPoint()
+        index = self.indexAt(point)
+        self._drag_press_pos = point if index.isValid() else None
+        self._drag_press_index = index
+        if index.isValid():
+            self.setCurrentIndex(index)
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        """Start QDrag explicitly instead of relying on icon-view heuristics."""
+
+        if (
+            self._drag_press_pos is not None
+            and self._drag_press_index.isValid()
+            and bool(event.buttons() & QtCore.Qt.MouseButton.LeftButton)
+            and (event.position().toPoint() - self._drag_press_pos).manhattanLength()
+            >= QtWidgets.QApplication.startDragDistance()
+        ):
+            self.setCurrentIndex(self._drag_press_index)
+            self._drag_press_pos = None
+            self._drag_press_index = QtCore.QModelIndex()
+            self.startDrag(QtCore.Qt.DropAction.CopyAction)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        self._drag_press_pos = None
+        self._drag_press_index = QtCore.QModelIndex()
+        super().mouseReleaseEvent(event)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 - Qt API
+        """Fit more Unreal-style tiles as the dock grows or becomes narrow."""
+
+        width = max(1, self.viewport().width())
+        if width < 300:
+            icon_size, grid_size = 82, QtCore.QSize(112, 120)
+        elif width < 700:
+            icon_size, grid_size = 92, QtCore.QSize(126, 132)
+        else:
+            icon_size, grid_size = 104, QtCore.QSize(142, 146)
+        wanted_icon = QtCore.QSize(icon_size, icon_size)
+        if self.iconSize() != wanted_icon:
+            self.setIconSize(wanted_icon)
+        if self.gridSize() != grid_size:
+            self.setGridSize(grid_size)
+        super().resizeEvent(event)
 
     def placement_mime_data(self, index: QtCore.QModelIndex | None = None) -> QtCore.QMimeData | None:
         """Build inspectable MIME data for the selected resource."""
@@ -122,12 +201,14 @@ class _PlacementAssetListView(QtWidgets.QListView):
         if entry is None:
             return None
         payload = self._payload_factory(entry)
-        if not str(payload.get("template_resref") or ""):
+        if not str(payload.get(self._required_payload_key) or ""):
             return None
         encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
         mime_data = QtCore.QMimeData()
-        mime_data.setData(MAP_PLACEMENT_MIME_TYPE, QtCore.QByteArray(encoded))
-        mime_data.setText(str(selected.data(QtCore.Qt.ItemDataRole.DisplayRole) or payload["template_resref"]))
+        mime_data.setData(self._mime_type, QtCore.QByteArray(encoded))
+        mime_data.setText(
+            str(selected.data(QtCore.Qt.ItemDataRole.DisplayRole) or payload[self._required_payload_key])
+        )
         return mime_data
 
     def startDrag(self, _supported_actions: QtCore.Qt.DropAction) -> None:  # noqa: N802
@@ -138,8 +219,8 @@ class _PlacementAssetListView(QtWidgets.QListView):
         drag.setMimeData(mime_data)
         label = str(self.currentIndex().data(QtCore.Qt.ItemDataRole.DisplayRole) or "Place object")
         metrics = self.fontMetrics()
-        card_width = max(150, min(320, metrics.horizontalAdvance(label) + 54))
-        card_height = max(34, metrics.height() + 16)
+        card_width = 148
+        card_height = 132
         card = QtGui.QPixmap(card_width, card_height)
         card.fill(QtCore.Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(card)
@@ -150,12 +231,28 @@ class _PlacementAssetListView(QtWidgets.QListView):
         painter.setPen(palette.color(QtGui.QPalette.ColorRole.Mid))
         painter.setBrush(background)
         painter.drawRoundedRect(card.rect().adjusted(1, 1, -2, -2), 6, 6)
+        icon = self.currentIndex().data(QtCore.Qt.ItemDataRole.DecorationRole)
+        if isinstance(icon, QtGui.QIcon):
+            thumbnail = icon.pixmap(96, 96)
+            if not thumbnail.isNull():
+                target = QtCore.QRect((card_width - thumbnail.width()) // 2, 8, thumbnail.width(), thumbnail.height())
+                painter.drawPixmap(target, thumbnail)
         painter.setPen(foreground)
-        painter.drawText(14, 0, card_width - 24, card_height, QtCore.Qt.AlignmentFlag.AlignVCenter, label)
+        elided = metrics.elidedText(label, QtCore.Qt.TextElideMode.ElideRight, card_width - 20)
+        painter.drawText(10, card_height - metrics.height() - 8, card_width - 20, metrics.height(), QtCore.Qt.AlignmentFlag.AlignCenter, elided)
         painter.end()
         drag.setPixmap(card)
-        drag.setHotSpot(QtCore.QPoint(18, card_height // 2))
-        drag.exec(QtCore.Qt.DropAction.CopyAction)
+        drag.setHotSpot(QtCore.QPoint(card_width // 2, card_height - 16))
+        self.dragStarted.emit(label)
+        self.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+        try:
+            result = drag.exec(
+                QtCore.Qt.DropAction.CopyAction,
+                QtCore.Qt.DropAction.CopyAction,
+            )
+        finally:
+            self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+        self.dragFinished.emit(label, result == QtCore.Qt.DropAction.CopyAction)
 
 
 class PlacementTab(QtWidgets.QWidget):
@@ -168,6 +265,7 @@ class PlacementTab(QtWidgets.QWidget):
     creatureBehaviorRequested = QtCore.Signal(str, str, str, str)
     dialogueEditorRequested = QtCore.Signal(str, str)
     actionRequested = QtCore.Signal(str, str)
+    thumbnailRequested = QtCore.Signal(object)
     statusChanged = QtCore.Signal(str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -176,6 +274,9 @@ class PlacementTab(QtWidgets.QWidget):
         self._palette_entries: list[object] = []
         self._placements: dict[str, object] = {}
         self._auto_tag_value = ""
+        self._thumbnail_timer = QtCore.QTimer(self)
+        self._thumbnail_timer.setSingleShot(True)
+        self._thumbnail_timer.timeout.connect(self._request_next_visible_thumbnail)
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
@@ -215,6 +316,14 @@ class PlacementTab(QtWidgets.QWidget):
         asset_layout.addRow("Type", self.kind_combo)
         asset_layout.addRow("Find", self.search_edit)
         asset_layout.addRow("Assets", self.asset_list)
+        self.asset_thumbnail_label = QtWidgets.QLabel("3D previews load for visible assets", asset_box)
+        self.asset_thumbnail_label.setObjectName("mapStudioPlacementAssetThumbnailLabel")
+        self.asset_thumbnail_label.setAccessibleName("Selected placement asset preview")
+        self.asset_thumbnail_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.asset_thumbnail_label.setMinimumSize(176, 148)
+        self.asset_thumbnail_label.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.asset_thumbnail_label.setWordWrap(True)
+        self.asset_thumbnail_label.setVisible(False)
         asset_layout.addRow("Template", self.template_edit)
         asset_layout.addRow("Tag", self.tag_edit)
 
@@ -235,19 +344,20 @@ class PlacementTab(QtWidgets.QWidget):
         )
         self.keep_placing_box = QtWidgets.QCheckBox("Repeat click placement", asset_box)
         self.keep_placing_box.setObjectName("mapStudioPlacementKeepPlacingCheckBox")
-        self.keep_placing_box.setChecked(True)
+        self.keep_placing_box.setChecked(False)
+        self.keep_placing_box.setVisible(False)
         options.addWidget(self.snap_wok_box)
-        options.addWidget(self.keep_placing_box)
         asset_layout.addRow(options)
 
         self.place_button = QtWidgets.QPushButton("Click-place mode", asset_box)
         self.place_button.setObjectName("mapStudioPlaceInViewportButton")
         self.place_button.setCheckable(True)
         self.place_button.setToolTip("Optional alternative to dragging: arm placement, then click visible level surfaces. Esc exits placement mode.")
-        self.add_coordinates_button = QtWidgets.QPushButton("Add at coordinates", asset_box)
+        self.place_button.setVisible(False)
+        self.add_coordinates_button = QtWidgets.QPushButton("Add without dragging…", asset_box)
         self.add_coordinates_button.setObjectName("mapStudioAddPlacementAtCoordinatesButton")
         buttons = QtWidgets.QHBoxLayout()
-        buttons.addWidget(self.place_button, 1)
+        buttons.addStretch(1)
         buttons.addWidget(self.add_coordinates_button)
         asset_layout.addRow(buttons)
         self.asset_status_label = QtWidgets.QLabel("Choose a game resource or type a template resref.", asset_box)
@@ -350,6 +460,9 @@ class PlacementTab(QtWidgets.QWidget):
         self.search_edit.textChanged.connect(self._apply_palette_filter)
         self.palette_combo.currentIndexChanged.connect(self._use_current_palette_entry)
         self.asset_list.selectionModel().currentChanged.connect(self._asset_list_current_changed)
+        self.asset_list.clicked.connect(self._request_clicked_thumbnail)
+        self.asset_list.verticalScrollBar().valueChanged.connect(self._queue_visible_thumbnails)
+        self.asset_list.horizontalScrollBar().valueChanged.connect(self._queue_visible_thumbnails)
         self.template_edit.textChanged.connect(self._update_asset_status)
         self.template_edit.textChanged.connect(self._refresh_active_placement_context)
         self.tag_edit.textChanged.connect(self._refresh_active_placement_context)
@@ -397,6 +510,7 @@ class PlacementTab(QtWidgets.QWidget):
         self._palette_entries = list(entries or ())
         self._rebuild_asset_model()
         self._apply_palette_filter()
+        self._queue_visible_thumbnails()
 
     def set_placements(self, placements) -> None:
         selected_id = self.selected_placement_id()
@@ -447,7 +561,7 @@ class PlacementTab(QtWidgets.QWidget):
             "tag": self.tag_edit.text().strip(),
             "bearing": math.radians(float(self.bearing_spin.value())),
             "snap_to_walkmesh": self.snap_wok_box.isChecked(),
-            "keep_placing": self.keep_placing_box.isChecked(),
+            "keep_placing": False,
         }
 
     def stop_placement_mode(self) -> None:
@@ -474,6 +588,54 @@ class PlacementTab(QtWidgets.QWidget):
             self.palette_combo.addItem("No matching game resources", None)
         self.palette_combo.blockSignals(blocked)
         self._use_current_palette_entry()
+        self._queue_visible_thumbnails()
+
+    def _placeholder_thumbnail(self, kind: str, label: str) -> QtGui.QIcon:
+        """Create a theme-aware tile while the real model preview is loading."""
+
+        size = 112
+        pixmap = QtGui.QPixmap(size, size)
+        palette = self.palette()
+        pixmap.fill(palette.color(QtGui.QPalette.ColorRole.Base))
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QtGui.QPen(palette.color(QtGui.QPalette.ColorRole.Mid), 2))
+        painter.setBrush(palette.color(QtGui.QPalette.ColorRole.AlternateBase))
+        painter.drawRoundedRect(pixmap.rect().adjusted(5, 5, -6, -6), 8, 8)
+        glyph = {
+            "creature": "NPC",
+            "door": "DOOR",
+            "placeable": "PLC",
+            "waypoint": "WP",
+            "trigger": "TRG",
+            "encounter": "ENC",
+            "sound": "SND",
+            "camera": "CAM",
+            "store": "STORE",
+        }.get(str(kind or "").lower(), "ASSET")
+        painter.setPen(palette.color(QtGui.QPalette.ColorRole.Text))
+        font = QtGui.QFont(self.font())
+        font.setBold(True)
+        font.setPointSize(max(8, font.pointSize()))
+        painter.setFont(font)
+        painter.drawText(
+            pixmap.rect().adjusted(8, 16, -8, -24),
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            glyph,
+        )
+        painter.setFont(self.font())
+        metrics = QtGui.QFontMetrics(self.font())
+        short_label = metrics.elidedText(str(label or ""), QtCore.Qt.TextElideMode.ElideRight, size - 18)
+        painter.drawText(
+            9,
+            size - metrics.height() - 7,
+            size - 18,
+            metrics.height(),
+            QtCore.Qt.AlignmentFlag.AlignCenter,
+            short_label,
+        )
+        painter.end()
+        return QtGui.QIcon(pixmap)
 
     def _rebuild_asset_model(self) -> None:
         self._asset_model.clear()
@@ -492,6 +654,8 @@ class PlacementTab(QtWidgets.QWidget):
             item.setData(kind, _PLACEMENT_KIND_ROLE)
             item.setData(family, _PLACEMENT_FAMILY_ROLE)
             item.setData(search_text, _PLACEMENT_SEARCH_ROLE)
+            item.setData("placeholder", _PLACEMENT_THUMBNAIL_STATE_ROLE)
+            item.setIcon(self._placeholder_thumbnail(kind, label))
             details = [value for value in (game, kind.upper(), template, category, source) if value]
             item.setToolTip(" · ".join(details) + "\nDrag into the viewport to place this resource.")
             self._asset_model.appendRow(item)
@@ -504,6 +668,11 @@ class PlacementTab(QtWidgets.QWidget):
         entry = current.data(_PLACEMENT_ENTRY_ROLE) if current.isValid() else None
         if entry is None:
             return
+        icon = current.data(QtCore.Qt.ItemDataRole.DecorationRole)
+        if isinstance(icon, QtGui.QIcon):
+            pixmap = icon.pixmap(176, 148)
+            if not pixmap.isNull():
+                self.asset_thumbnail_label.setPixmap(pixmap)
         combo_index = next(
             (
                 index
@@ -537,6 +706,79 @@ class PlacementTab(QtWidgets.QWidget):
             self.asset_list.setCurrentIndex(proxy_index)
             selection_model.blockSignals(blocked)
             self.asset_list.scrollTo(proxy_index)
+            return
+
+    def _queue_visible_thumbnails(self, _value: object = None) -> None:
+        self._thumbnail_timer.start(0)
+
+    def _request_clicked_thumbnail(self, index: QtCore.QModelIndex) -> None:
+        self._request_thumbnail_for_index(index)
+
+    def _request_thumbnail_for_index(self, proxy_index: QtCore.QModelIndex) -> bool:
+        if not proxy_index.isValid():
+            return False
+        source_index = self._asset_proxy_model.mapToSource(proxy_index)
+        state = str(source_index.data(_PLACEMENT_THUMBNAIL_STATE_ROLE) or "placeholder")
+        if state in {"pending", "ready", "unavailable"}:
+            return False
+        entry = source_index.data(_PLACEMENT_ENTRY_ROLE)
+        if entry is None:
+            return False
+        self._asset_model.setData(source_index, "pending", _PLACEMENT_THUMBNAIL_STATE_ROLE)
+        self.thumbnailRequested.emit(entry)
+        return True
+
+    def _request_next_visible_thumbnail(self) -> None:
+        viewport_rect = self.asset_list.viewport().rect()
+        for row in range(self._asset_proxy_model.rowCount()):
+            proxy_index = self._asset_proxy_model.index(row, 0)
+            item_rect = self.asset_list.visualRect(proxy_index)
+            if item_rect.isValid() and item_rect.intersects(viewport_rect):
+                if self._request_thumbnail_for_index(proxy_index):
+                    self._thumbnail_timer.start(40)
+                    return
+
+    def set_asset_thumbnail(
+        self,
+        entry: object,
+        pixmap: QtGui.QPixmap | None,
+        detail: str = "",
+    ) -> None:
+        """Publish one lazy real-model thumbnail into its Content Browser tile."""
+
+        for row in range(self._asset_model.rowCount()):
+            source_index = self._asset_model.index(row, 0)
+            candidate = source_index.data(_PLACEMENT_ENTRY_ROLE)
+            if candidate is not entry and candidate != entry:
+                continue
+            usable = isinstance(pixmap, QtGui.QPixmap) and not pixmap.isNull()
+            if usable:
+                self._asset_model.setData(
+                    source_index,
+                    QtGui.QIcon(pixmap),
+                    QtCore.Qt.ItemDataRole.DecorationRole,
+                )
+                self._asset_model.setData(source_index, "ready", _PLACEMENT_THUMBNAIL_STATE_ROLE)
+            else:
+                self._asset_model.setData(source_index, "unavailable", _PLACEMENT_THUMBNAIL_STATE_ROLE)
+            proxy_index = self._asset_proxy_model.mapFromSource(source_index)
+            if proxy_index == self.asset_list.currentIndex():
+                if usable:
+                    self.asset_thumbnail_label.setPixmap(
+                        pixmap.scaled(
+                            176,
+                            148,
+                            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                            QtCore.Qt.TransformationMode.SmoothTransformation,
+                        )
+                    )
+                else:
+                    self.asset_thumbnail_label.setPixmap(QtGui.QPixmap())
+                    self.asset_thumbnail_label.setText(
+                        detail or "No 3D model preview is available for this asset."
+                    )
+                if detail:
+                    self.asset_status_label.setText(detail)
             return
 
     def _drag_payload_for_entry(self, entry: object) -> dict[str, Any]:

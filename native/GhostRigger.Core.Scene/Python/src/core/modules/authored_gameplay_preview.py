@@ -33,6 +33,27 @@ class AuthoredGameplayPlacementPreviewMarker:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class AuthoredModuleEntryPointPreviewRow:
+    """Viewport/outliner projection of the IFO player start.
+
+    The entry point is not a GIT row, but Map Studio still needs a stable,
+    spatial editor object so the real player model can be picked and moved.
+    """
+
+    placement_id: str
+    kind: str
+    tag: str
+    template_resref: str
+    model_resref: str
+    head_model_resref: str
+    position: Vec3
+    bearing: float
+    area_resref: str
+    index: int = -1
+    is_spatial: bool = True
+
+
 _MARKER_STYLE: dict[str, tuple[str, str, float, float]] = {
     # IFO player start: editor-only semantic marker with a facing arrow.  It
     # is deliberately part of the preview contract even though it is not a
@@ -120,7 +141,7 @@ def authored_gameplay_preview_marker_for_row(
 
 def authored_module_entry_point_preview_marker(
     project: AuthoredModuleProject,
-) -> AuthoredGameplayPlacementPreviewMarker:
+) -> AuthoredGameplayPlacementPreviewMarker | None:
     """Return the editor marker for the IFO player start.
 
     The entry point is not a GIT placement row, so it intentionally stays out
@@ -130,6 +151,8 @@ def authored_module_entry_point_preview_marker(
     """
 
     entry = project.placements.entry_point
+    if not str(entry.area_resref or "").strip():
+        return None
     entry_position = _vec3(entry.position)
     entry_facing = float(entry.facing or 0.0)
     shape, color, radius, height = _MARKER_STYLE["entry_point"]
@@ -156,6 +179,33 @@ def authored_module_entry_point_preview_marker(
     )
 
 
+def authored_module_entry_point_preview_row(
+    project: AuthoredModuleProject,
+    *,
+    body_model_resref: str = "pmbam",
+    head_model_resref: str = "pmhc01",
+) -> AuthoredModuleEntryPointPreviewRow | None:
+    """Return a real-model editor row for an active IFO player start."""
+
+    entry = project.placements.entry_point
+    area_resref = str(entry.area_resref or "").strip().lower()
+    if not area_resref:
+        return None
+    body = str(body_model_resref or "pmbam").strip().lower()
+    head = str(head_model_resref or "").strip().lower()
+    return AuthoredModuleEntryPointPreviewRow(
+        placement_id="entry_point",
+        kind="entry_point",
+        tag="Player Start",
+        template_resref=body,
+        model_resref=body,
+        head_model_resref=head,
+        position=_vec3(entry.position),
+        bearing=float(entry.facing or 0.0),
+        area_resref=area_resref,
+    )
+
+
 def authored_gameplay_preview_markers(
     project: AuthoredModuleProject,
 ) -> tuple[AuthoredGameplayPlacementPreviewMarker, ...]:
@@ -172,7 +222,9 @@ def authored_gameplay_preview_markers(
 
 __all__ = [
     "AuthoredGameplayPlacementPreviewMarker",
+    "AuthoredModuleEntryPointPreviewRow",
     "authored_gameplay_preview_marker_for_row",
     "authored_gameplay_preview_markers",
+    "authored_module_entry_point_preview_row",
     "authored_module_entry_point_preview_marker",
 ]

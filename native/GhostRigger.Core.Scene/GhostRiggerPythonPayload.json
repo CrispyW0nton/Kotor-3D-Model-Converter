@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 129,
+    "file_count": 133,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -75,7 +75,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_MAP_STUDIO_TEXTURE_ASSETS",
             "source_path": "src/core/level/map_studio_texture_assets.py",
             "packaged_path": "Python/src/core/level/map_studio_texture_assets.py",
-            "sha256": "cb33957df59a0f053a60f457f22f8b75add2f90cd2083e3b55a57402376f7e17"
+            "sha256": "af75fd0567541003da347d3df70deb9d9fa0a9a93556560d863fc6e4d5d3c66e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_MAP_STUDIO_TEXTURE_SIDECAR_JOURNAL",
@@ -117,25 +117,25 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_GAMEPLAY_PREVIEW",
             "source_path": "src/core/modules/authored_gameplay_preview.py",
             "packaged_path": "Python/src/core/modules/authored_gameplay_preview.py",
-            "sha256": "ea0826ed69612310a53822124dac061a5178a86e1758115aac1cdf23803163e6"
+            "sha256": "dc70ee0cc92833287e0490dca349826f0b25ef04d19c222ac357cfe2119a481d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_IMPORTED_MESH",
             "source_path": "src/core/modules/authored_imported_mesh.py",
             "packaged_path": "Python/src/core/modules/authored_imported_mesh.py",
-            "sha256": "6f113454278d12fa4bbb523d255e42d889b27da82349eede1d90104051a8b6c6"
+            "sha256": "52fe083cd7eefef8e5e75be09dda088dff0bd0ecd14a473c3144130b1d6793b8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
             "source_path": "src/core/modules/authored_module_export.py",
             "packaged_path": "Python/src/core/modules/authored_module_export.py",
-            "sha256": "00a27e490ad7a42b0aa842d858f55ea6810d2084aac3993a9a2525a02bce6b15"
+            "sha256": "65ac7768377ad7ee2bbbfe7d7ba7b8f8e318d60b0c00dc5dadc62baf62634a2c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
             "source_path": "src/core/modules/authored_module_kmap_bridge.py",
             "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
-            "sha256": "a03a995f3c097ab4da02a0e81bb86ab5c84743919285423caef2af57e55c0a42"
+            "sha256": "4592122a313f48b0844bf55836371c4f8d8e5c649dadf517d3c2d5a501af4fb4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
@@ -171,7 +171,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_PLACEMENTS",
             "source_path": "src/core/modules/authored_module_placements.py",
             "packaged_path": "Python/src/core/modules/authored_module_placements.py",
-            "sha256": "c3172558de353221d92a36472bd75e053219e2bab57105fb8d672e252793e706"
+            "sha256": "82bc379b3b40b08d2d732aa7c0601d3fa0c5ae8d3bbd8d0c6564652a5d707784"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_PREVIEW_MODEL",
@@ -216,6 +216,12 @@
             "sha256": "a139c08b70e2474d91e896346f731fc585709058142b466d6967fe5e00084f80"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_OBJ_ROOM_IMPORT",
+            "source_path": "src/core/modules/authored_obj_room_import.py",
+            "packaged_path": "Python/src/core/modules/authored_obj_room_import.py",
+            "sha256": "75a4b09800e7ab78d4e94365ced611de6003a13ad9bec18ecae09c23dc0545e0"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_PRIMITIVE_POLYGON_CAGES",
             "source_path": "src/core/modules/authored_primitive_polygon_cages.py",
             "packaged_path": "Python/src/core/modules/authored_primitive_polygon_cages.py",
@@ -237,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "cc844021b50713229434141dafc3743a0fd0cecc2c4612c9cfe7ba30959bbee0"
+            "sha256": "b3549df1d6cfbd408188a1d022acf885ae9a7890a49c0c8b490928dde97b1d20"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -255,7 +261,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
             "source_path": "src/core/modules/authored_room_operations.py",
             "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-            "sha256": "36d95205a6debde6d921e156fa196b6442c768c6e303eeb4959634f58310051f"
+            "sha256": "38f1adbef478069a8e19d3b4d996f77acd9078a07f28dfb0f18e8c90142d870c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OUTLINE_GEOMETRY",
@@ -291,7 +297,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_SKYBOX",
             "source_path": "src/core/modules/authored_skybox.py",
             "packaged_path": "Python/src/core/modules/authored_skybox.py",
-            "sha256": "df137e8c1f26b752a84272a4d80fdd151554eae498e99f126f76a50253713eb1"
+            "sha256": "1b44a875d35a1f97dae0a1081dfe5b864cd71202cb9e67389a16a808553dafa1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_TERRAIN_BUILDER",
@@ -366,6 +372,12 @@
             "sha256": "4c891466aa7139e9dcbb0d7b643fa0903ae82cae88bb6da89a631d14e8f39783"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ENVIRONMENT_KITS",
+            "source_path": "src/core/modules/map_studio_environment_kits.py",
+            "packaged_path": "Python/src/core/modules/map_studio_environment_kits.py",
+            "sha256": "8c7d12c2f6d92eec9aa6b506cacecb6d41a7bc6302921c5cd1318c093b71a2f8"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS",
             "source_path": "src/core/modules/map_studio_export_objects.py",
             "packaged_path": "Python/src/core/modules/map_studio_export_objects.py",
@@ -406,6 +418,12 @@
             "source_path": "src/core/modules/map_studio_multi_cut.py",
             "packaged_path": "Python/src/core/modules/map_studio_multi_cut.py",
             "sha256": "242979909edda5d90f329f27c7c210238f3e489f619ae71c796004758135ec07"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
+            "source_path": "src/core/modules/map_studio_pascal_building.py",
+            "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
+            "sha256": "44e9f69b59ea4825015e04cd1305ed5d332e018485329d11c291f66e0c3c306c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
@@ -531,7 +549,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
             "source_path": "src/core/modules/map_studio_stock_content_preview.py",
             "packaged_path": "Python/src/core/modules/map_studio_stock_content_preview.py",
-            "sha256": "bdd842570d877d2d6046e60c5482754b6e48300f5ad5f18234ba5f06d1f670ae"
+            "sha256": "c7468b2950301dedd954ec798a680454c1f9cb5b153babbf48765a9e33723327"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_KIT",
+            "source_path": "src/core/modules/map_studio_terrain_kit.py",
+            "packaged_path": "Python/src/core/modules/map_studio_terrain_kit.py",
+            "sha256": "3e981882f4f750362b8e84e450db9beb2834a100c9466e825f562d34e176096d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION",
@@ -591,7 +615,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "1d16f2189b56f3ddebd72ca68cfb03f8806f84f9d627fa5559bcc746ee705c2f"
+            "sha256": "fa4e26e6135af128ec53523e07f846c4b8695575c2cdf8c16808f1e7ca587bc7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

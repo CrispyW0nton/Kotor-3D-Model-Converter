@@ -4529,7 +4529,10 @@ def bridge_authored_floor_plan_edges(
         wall_height=first_primitive.wall_height,
         floor_surface_id=first_primitive.floor_surface_id,
         material=first_primitive.material,
+        wall_material=first_primitive.wall_material,
+        ceiling_material=first_primitive.ceiling_material,
         include_walls=first_primitive.include_walls,
+        include_ceiling=first_primitive.include_ceiling,
         openings=(),
         metadata={
             **dict(first_primitive.metadata),

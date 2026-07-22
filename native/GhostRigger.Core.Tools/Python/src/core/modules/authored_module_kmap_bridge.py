@@ -559,7 +559,18 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
             wall_height=_float(primitive.get("wall_height"), 3.0),
             floor_surface_id=primitive.get("floor_surface_id", 4),
             material=_material(primitive.get("material")),
+            wall_material=(
+                _material(primitive.get("wall_material"))
+                if primitive.get("wall_material") is not None
+                else None
+            ),
+            ceiling_material=(
+                _material(primitive.get("ceiling_material"))
+                if primitive.get("ceiling_material") is not None
+                else None
+            ),
             include_walls=bool(primitive.get("include_walls", True)),
+            include_ceiling=bool(primitive.get("include_ceiling", False)),
             openings=tuple(_opening(item) for item in primitive.get("openings", ()) or ()),
             metadata=_dict(primitive.get("metadata")),
         )
@@ -704,7 +715,9 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
     )
     return AuthoredGameplayPlacement(
         entry_point=ModuleEntryPoint(
-            area_resref=normalise_resref(entry.get("area_resref") or module_root),
+            # An explicit blank value means the user deleted the player start.
+            # Only legacy payloads that omit the field inherit module_root.
+            area_resref=normalise_resref(entry.get("area_resref") if "area_resref" in entry else module_root),
             position=_vec3(entry.get("position")),
             facing=_bearing_radians(entry.get("facing"), unit=bearing_unit),
         ),
@@ -1067,7 +1080,7 @@ def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimit
             payload["holes"] = [[int(row), int(column)] for row, column in primitive.holes]
         return payload
     if isinstance(primitive, FloorPlanRoomPrimitive):
-        return {
+        payload = {
             "type": "floor_plan",
             "room_resref": primitive.room_resref,
             "points": [[float(x), float(y)] for x, y in primitive.points],
@@ -1090,6 +1103,14 @@ def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimit
             ],
             "metadata": dict(primitive.metadata),
         }
+        if primitive.wall_material is not None:
+            payload["wall_material"] = _material_payload(primitive.wall_material)
+        if primitive.ceiling_material is not None:
+            payload["ceiling_material"] = _material_payload(primitive.ceiling_material)
+        if primitive.include_ceiling:
+            # Omit the false default so older KMAPs remain byte-stable.
+            payload["include_ceiling"] = True
+        return payload
     return {
         "type": "rectangular",
         "room_resref": primitive.room_resref,

@@ -11,6 +11,379 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-21
 
+### [2026-07-21] T2907 Universal transient overlays and Pascal-style direct building
+
+Owner: LordVaderCW
+
+Subsystem: shared viewport composition, Map Studio terrain/texture brushes,
+placement and kit previews, selection/gizmos/walkmesh helpers, Pascal-style
+room authoring, retail environment palettes, and embedded Scene/Tools/GUI
+Display payloads.
+
+All temporary editor visuals now render onto a fresh transparent image and are
+alpha-composited over the immutable renderer scene frame. The rule is enforced
+once in the shared GPU/live-surface overlay boundary, so terrain and texture
+brushes, placeable and terrain-kit ghosts, direct-building previews, selected
+components, transform gizmos, walkmesh guides, bones/helpers, measurements,
+and future asset types cannot leave cyan/holographic trails when a retained
+backend reuses its last scene readback. The terrain brush itself is now a thin
+outer size ring, inner hardness ring, center point, and compact hardness meter
+instead of a large translucent cyan fill.
+
+Room Building now leads with a Pascal-inspired direct wall workflow: click
+successive snapped corners, close the loop to create a textured exportable
+Odyssey room, insert door/window openings on wall edges, organize rooms by
+levels, and optionally generate ceilings. Concave simple plans triangulate into
+matching MDL/WOK geometry; crossing plans are rejected. Independent
+floor/wall/ceiling materials and building metadata survive KMAP round-trip and
+normal module export. Common Level/Style choices stay visible while dimensions
+and opening values collapse under **Building settings**, keeping construction
+content on screen. Legacy primitive/boolean controls remain under **Advanced
+room geometry**.
+
+The old file-picker room-kit path is replaced by a visual Vanilla Environment
+Kit browser. Its generated local catalog indexes 210 K1/K2 module collections,
+9,174 geometry records, 2,637 room/exterior tiles, 6,537 terrain surfaces, and
+28,080 logical magnets without redistributing game geometry. Real LYT doorway
+hooks classify tiles as chamber, dead end, straight, corner/bend, T-junction,
+cross, or hub. Users choose one interior/exterior module style at a time, filter
+typed pieces, inspect lazily rendered stock thumbnails, and drag a tile into the
+viewport. Compatible door sockets resolve a live green magnet preview. Release
+loads the source model/WOK from the user's game, assigns a unique authored room
+resref, transforms render geometry and collision together, removes source
+lightmaps for destination rebaking, persists provenance/connection metadata in
+KMAP, and records one Undo step. The complete Content Browser remains
+detachable, resizable, and redockable.
+
+Terrain pieces now use compact author-facing categories — Terrain Forms, Rock
+Formations, Foliage, Ruins & Structures, Water & Shorelines, Vistas & Horizons,
+and Debris & Natural Props — across both supplied OBJ examples and the 6,537
+retail-derived surface records. Room Building exposes an explicit Interior /
+Exterior / All build-type selector and a linked module-style selector; nine
+representative retail palettes from Endar Spire, Dantooine, Tatooine, Manaan,
+Peragus, Telos, Nar Shaddaa, and Dxun were additionally sampled into distinct
+floor/wall/ceiling roles for immediate multi-planet construction proof.
+
+Map Studio object interaction now follows the requested Maya convention.
+Shift-click adds objects, Alt-click removes one from the current selection,
+and dragging any selected placement or authored terrain/building primitive
+moves the complete selection in one undoable transaction. Delete removes all
+selected authored objects together. A picked Player Start head or body now
+promotes to the single IFO entry-point group, so its native-scale body/head
+preview, transform gizmo, movement, rotation, deletion, and Undo operate as one
+authored player-start object.
+
+The construction contract is based on a deep audit of pascalorg/editor commit
+`cb6fadbc288f9daa627e866f31eb86a39b2d93e5`, the supplied 92.9-second house
+tutorial, and its transcript. The audit covers Pascal's stable-ID node graph,
+armed/hover/drafting/preview/validity/commit/continue states, transient live
+overrides, one-gesture history, wall splitting and hosted-opening migration,
+half-edge closed-space reconciliation, door/window wall-local preview and
+collision, roof footprint/segments, stacked/exploded/solo levels, dirty-node
+rebuilds, and 2D/3D parity. The KOTOR adaptation and Odyssey compile boundary
+are recorded in `knowledge_base/pascal_editor_kotor_environment_kit_spec.md`.
+
+Intersects: the existing 2026-07-21 Terrain Kit, terrain sculpt, placement,
+lighting, skybox, and authored-module changes in the shared dirty worktree;
+their behavior and payload mirrors were preserved.
+
+Verification: focused catalog topology, typed drag payload, browser lazy-load,
+canvas coordinate normalization, live magnet preview, unique-room persistence,
+render/WOK transform, source-lightmap removal, window construction, dockability,
+and native payload contracts pass. Touched Python files compile; paired
+Scene/Tools and Tools/GUI Display payload sources are byte-identical. Rebuilt
+Scene, Tools, and GUI Display Debug x64 DLLs and staged/verified all 18 payload
+DLLs. In the actual staged GhostStudio app, a closed Pascal wall loop created an
+exportable room, dragging `m01aa_08c` created `grkit0001`, dragging Distant Hill
+Mass created `grtk0001`, and the floating browser displayed real thumbnails and
+resized cleanly. Creating a 17x17 terrain and Alt+right-dragging changed the live
+brush from size 3/hardness 0.50 to size 12/hardness 1.00; one fresh ring/meter
+remained visible with no retained holographic trail or scene-frame paint-over.
+The final staged-app UX pass clicked the Player Start's head, selected the
+whole body/head group, and moved its IFO X position from 0.000 to 10.787;
+Shift-click selected the starter placeable plus waypoint, Alt-click removed the
+waypoint, and Delete removed the remaining placeable. Terrain mode displayed
+all seven category choices. The direct wall tool closed and built `grdev01r001`
+with the K1 `m01aa` Interior style and `grdev01r002` with the K1 `m13aa`
+Exterior style. Focused verification finished with 27 passing tests, including
+multi-placement movement with Player Start, one-transaction multi-delete,
+both-game catalog provenance, and all native payload contracts.
+
+### [2026-07-21] T2907 Terrain Kit browser, continuous sculpt preview, and canvas brush adjustment
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Terrain Building, typed content-browser drag/drop,
+Odyssey room-geometry compilation, terrain-stroke interaction, brush HUD/cursor,
+outliner room selection, and embedded Scene/Tools/GUI Display payloads.
+
+Terrain Building now includes a searchable thumbnail browser for nine supplied
+Dantooine landscape pieces: cliffs, ridges, drainage/canyon forms, distant
+terrain, vistas, and trees. Dragging a tile onto a visible level surface creates
+an undoable, surface-snapped, visual-only Odyssey room with baked rotation and
+scale, generated tiled UVs, bounded retail-era triangle counts, and an explicit
+zero-face WOK so the sculpted terrain below remains the collision authority.
+The pieces participate in LYT/VIS, KMAP round-trip, authored-room outliner
+selection/deletion, and normal MDL/MDX export instead of masquerading as GIT
+placeables. Source OBJ/MTL/TGA assets live under
+`assets/map_studio/terrain_kits/dantooine`.
+
+Fast sculpt strokes now submit every interpolated sample in small live chunks
+and force the dirty-region preview update, eliminating gaps and delayed
+ZBrush-style feedback without rebuilding the complete MDL/WOK until release.
+Alt+right-drag now mirrors Photoshop: horizontal motion changes brush size and
+vertical motion changes falloff hardness. The viewport shelf and Builder values
+update during the gesture, while the on-surface cursor grows/shrinks and its
+translucent inner hardness disc visibly fills or empties. An empty visual-only
+room is also safe in the outliner instead of assuming it contains editable
+composition primitives.
+
+Intersects: the existing 2026-07-21 Map Studio terrain, placeable-browser,
+OBJ-room, lighting, and skybox work in shared payloads; unrelated changes were
+preserved and the paired Tools/GUI Display files remain byte-identical.
+
+Verification: terrain-kit catalog/compile/KMAP/Undo tests pass 3/3; focused live
+sculpt and placement-drop regressions pass 12/12; the actual Alt+right runtime
+gesture and focused Terrain workspace checks pass 3/3; all touched Python files
+compile; payload functional contracts passed and the new 1,376-row manifest
+count contract passes. Rebuilt Scene, Tools, and GUI Display Debug x64 DLLs and
+staged/verified all 18 payload DLLs. In the actual staged GhostStudio app, all
+nine thumbnails rendered, a real Drainage Cut tile drag created visible static
+terrain geometry on the sculpted surface, a continuous viewport stroke
+committed successfully, and Alt+right-drag changed the live HUD from size 1 /
+hardness 0.57 to size 4 / hardness 0.87 while the cursor disc expanded and
+filled.
+
+### [2026-07-21] T2907 Terrain Sculpt is now a focused viewport workspace
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio terrain authoring UX, viewport gestures, brush cursor,
+camera presets, slope/WOK feedback, and embedded GUI payloads
+(`GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display`).
+
+Researched ZyFou ProceduralTerrains source and the supplied Terrain Studio
+walkthrough, then adapted its clearest interaction contracts to Odyssey rather
+than copying its modern runtime terrain features. Entering Terrain Building now
+opens a compact viewport-local Sculpt shelf with one-click
+Raise/Lower/Smooth/Flatten tools, the complete existing advanced brush list,
+size/falloff/strength/height controls, Top/Angled/Frame camera actions, and an
+explicit Exit Sculpt command. Left drag paints, Shift+left drag temporarily
+lowers from Raise, Shift+wheel resizes the brush, right drag orbits, and
+Alt+right drag changes size/falloff. Alt+middle drag now pans across the scene
+without changing orbit angles or painting; bare middle drag remains inert so
+camera movement is always intentional while sculpting.
+
+The cursor now has a high-contrast outer extent, inner falloff ring, center
+point, and short tool/size label instead of exposing room/sample diagnostics.
+The full slope/WOK triangle overlay starts off for an unobstructed sculpting
+surface and is available from the shelf as an explicit pre-export check.
+Generic translate/rotate/scale controls and placement status stand down while
+Sculpt Mode owns the viewport. A shared-viewport input lock consumes any
+Alt+left/Maya, Max, or Blender navigation gesture that escapes the terrain
+handler, so a left paint stroke cannot accidentally begin a camera drag.
+Terrain remains a finite static heightfield that bakes to MDL/WOK; unsupported
+infinite streaming, runtime LOD terrain, shader splat layers, and instanced
+procedural foliage were deliberately not added.
+
+Verification: the focused terrain workspace/build/source contracts pass 3/3;
+live viewport stroke, fail-closed camera lock, Alt+right brush-option, and
+Alt+middle pan regressions pass; all touched Python modules compile; Tools/GUI
+Display shelf and viewport-panel payload mirrors are byte-identical. Rebuilt
+the Tools and GUI Display Debug x64 DLLs, staged and verified all 18 payload
+DLLs in the repository root, and verified the clean surface, dual-ring cursor,
+hidden transform gizmo, opt-in WOK overlay, and Alt+middle camera pan in the
+actual staged GhostStudio application.
+
+### [2026-07-21] T2908 Unreal-style placeable drag/drop and thumbnail Content Browser
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio gameplay-placement palette, typed viewport drop target,
+stock KOTOR template/model resolution, lazy thumbnail rendering, selection,
+ground snapping, and embedded payload delivery (`GhostRigger.Core.Scene`,
+`GhostRigger.Core.Tools`, and `GhostRigger.Core.GUI.Display`).
+
+The Placeables workspace now presents searchable visual asset tiles instead of
+a text-only list and makes direct left-button drag into the level the primary
+placement workflow. The complete Content Browser / Workflow surface is now a
+real Qt dock: its title bar can be dragged completely out of Map Studio, moved
+to another monitor, resized, docked on any edge, closed/reopened from View, and
+restored to its default bottom-docked position with Reset Layout. Adaptive
+compact tiles fit several assets across a wide/floating browser, and the
+duplicated large selected-preview row is removed to preserve vertical space.
+Validation / Output is now a separate movable dock that starts hidden instead
+of permanently consuming the bottom of the viewport. **View → Show Validation
+/ Output** opens it on demand, and an explicit Validate command brings its
+Validation tab forward automatically.
+
+Real KOTOR models and diffuse textures are resolved lazily for visible tile
+thumbnails, cached by resource/authored revision, and reused as the pointer's
+drag card. Thumbnail rendering reuses Map Studio's active viewport renderer
+instead of allocating one OpenGL context per tile, preventing content previews
+from starving the scene renderer and forcing its diagnostic fallback. During a
+drag the viewport keeps its existing
+surface highlight and exact world hit; releasing creates one object, applies
+walkmesh/floor snapping by default, refreshes the level preview, and selects the
+new instance for immediate move/rotate work. The misleading click-place and
+repeat-click controls are hidden, while coordinate entry remains available as
+an explicit fallback for non-spatial resources.
+
+The drag initialization order also now restores Qt drag support after entering
+icon mode. `QListView.setViewMode()` had silently cleared `dragEnabled`, which
+was the direct cause of tile drags not starting.
+
+Intersects: concurrent OBJ room import, panorama skybox, lighting, and authored
+room work in shared Map Studio payloads was preserved outside the focused
+placement-browser, preview-resolution, and viewport-drop hunks.
+
+Verification: the focused widget/payload/drop/selection/ground-snap regression
+suite passes 10/10, the stock-content resolution suite passes 14/14, the
+float/undock/redock runtime contract passes, the pre-existing workflow sizing
+contract passes, the two placement-panel payload mirrors are byte-identical,
+and all touched modules compile. Native rebuild/staging and visible Debug-app
+drag/drop verification are recorded after completion below.
+
+### [2026-07-21] T2908 Player Start is a real editable Map Studio object
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio IFO entry-point state, stock-content preview composition,
+outliner/viewport selection, transform routing, deletion/Undo, and native
+payload delivery (`GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and
+`GhostRigger.Core.GUI.Display`).
+
+The module Player Start is now projected as a first-class editor object instead
+of an unconditional green overlay. Map Studio loads the configured KOTOR player
+body/head (`pmbam` + `pmhc01` by default) at native 1:1 game scale, exposes a
+clearly named **Player Start** row in the outliner, and binds the real viewport
+translate/rotate gizmo so position and facing update the exported IFO entry
+fields. Delete now removes the Player Start from both viewport and KMAP state,
+blocks export until a replacement is set, and records an undoable command;
+Undo restores it. KMAP hydration preserves an explicitly deleted/blank entry
+instead of silently recreating it from the module root.
+
+Intersects: concurrent OBJ import, panorama skybox, lighting, and authored-room
+work in shared Map Studio payloads was preserved outside these focused entry
+point and editor-interaction hunks.
+
+Verification: targeted entry-point state, direct-model preview, selection/gizmo,
+fallback-marker, and prior room-selection regressions passed 7/7; all touched
+payload modules compile. Native rebuild/staging and visible Debug-app workflow
+verification are recorded after completion below.
+
+### [2026-07-21] T2908 Outliner selection dismisses stale room-editing gizmos
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio outliner/viewport selection synchronization
+(`GhostRigger.Core.Tools` and the byte-identical
+`GhostRigger.Core.GUI.Display` viewport-panel payload).
+
+Selecting a gameplay placement, authored light, or other scene-outliner object
+now clears the prior room component selection, authored-primitive selection,
+Universal Transform overlay, and floor-plan edge highlight before binding the
+new object's relevant viewport handles. Selecting another authored primitive
+rebuilds only that primitive's room-editing overlay, so the floor gizmo and
+cyan edge label no longer remain attached after selection moves elsewhere.
+
+Intersects: concurrent OBJ import, panorama skybox, lighting, and authored-room
+work in the shared Map Studio payloads was preserved outside these focused
+selection-handoff hunks.
+
+Verification: the focused stale-handle regression passed 1/1, both payload
+mirrors compile, the Debug x64 native host plus all payload DLLs rebuilt/staged,
+and visible root-app testing confirmed that selecting the authored room light
+immediately dismisses the prior floor/edge transform overlay.
+
+### [2026-07-21] T2904 Dathomir OBJ imports as a scaled, textured, walkable K2 module candidate
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio OBJ/MTL import, authored imported-room topology and WOK
+generation, module export/PTH compilation, and native payload delivery
+(`GhostRigger.Core.IO`, `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`,
+`GhostRigger.Core.Math`, and `GhostRigger.Core.GUI.Display`).
+
+Added a save-first **File -> Import OBJ Map...** workflow that parses OBJ/MTL
+material and seam data, honors source units, previews KOTOR-space scale, splits
+surfaces below the 65,535-vertex Odyssey limit, imports bounded texture
+sidecars, and requires an explicit walkable-floor component review before an
+atomic KMAP edit. Adaptive walkmesh reduction preserves floor topology,
+perimeter loops, adjacency, and AABB coverage. Export now uses room-aware,
+LYT-ordered PTH compilation and no longer stalls on seam-heavy OBJ boundary
+chains.
+
+The real centimetre-authored `DathomirCave.obj` produced a 13.21 x 13.80 x
+15.25 metre room with nine visual surfaces, 91,379 render triangles, eight
+decoded material textures, and a 2,232-face floor-only WOK. The resulting K2
+MOD contains exactly 17 manifest-matched resources. Independent structural
+comparison against the installed `001ebo1` vanilla oracle confirmed K2 model
+pointers, geometry type 2, node `+8 = 0`, an embedded AABB node, zero synthetic
+controllers, a complete 4,463-node WOK AABB, 17/17 closed perimeter loops,
+reciprocal adjacency, and an entry point on a walkable face.
+
+Intersects: the concurrent primitive-room material/lighting and compact PIE HUD
+work in the shared dirty worktree was preserved. Those hunks were not claimed
+or independently staged by this slice.
+
+Verification: the focused OBJ/skybox/texture suites passed 17/17, topology and
+cache contracts passed, native payload identity passed, strict module export
+completed in 28.10 seconds, package readback reported zero blockers, and the
+Debug x64 native host plus all 18 payload DLLs built/staged successfully. The
+full structural proof is
+`DathomirCave/MapStudio/K2Build/dthcave_k2_structural_proof.json`. Manual K2
+installation was safely refused because `swkotor2.exe` was running; no retail
+warp claim is made. Remaining empirical risks are the WOK's 96 faces above the
+largest observed stock room, two disconnected walkable levels, and the dense
+render mesh.
+
+### [2026-07-21] T2908 Outliner light selection binds the real viewport gizmo
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio outliner/viewport transform interaction
+(`GhostRigger.Core.GUI.Display`, byte-identical `GhostRigger.Core.Tools`
+payload mirror).
+
+Selecting an authored room light from the outliner now finds its retained
+preview light node, makes that node the renderer selection, and rebuilds the
+shared Maya-style gizmo at the light's exact world position. Lights
+automatically enter Translate mode; Rotate is disabled until an engine-backed
+direction manipulator exists, Scale is disabled in favor of the Radius
+property, and the final gizmo position commits through the existing undoable
+authored-light transform signal. Placement behavior remains unchanged.
+
+Intersects: compact PIE HUD edits in the same large viewport-panel file were
+preserved byte-for-byte and are outside this change's ownership boundary.
+
+Verification: the focused outliner-light and retained-placement gizmo contracts
+passed 2/2, payload manifest/byte-identity checks passed 2/2, both mirrors
+compile, and the rebuilt Debug x64 application starts with the updated payload.
+Visible foreground interaction was deferred because KOTOR 2 was actively
+running and the validation session did not steal focus from the game.
+
+### [2026-07-21] T2908 Map Studio converts panorama/HDR skies into KOTOR sky rooms
+
+Owner: LordVaderCW
+
+Subsystem: panorama decoding/conversion, Environment workspace, authored sky
+room creation, and transactional texture sidecars (`GhostRigger.Core.IO`,
+`GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Scene`, and
+`GhostRigger.Core.Tools`).
+
+Enabled **Environment -> Create from Panorama / HDR...** with floating-point
+HDR/EXR decode, exposure and yaw controls, ACES/Reinhard/clip tone mapping, and
+deterministic north/east/south/west/top KOTOR TGA faces. The operation creates
+a visual-only exact-empty-WOK sky room, records source/settings provenance,
+protects resource-name collisions and stale project state, and rolls back all
+five sidecars plus the KMAP edit on failure. Undo/Redo restores both project
+and texture state.
+
+Verification: focused panorama, HDR dynamic-range, transaction, rollback,
+collision, and payload contracts passed 21/21. No Dathomir panorama/HDR source
+was supplied, so the current `dthcave` candidate intentionally has no skybox.
+
 ### [2026-07-21] Particle placeables ship through Map Studio; primitive rooms and PIE HUD are presentation-ready
 
 Owner: ShaolinGhost
@@ -62,6 +435,99 @@ module/Override workflow. The duplicate Rendering/Runtime.Shared mesh-render
 contract was also restored to byte identity so loose-atlas UV orientation does
 not depend on DLL discovery order. No retail KOTOR warp proof is claimed.
 
+### [2026-07-21] T2908 Map Studio lightmaps use room-wide shadow occlusion without self-acne
+
+Owner: LordVaderCW
+
+Subsystem: renderer-owned lightmap shadowing/UV validation
+(`GhostRigger.Core.Rendering`, byte-identical `GhostRigger.Core.Tools` payload
+mirror) and the headless selected-surface apply workflow
+(`GhostRigger.Core.Workflow`).
+
+Selected-surface lightmap baking now builds its shadow scene from every
+surface in the selected room instead of only the surface receiving the bake.
+The rasterized source mesh and triangle IDs flow into the lighting solver, so
+the raycaster rejects only the exact source triangle; folded geometry on that
+same mesh still self-shadows, while a normal-bias ray cannot create source-face
+acne. The CPU fallback now uses a median-split triangle BVH instead of scanning
+the entire room for every texel. UV validation caches the face-UV stream and
+uses a sweep-line AABB broadphase before exact triangle tests, removing the
+repeated full-atlas reconstruction that stalled dense imported rooms.
+
+Intersects: concurrent Dathomir OBJ import, Map Studio environment/controller,
+and topology work was preserved; this slice touched only lightmap-owned core
+and workflow files plus focused tests and generated payload manifests.
+
+Verification: `tests/test_map_studio_lightmap_apply_workflow.py` passed 9/9,
+including a selected floor that is darkened by a separate room surface;
+`tests/test_lightmap_baker.py` passed 18/18, including exact-triangle acne
+rejection, same-mesh folded self-shadow, overlap-result parity, and an
+8,192-triangle broadphase budget. Both owner/mirror copies compile and are
+byte-identical, and the Rendering/Tools/Workflow payload manifests have no hash
+mismatches. The real 91,379-triangle Dathomir room built its CPU shadow BVH in
+6.145 s; its 20,000-face Part4 surface validated generated UV2 in 0.941 s after
+the fix (the complete synchronous 64-pixel atlas/remap/validate operation still
+took 26.343 s). Headless validation only; no K1/K2 retail warp claim is made.
+
+### [2026-07-21] T2904 Large seam-heavy OBJ topology validation no longer stalls Map Studio export
+
+Owner: LordVaderCW
+
+Subsystem: shared mesh topology and imported-room validation
+(`GhostRigger.Core.Math`, `GhostRigger.Core.Scene`, and the byte-identical
+`GhostRigger.Core.Tools` mirror).
+
+Replaced the raw/geometric boundary-chain builders' repeated
+`min(unused_edges)` scans with lazy deterministic heaps. Imported OBJ meshes
+duplicate raw vertices at UV and hard-normal seams; DathomirCave therefore
+exposed tens of thousands of short raw boundary chains and made the old walk
+quadratic. Full-mesh component records are now cached on each transient
+`MeshTopology`, and the same immutable `ImportedMeshRoomPrimitive` reuses a
+bounded weak-reference validation result when project preflight is immediately
+followed by room compilation. Edits still construct replacement primitives and
+therefore receive a fresh audit.
+
+Intersects: the concurrent DathomirCave OBJ import, generated-WOK, authored PTH,
+skybox, and lightmap work in the shared dirty worktree; no lightmap files were
+changed by this performance correction.
+
+Verification: live sampling of the original export found
+`MeshTopology._build_raw_border_loops` as the active stall. The real
+91,379-triangle, nine-surface Dathomir KMAP then completed its first complete
+imported-room topology validation in 17.52 seconds; the immediately repeated
+compile validation took 0.00033 seconds. A fresh strict authored-module dry run
+completed in 33.60 seconds under `cProfile`, produced nine resources, and passed
+with zero blocking issues. Focused topology contracts passed (`8 passed`) and
+the identity-cache contract passed (`1 passed`). This is headless structural
+proof only; it does not claim an in-game warp result.
+
+### [2026-07-21] T3101 Map Studio export preserves room topology and LYT-indexed PTH portals
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio authored module export and generated PTH pathing
+(`GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`), with focused export
+contracts in `tests/test_legacy_module_repair.py`.
+
+Replaced the authored exporter's flattened merged-WOK line-of-sight PTH pass
+with the existing room-aware compiler. Export now keeps the exact LYT room
+order (including empty backdrop rows), preserves each room's indexed-face
+adjacency, routes anchors through sharply concave walkable topology, and emits
+bidirectional PTH bridges only for matching reciprocal WOK transition edges.
+Room-local authored WOKs receive their LYT position for pathing, while imported
+WOKs already normalized to module space are not translated twice.
+
+Intersects: concurrent authored-module install-prep Override staging changes in
+the same exporter mirrors; those changes were preserved byte-for-byte.
+
+Verification: both exporter mirrors compile and are byte-identical. Focused
+tests proved a sharply concave imported-room export emits a connected routed
+PTH, reverse-lexical LYT room order remains authoritative for reciprocal portal
+indices, the portal bridge is bidirectional at the matching boundary midpoint,
+authored room-local WOK bounds receive their nonzero LYT translation, the
+existing room engine contract still passes, and the lower-level concave route
+contract still passes (`5 passed`). No in-game warp claim is made by this
+headless export correction.
 
 ### [2026-07-21] Particle authoring UI: searchable libraries, safe edit states, and honest placeable export guidance
 

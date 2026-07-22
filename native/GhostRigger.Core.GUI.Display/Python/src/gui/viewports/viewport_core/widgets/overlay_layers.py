@@ -584,6 +584,76 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio terrain walkability overlay failed: %s", exc)
 
+    def _draw_map_studio_building_preview(self, draw, w: int, h: int) -> None:
+        """Draw one Pascal-style wall path without ever touching the scene image."""
+
+        preview = getattr(self, "_map_studio_building_preview", None)
+        if not isinstance(preview, dict) or not bool(preview.get("active", False)):
+            return
+        try:
+            world_points = [tuple(float(value) for value in tuple(point)[:3]) for point in tuple(preview.get("points") or ())]
+            hover = preview.get("hover_world")
+            hover_world = tuple(float(value) for value in tuple(hover)[:3]) if hover is not None else None
+            wall_height = max(0.05, float(preview.get("wall_height", 3.0) or 3.0))
+            close_ready = bool(preview.get("close_ready", False))
+            base_color = self._map_studio_theme_rgba("accent.primary", "#00e5ff", 245)
+            close_color = self._map_studio_theme_rgba("success", "#58e88b", 250)
+            color = close_color if close_ready else base_color
+            path_world = list(world_points)
+            if hover_world is not None:
+                path_world.append(hover_world)
+            projected = []
+            for point in path_world:
+                result = self._map_studio_project_point(point, w, h)
+                if result is None:
+                    projected = []
+                    break
+                projected.append((float(result[0]), float(result[1])))
+            if projected:
+                for start, end in zip(projected, projected[1:]):
+                    draw.line((start, end), fill=(0, 0, 0, 210), width=6)
+                    draw.line((start, end), fill=color, width=3)
+            if close_ready and len(world_points) >= 3:
+                closed_points = []
+                for point in world_points:
+                    result = self._map_studio_project_point(point, w, h)
+                    if result is None:
+                        closed_points = []
+                        break
+                    closed_points.append((float(result[0]), float(result[1])))
+                if len(closed_points) >= 3:
+                    draw.polygon(closed_points, fill=(color[0], color[1], color[2], 24))
+                    draw.line(closed_points + [closed_points[0]], fill=color, width=2)
+            for index, point in enumerate(world_points):
+                base = self._map_studio_project_point(point, w, h)
+                top = self._map_studio_project_point((point[0], point[1], point[2] + wall_height), w, h)
+                if base is None:
+                    continue
+                bx, by = float(base[0]), float(base[1])
+                radius = 7 if index == 0 else 5
+                point_color = close_color if index == 0 and close_ready else base_color
+                draw.ellipse((bx - radius, by - radius, bx + radius, by + radius), fill=(18, 22, 27, 225), outline=point_color, width=3 if index == 0 else 2)
+                if top is not None:
+                    tx, ty = float(top[0]), float(top[1])
+                    self._map_studio_draw_dashed_line(
+                        draw,
+                        (bx, by),
+                        (tx, ty),
+                        fill=(base_color[0], base_color[1], base_color[2], 150),
+                        width=1,
+                        dash=5.0,
+                        gap=4.0,
+                    )
+            if hover_world is not None:
+                result = self._map_studio_project_point(hover_world, w, h)
+                if result is not None:
+                    hx, hy = float(result[0]), float(result[1])
+                    draw.ellipse((hx - 6, hy - 6, hx + 6, hy + 6), outline=color, width=2)
+                    label = "Click to close room" if close_ready else f"Corner {len(world_points) + 1}"
+                    draw.text((hx + 10, hy - 9), label, fill=color)
+        except Exception as exc:
+            log.debug("Map Studio building preview overlay failed: %s", exc)
+
     def _draw_map_studio_terrain_brush_cursor(self, draw, w: int, h: int) -> None:
         cursor = getattr(self, "_map_studio_terrain_brush_cursor", None)
         if not isinstance(cursor, dict):
@@ -598,20 +668,28 @@ class ViewportOverlayLayersMixin:
             cx, cy = float(center[0]), float(center[1])
             ex, ey = float(edge[0]), float(edge[1])
             radius = max(7.0, min(260.0, ((ex - cx) ** 2 + (ey - cy) ** 2) ** 0.5))
-            color = self._map_studio_marker_rgba(cursor.get("color", "#00ff7a"), 235)
+            color = self._map_studio_theme_rgba(
+                str(cursor.get("color_role", "accent") or "accent"),
+                str(cursor.get("color", "#00e5ff") or "#00e5ff"),
+                245,
+            )
             bounds = (cx - radius, cy - radius, cx + radius, cy + radius)
-            draw.ellipse(bounds, outline=(0, 0, 0, 190), width=4)
+            draw.ellipse(bounds, outline=(0, 0, 0, 205), width=4)
             draw.ellipse(bounds, outline=color, width=2)
-            draw.line([(cx - radius, cy), (cx + radius, cy)], fill=(color[0], color[1], color[2], 175), width=1)
-            draw.line([(cx, cy - radius), (cx, cy + radius)], fill=(color[0], color[1], color[2], 175), width=1)
-            sample = cursor.get("sample", ())
+            hardness = max(0.0, min(1.0, float(cursor.get("hardness", 0.5) or 0.0)))
+            inner_radius = max(4.0, radius * hardness)
+            inner_bounds = (cx - inner_radius, cy - inner_radius, cx + inner_radius, cy + inner_radius)
+            # The inner ring communicates the hard core without washing a
+            # large part of the scene in translucent cyan.  A compact meter
+            # below the cursor still gives Photoshop-style fill/empty feedback.
+            draw.ellipse(inner_bounds, outline=(0, 0, 0, 180), width=2)
+            draw.ellipse(inner_bounds, outline=(color[0], color[1], color[2], 205), width=1)
+            draw.ellipse((cx - 3.0, cy - 3.0, cx + 3.0, cy + 3.0), fill=color, outline=(0, 0, 0, 220), width=1)
             brush = str(cursor.get("brush", "") or "brush")
-            room = str(cursor.get("room_resref", "") or "")
-            label = f"{brush} {room} r{int(cursor.get('radius_samples', 0) or 0)}"
-            if "hardness" in cursor:
-                label = f"{label} h{float(cursor.get('hardness', 0.0) or 0.0):.2f}"
-            if isinstance(sample, (tuple, list)) and len(sample) >= 2:
-                label = f"{label} [{int(sample[0])},{int(sample[1])}]"
+            label = (
+                f"{brush.replace('_', ' ').title()} · "
+                f"{int(cursor.get('radius_samples', 0) or 0)} cells · H {int(round(hardness * 100.0))}%"
+            )
             text_pos = (cx + radius + 8.0, cy - 10.0)
             try:
                 text_box = draw.textbbox(text_pos, label)
@@ -623,6 +701,13 @@ class ViewportOverlayLayersMixin:
             except Exception:
                 pass
             draw.text(text_pos, label, fill=(color[0], color[1], color[2], 245))
+            meter_left = cx - min(radius, 54.0)
+            meter_right = cx + min(radius, 54.0)
+            meter_y = cy + radius + 7.0
+            draw.line((meter_left, meter_y, meter_right, meter_y), fill=(0, 0, 0, 210), width=5)
+            filled_right = meter_left + ((meter_right - meter_left) * hardness)
+            if filled_right > meter_left:
+                draw.line((meter_left, meter_y, filled_right, meter_y), fill=color, width=3)
         except Exception as exc:
             log.debug("Map Studio terrain brush cursor overlay failed: %s", exc)
 
@@ -951,6 +1036,22 @@ class ViewportOverlayLayersMixin:
                     draw.line((cx, cy - 15.0, cx, cy + 15.0), fill=(0, 255, 122, 255), width=2)
                     label = str(payload.get("placement_label", "object") or "object")
                     draw.text((cx + 16.0, cy - 9.0), f"Drop {label}", fill=(230, 255, 241, 255))
+                    if bool(payload.get("magnet_snapped", False)):
+                        snap_proj = self._map_studio_project_point(
+                            tuple(payload.get("snapped_world_point", ()) or ()),
+                            w,
+                            h,
+                        )
+                        if snap_proj is not None:
+                            sx, sy = float(snap_proj[0]), float(snap_proj[1])
+                            draw.line((cx, cy, sx, sy), fill=(0, 0, 0, 205), width=6)
+                            draw.line((cx, cy, sx, sy), fill=(0, 255, 122, 245), width=3)
+                            diamond = ((sx, sy - 9.0), (sx + 9.0, sy), (sx, sy + 9.0), (sx - 9.0, sy))
+                            draw.polygon(diamond, fill=(0, 0, 0, 190))
+                            inner = ((sx, sy - 6.0), (sx + 6.0, sy), (sx, sy + 6.0), (sx - 6.0, sy))
+                            draw.polygon(inner, outline=(0, 255, 122, 255), width=3)
+                            target = str(payload.get("magnet_target_label", "kit edge") or "kit edge")
+                            draw.text((sx + 12.0, sy + 7.0), f"Snap to {target}", fill=(230, 255, 241, 255))
 
             # The edge-selector widget makes the next operation's
             # direction predictable.  Faces point from their center to the
@@ -1816,11 +1917,12 @@ class ViewportOverlayLayersMixin:
             # diagnostics HUD is restored by the release-frame redraw.
             return img
         try:
-            from PIL import ImageDraw
+            from PIL import Image, ImageDraw
 
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
-            draw = ImageDraw.Draw(img, "RGBA")
+            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay, "RGBA")
             fps = self._fps_display
             if fps <= 0.0 and self._last_render_ms > 0.0:
                 fps = 1000.0 / max(self._last_render_ms, 1.0)
@@ -1853,7 +1955,7 @@ class ViewportOverlayLayersMixin:
                 outline=(42, 90, 62),
                 max_width=max_width,
             )
-            return img
+            return Image.alpha_composite(img, overlay)
         except Exception as exc:
             log.debug("Viewport FPS overlay draw failed: %s", exc)
             return img

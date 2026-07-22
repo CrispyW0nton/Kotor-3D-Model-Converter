@@ -50,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 320,
+        "python_file_count": 325,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -75,6 +75,8 @@
             "src\\gui\\dialogs\\fbx_sdk_setup_dialog.py",
             "src\\gui\\dialogs\\lightmap_bake_worker.py",
             "src\\gui\\dialogs\\lightmap_preview_window.py",
+            "src\\gui\\dialogs\\map_studio_obj_room_import_dialog.py",
+            "src\\gui\\dialogs\\map_studio_panorama_skybox_dialog.py",
             "src\\gui\\dialogs\\qt_dialogs.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
             "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
@@ -161,6 +163,7 @@
             "src\\gui\\panels\\module_editor\\blueprints_tab.py",
             "src\\gui\\panels\\module_editor\\builder_tab.py",
             "src\\gui\\panels\\module_editor\\component_marking_menu.py",
+            "src\\gui\\panels\\module_editor\\environment_kit_browser.py",
             "src\\gui\\panels\\module_editor\\environment_tab.py",
             "src\\gui\\panels\\module_editor\\export_panel.py",
             "src\\gui\\panels\\module_editor\\gmodeler_marking_menu.py",
@@ -174,6 +177,8 @@
             "src\\gui\\panels\\module_editor\\porter_tab.py",
             "src\\gui\\panels\\module_editor\\readiness_panel.py",
             "src\\gui\\panels\\module_editor\\rooms_tab.py",
+            "src\\gui\\panels\\module_editor\\terrain_kit_browser.py",
+            "src\\gui\\panels\\module_editor\\terrain_sculpt_shelf.py",
             "src\\gui\\panels\\module_editor\\texture_browser_dialog.py",
             "src\\gui\\panels\\module_editor\\texture_paint_tab.py",
             "src\\gui\\panels\\module_editor\\validation_panel.py",
@@ -392,7 +397,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 39,
+        "python_file_count": 41,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -432,7 +437,9 @@
             "src\\io\\fbx\\fbx_sdk_paths.py",
             "src\\io\\fbx\\fbx_sdk_setup.py",
             "src\\io\\kotor_gui_io.py",
-            "src\\io\\mdl_auto_import.py"
+            "src\\io\\mdl_auto_import.py",
+            "src\\io\\obj_room_document.py",
+            "src\\io\\skybox_panorama_conversion.py"
         ]
     },
     {
@@ -695,7 +702,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 129,
+        "python_file_count": 133,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -732,6 +739,7 @@
             "src\\core\\modules\\authored_module_validation_projection.py",
             "src\\core\\modules\\authored_module_walkmesh.py",
             "src\\core\\modules\\authored_module_world_lighting.py",
+            "src\\core\\modules\\authored_obj_room_import.py",
             "src\\core\\modules\\authored_primitive_polygon_cages.py",
             "src\\core\\modules\\authored_primitive_topology_policy.py",
             "src\\core\\modules\\authored_room_composition.py",
@@ -757,6 +765,7 @@
             "src\\core\\modules\\map_studio_base_game_contract.py",
             "src\\core\\modules\\map_studio_command_history.py",
             "src\\core\\modules\\map_studio_curve_guides.py",
+            "src\\core\\modules\\map_studio_environment_kits.py",
             "src\\core\\modules\\map_studio_export_objects.py",
             "src\\core\\modules\\map_studio_hover_context.py",
             "src\\core\\modules\\map_studio_live_topology_session.py",
@@ -764,6 +773,7 @@
             "src\\core\\modules\\map_studio_modeling_shelf.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_multi_cut.py",
+            "src\\core\\modules\\map_studio_pascal_building.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_combat.py",
@@ -785,6 +795,7 @@
             "src\\core\\modules\\map_studio_room_snapping.py",
             "src\\core\\modules\\map_studio_scene_animations.py",
             "src\\core\\modules\\map_studio_stock_content_preview.py",
+            "src\\core\\modules\\map_studio_terrain_kit.py",
             "src\\core\\modules\\map_studio_terrain_sculpt_session.py",
             "src\\core\\modules\\map_studio_texture_paint.py",
             "src\\core\\modules\\map_studio_tool_action_dispatch.py",
@@ -830,7 +841,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 394,
+        "python_file_count": 399,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -957,6 +968,7 @@
             "src\\core\\modules\\map_studio_base_game_contract.py",
             "src\\core\\modules\\map_studio_command_history.py",
             "src\\core\\modules\\map_studio_curve_guides.py",
+            "src\\core\\modules\\map_studio_environment_kits.py",
             "src\\core\\modules\\map_studio_export_objects.py",
             "src\\core\\modules\\map_studio_hover_context.py",
             "src\\core\\modules\\map_studio_live_topology_session.py",
@@ -964,6 +976,7 @@
             "src\\core\\modules\\map_studio_modeling_shelf.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_multi_cut.py",
+            "src\\core\\modules\\map_studio_pascal_building.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_combat.py",
@@ -1113,6 +1126,7 @@
             "src\\gui\\panels\\module_editor\\blueprints_tab.py",
             "src\\gui\\panels\\module_editor\\builder_tab.py",
             "src\\gui\\panels\\module_editor\\component_marking_menu.py",
+            "src\\gui\\panels\\module_editor\\environment_kit_browser.py",
             "src\\gui\\panels\\module_editor\\environment_tab.py",
             "src\\gui\\panels\\module_editor\\export_panel.py",
             "src\\gui\\panels\\module_editor\\gmodeler_marking_menu.py",
@@ -1126,6 +1140,8 @@
             "src\\gui\\panels\\module_editor\\porter_tab.py",
             "src\\gui\\panels\\module_editor\\readiness_panel.py",
             "src\\gui\\panels\\module_editor\\rooms_tab.py",
+            "src\\gui\\panels\\module_editor\\terrain_kit_browser.py",
+            "src\\gui\\panels\\module_editor\\terrain_sculpt_shelf.py",
             "src\\gui\\panels\\module_editor\\texture_browser_dialog.py",
             "src\\gui\\panels\\module_editor\\texture_paint_tab.py",
             "src\\gui\\panels\\module_editor\\validation_panel.py",

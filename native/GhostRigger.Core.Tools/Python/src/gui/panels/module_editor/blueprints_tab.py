@@ -50,3 +50,12 @@ class BlueprintsTab(QtWidgets.QWidget):
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
             layout.addWidget(button)
         layout.addStretch(1)
+
+    def adopt_script_hook_tools(self, script_group: QtWidgets.QWidget) -> None:
+        """Present ARE/IFO script-hook authoring in the Data workflow."""
+
+        script_group.setParent(self)
+        layout = self.layout()
+        if isinstance(layout, QtWidgets.QVBoxLayout):
+            layout.insertWidget(layout.count() - 1, script_group)
+        script_group.show()

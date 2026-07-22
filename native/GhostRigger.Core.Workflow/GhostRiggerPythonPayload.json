@@ -825,7 +825,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_MAP_STUDIO_LIGHTMAP_APPLY",
             "source_path": "src/core/workflow/map_studio_lightmap_apply.py",
             "packaged_path": "Python/src/core/workflow/map_studio_lightmap_apply.py",
-            "sha256": "23e10ea08d43e9a0d76bff9cb57f02612ec2eec4f072d525c90a2f75275b054a"
+            "sha256": "4de914165a4ef51145b3b9af26d3eb48a3ab35bf07ff41a87efd81c329fcfa49"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PARTICLE_PLACEABLE_EXPORT",

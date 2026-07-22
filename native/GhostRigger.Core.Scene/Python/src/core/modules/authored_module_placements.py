@@ -555,6 +555,44 @@ def update_authored_module_entry_point(
     )
 
 
+def remove_authored_module_entry_point(
+    project: AuthoredModuleProject,
+) -> AuthoredModuleEntryPointUpdate:
+    """Clear the IFO player start while retaining its transform for Undo/UI."""
+
+    current = project.placements.entry_point
+    entry = replace(current, area_resref="")
+    metadata = {
+        "area_resref": "",
+        "position": [float(value) for value in _vec3(current.position)],
+        "facing": float(current.facing),
+        "removed": True,
+    }
+    updated_placements = replace(
+        project.placements,
+        entry_point=entry,
+        metadata={
+            **dict(project.placements.metadata),
+            "last_entry_point_update": metadata,
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + ("Removed Map Studio module entry point/player start.",),
+        extra={
+            **dict(project.extra),
+            "last_entry_point_update": metadata,
+        },
+    )
+    return AuthoredModuleEntryPointUpdate(
+        project=updated,
+        area_resref="",
+        position=_vec3(current.position),
+        facing=float(current.facing),
+    )
+
+
 def _append_placement(
     placement: AuthoredGameplayPlacement,
     *,
@@ -1163,6 +1201,7 @@ __all__ = [
     "duplicate_authored_gameplay_placement",
     "new_authored_gameplay_instance_id",
     "parse_authored_gameplay_placement_id",
+    "remove_authored_module_entry_point",
     "remove_authored_gameplay_placement",
     "rename_authored_gameplay_placement",
     "update_authored_module_entry_point",

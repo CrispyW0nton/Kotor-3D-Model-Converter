@@ -693,6 +693,16 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_room_outline_edge_highlight(None)
 
+    def set_map_studio_building_preview(self, preview: object | None) -> None:
+        """Display the transient direct-wall path on the shared overlay layer."""
+
+        self._map_studio_building_preview = preview if isinstance(preview, dict) else None
+        self._clear_map_studio_shared_debug_labels()
+        self._request_render(fast=True, reason="map studio building preview changed", overlay=True)
+
+    def clear_map_studio_building_preview(self) -> None:
+        self.set_map_studio_building_preview(None)
+
     def set_map_studio_universal_transform_overlay(self, overlay: object | None) -> None:
         """Display Map Studio Universal Manipulator bounds and dimensions."""
 
@@ -807,6 +817,7 @@ class ViewportSceneModelMixin:
             "_map_studio_terrain_brush_cursor",
             "_map_studio_texture_paint_cursor",
             "_map_studio_modeling_points_overlay",
+            "_map_studio_building_preview",
         ):
             if getattr(self, name, None) is not None:
                 return True

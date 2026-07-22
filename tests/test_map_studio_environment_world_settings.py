@@ -599,13 +599,19 @@ def test_environment_tab_explicit_apply_and_honest_capability_labels() -> None:
     assert tab.sky_group.isEnabled() is True
     assert tab.sky_room_resref_edit.text() == "grworld_sky"
     assert tab.sky_texture_edits["north"].text()
-    assert tab.sky_panorama_button.isEnabled() is False
+    assert tab.sky_panorama_button.isEnabled() is True
     sky_requests: list[dict[str, object]] = []
     tab.skyboxCreateRequested.connect(sky_requests.append)
     tab.sky_create_button.click()
     app.processEvents()
     assert sky_requests[-1]["visible_rooms"] == ("grworlda",)
     assert sky_requests[-1]["half_extent"] == 500.0
+    panorama_requests: list[dict[str, object]] = []
+    tab.skyPanoramaRequested.connect(panorama_requests.append)
+    tab.sky_panorama_button.click()
+    app.processEvents()
+    assert panorama_requests[-1]["room_resref"] == "grworld_sky"
+    assert panorama_requests[-1]["north_texture"] == tab.sky_texture_edits["north"].text()
 
     tab.set_lightmap_context(
         (
@@ -661,7 +667,7 @@ def test_environment_tab_explicit_apply_and_honest_capability_labels() -> None:
     assert "manual KOTOR warp is still required" in labels
     assert "approximate realtime preview" in labels
     assert "Fog and sun-shadow controls are ARE/export-only" in labels
-    assert "panorama/HDR conversion" in labels
+    assert "tone-mapped offline" in labels
     assert "room-MDL animloop1/2/3" in labels
     tab.deleteLater()
 
@@ -727,6 +733,9 @@ def test_environment_payload_mirrors_and_window_wiring_are_exact() -> None:
     assert "self.environment_tab.set_lightmap_context(" in window
     assert "self.controller.authored_lightmap_surface_rows()" in window
     assert "self.environment_tab.skyboxCreateRequested.connect(self._create_map_studio_five_face_skybox)" in window
+    assert "self.environment_tab.skyPanoramaRequested.connect(self._create_map_studio_panorama_skybox)" in window
+    assert "_MAP_STUDIO_SKYBOX_EXECUTOR.submit(" in window
+    assert "MapStudioPanoramaSkyboxDialog" in window
     assert "self.environment_tab.set_skybox_context(" in window
     assert "self.environment_tab.skyTrafficCreateRequested.connect(self._create_map_studio_sky_traffic)" in window
     assert "self.environment_tab.set_sky_traffic_context(" in window

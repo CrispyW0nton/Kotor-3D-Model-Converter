@@ -166,6 +166,7 @@ class QtViewportWidget(
         self._active_camera_guard = False
         self._render_suppress_camera_overlays = False
         self._transform_gizmo_dragging = False
+        self._gr_map_studio_terrain_sculpt_input_lock = False
         self._mesh_transform_promotes_to_model_root = False
         self._transform_gizmo_mirror_nodes: list = []
         self._transform_gizmo_mirror_start_positions: dict[int, tuple[float, float, float]] = {}
@@ -269,6 +270,7 @@ class QtViewportWidget(
         self._map_studio_room_outline_geometry = None
         self._map_studio_room_outline_snap_highlight = None
         self._map_studio_room_outline_edge_highlight = None
+        self._map_studio_building_preview = None
         self._map_studio_marker_geometry = None
         self._map_studio_terrain_walkability_overlay = None
         self._map_studio_terrain_brush_cursor = None

@@ -15,6 +15,17 @@ class ViewportSelectionMeshMixin:
             return None
         if bool(getattr(node, "is_light", False)) or bool(getattr(node, "is_camera", False)):
             return node
+        # Map Studio gameplay previews are one authored object even when their
+        # visual model is composed from many meshes (notably the Player Start
+        # body plus head). Always promote a picked descendant to the placement
+        # group carrying the durable GIT/IFO identity.
+        current = node
+        seen: set[int] = set()
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            if str(getattr(current, "_gr_map_studio_placement_id", "") or ""):
+                return current
+            current = getattr(current, "_gr_scene_object_root_ref", None) or getattr(current, "parent", None)
         root = self._scene_root_for_node(node)
         if root is None or root is node:
             return node

@@ -82,6 +82,7 @@ mesh = [
     "manifold3d>=3.5.2",
     "trimesh[easy]>=4.0",
     "xatlas>=0.0.11",
+    "fast-simplification>=0.1.13",
     "open3d",
     "pygltflib>=1.15.0",
 ]

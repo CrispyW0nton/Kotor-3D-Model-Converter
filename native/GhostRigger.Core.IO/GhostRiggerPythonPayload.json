@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 39,
+    "file_count": 41,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -238,6 +238,18 @@
             "source_path": "src/io/mdl_auto_import.py",
             "packaged_path": "Python/src/io/mdl_auto_import.py",
             "sha256": "19867f181e2d7906c49290530e5f664a7f3f8eda8582897806c7e3505cf83fa4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_OBJ_ROOM_DOCUMENT",
+            "source_path": "src/io/obj_room_document.py",
+            "packaged_path": "Python/src/io/obj_room_document.py",
+            "sha256": "7eeede7ea88a1a32dd8a96fa606d2630fb92b4cbe49edba15d55f73446b01e5a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_SKYBOX_PANORAMA_CONVERSION",
+            "source_path": "src/io/skybox_panorama_conversion.py",
+            "packaged_path": "Python/src/io/skybox_panorama_conversion.py",
+            "sha256": "a012b8abddf9f8236d2bc3d482be255146d7418618900ed15fff1a929ac6bce4"
         }
     ]
 }

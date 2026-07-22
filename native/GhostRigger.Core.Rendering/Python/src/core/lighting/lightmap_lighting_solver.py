@@ -28,6 +28,7 @@ class LightmapLightingSolver:
             rgb += self.solve_ambient_batch(len(ys), settings)
         if settings.use_direct_lighting:
             mesh_ids = buffer.mesh_ids[ys, xs]
+            triangle_ids = buffer.triangle_ids[ys, xs]
             for light in active_lights:
                 contribution = self.solve_direct_light_batch(positions, normals, light, settings)
                 if shadow_solver is not None and settings.use_shadows and np.any(contribution > 0.0):
@@ -35,6 +36,7 @@ class LightmapLightingSolver:
                         positions,
                         normals,
                         mesh_ids,
+                        triangle_ids,
                         contribution,
                         light,
                         settings,
@@ -59,6 +61,7 @@ class LightmapLightingSolver:
                 "normal": buffer.world_normals[y, x],
                 "diffuse": buffer.base_diffuse[y, x],
                 "mesh_id": int(buffer.mesh_ids[y, x]),
+                "triangle_id": int(buffer.triangle_ids[y, x]),
             }
             rgb = self.solve_texel_lighting(texel, active_lights, settings, shadow_solver)
             output[y, x] = rgb
@@ -216,7 +219,17 @@ class LightmapLightingSolver:
         gamma = max(float(settings.gamma), 1.0e-5)
         return np.power(np.clip(value, 0.0, None), 1.0 / gamma)
 
-    def _shadow_factors_batch(self, positions, normals, mesh_ids, contribution, light, settings, shadow_solver) -> np.ndarray:
+    def _shadow_factors_batch(
+        self,
+        positions,
+        normals,
+        mesh_ids,
+        triangle_ids,
+        contribution,
+        light,
+        settings,
+        shadow_solver,
+    ) -> np.ndarray:
         factors = np.ones(len(positions), dtype=np.float32)
         active = np.nonzero(np.any(contribution > 1.0e-8, axis=1))[0]
         for idx in active:
@@ -224,6 +237,7 @@ class LightmapLightingSolver:
                 "position": positions[idx],
                 "normal": normals[idx],
                 "mesh_id": int(mesh_ids[idx]),
+                "triangle_id": int(triangle_ids[idx]),
             }
             raw = float(shadow_solver.calculate_shadow_factor(texel, light, settings))
             strength = float(getattr(settings, "shadow_strength", 1.0))

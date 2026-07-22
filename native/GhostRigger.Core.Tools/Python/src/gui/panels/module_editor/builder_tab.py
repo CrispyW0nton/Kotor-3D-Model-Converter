@@ -44,6 +44,16 @@ class BuilderTab(QtWidgets.QWidget):
     scriptHookRequested = QtCore.Signal(str, str, str)
     scriptEditorRequested = QtCore.Signal(str, str, str)
     modelingContextChanged = QtCore.Signal(str)
+    buildSectionChanged = QtCore.Signal(str)
+    terrainCreateRequested = QtCore.Signal()
+    terrainDressingRequested = QtCore.Signal()
+    terrainPaintRequested = QtCore.Signal()
+    snapRoomsAtDoorwayRequested = QtCore.Signal()
+    snapRoomsToGridRequested = QtCore.Signal()
+    buildingToolChanged = QtCore.Signal(str)
+    buildingSettingsChanged = QtCore.Signal(object)
+    buildingStyleChanged = QtCore.Signal(str, str)
+    browseVanillaRoomKitsRequested = QtCore.Signal()
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -60,14 +70,206 @@ class BuilderTab(QtWidgets.QWidget):
         super().__init__(parent)
         self._gameplay_palette_entries: list[object] = []
         layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.buildSectionTabs = QtWidgets.QTabWidget(self)
+        self.buildSectionTabs.setObjectName("mapStudioBuildSectionTabs")
+        self.buildSectionTabs.setDocumentMode(True)
+
+        self.roomBuildingPage = QtWidgets.QWidget(self.buildSectionTabs)
+        self.roomBuildingPage.setObjectName("mapStudioRoomBuildingPage")
+        room_page_layout = QtWidgets.QVBoxLayout(self.roomBuildingPage)
+        room_page_layout.setContentsMargins(6, 6, 6, 6)
+        self._roomPrimaryContainer = QtWidgets.QWidget(self.roomBuildingPage)
+        self._roomPrimaryLayout = QtWidgets.QVBoxLayout(self._roomPrimaryContainer)
+        self._roomPrimaryLayout.setContentsMargins(0, 0, 0, 0)
+        room_page_layout.addWidget(self._roomPrimaryContainer)
+        self.roomAdvancedToggle = QtWidgets.QToolButton(self.roomBuildingPage)
+        self.roomAdvancedToggle.setObjectName("mapStudioRoomAdvancedToolsButton")
+        self.roomAdvancedToggle.setText("Advanced room geometry")
+        self.roomAdvancedToggle.setCheckable(True)
+        self.roomAdvancedToggle.setChecked(False)
+        self.roomAdvancedToggle.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.roomAdvancedToggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        room_page_layout.addWidget(self.roomAdvancedToggle)
+        self._roomAdvancedContainer = QtWidgets.QWidget(self.roomBuildingPage)
+        self._roomAdvancedContainer.setObjectName("mapStudioRoomAdvancedTools")
+        self._roomAdvancedLayout = QtWidgets.QVBoxLayout(self._roomAdvancedContainer)
+        self._roomAdvancedLayout.setContentsMargins(0, 0, 0, 0)
+        self._roomAdvancedContainer.setVisible(False)
+        room_page_layout.addWidget(self._roomAdvancedContainer)
+        room_page_layout.addStretch(1)
+
+        self.terrainBuildingPage = QtWidgets.QWidget(self.buildSectionTabs)
+        self.terrainBuildingPage.setObjectName("mapStudioTerrainBuildingPage")
+        self._terrainBuildingLayout = QtWidgets.QVBoxLayout(self.terrainBuildingPage)
+        self._terrainBuildingLayout.setContentsMargins(6, 6, 6, 6)
+        self._terrainBuildingLayout.addStretch(1)
+
+        self.skyboxBuildingPage = QtWidgets.QWidget(self.buildSectionTabs)
+        self.skyboxBuildingPage.setObjectName("mapStudioSkyboxBuildingPage")
+        self._skyboxBuildingLayout = QtWidgets.QVBoxLayout(self.skyboxBuildingPage)
+        self._skyboxBuildingLayout.setContentsMargins(6, 6, 6, 6)
+        self.skyboxBuildGuideLabel = QtWidgets.QLabel(
+            "Build a KOTOR visual-only sky dome from five engine textures, or convert an HDR/panorama into the required texture set."
+        )
+        self.skyboxBuildGuideLabel.setObjectName("mapStudioSkyboxBuildGuideLabel")
+        self.skyboxBuildGuideLabel.setWordWrap(True)
+        self._skyboxBuildingLayout.addWidget(self.skyboxBuildGuideLabel)
+        self._skyboxBuildingLayout.addStretch(1)
+
+        self.buildSectionTabs.addTab(self.roomBuildingPage, "Room Building")
+        self.buildSectionTabs.addTab(self.terrainBuildingPage, "Terrain Building")
+        self.buildSectionTabs.addTab(self.skyboxBuildingPage, "Skybox")
+        layout.addWidget(self.buildSectionTabs, 1)
+
+        self._legacyToolsContainer = QtWidgets.QWidget(self)
+        self._legacyToolsContainer.setObjectName("mapStudioLegacyBuilderTools")
+        self._legacyToolsLayout = QtWidgets.QVBoxLayout(self._legacyToolsContainer)
+        self._legacyToolsLayout.setContentsMargins(0, 0, 0, 0)
+        self._legacyToolsContainer.setVisible(False)
         self.builderGuideLabel = QtWidgets.QLabel(
-            "Builder workflow: create a flat test room, doorway blockout, corridor, or terrain patch; edit shape/materials/WOK; then validate before export or game proof."
+            "Build is organized around room assembly, terrain sculpting and dressing, and KOTOR skybox authoring."
         )
         self.builderGuideLabel.setObjectName("mapStudioBuilderGuideLabel")
         self.builderGuideLabel.setWordWrap(True)
         self.builderGuideLabel.setToolTip(self.builderGuideLabel.text())
         self.builderGuideLabel.setVisible(False)
-        layout.addWidget(self.builderGuideLabel)
+        self._legacyToolsLayout.addWidget(self.builderGuideLabel)
+        building_box = QtWidgets.QGroupBox("Pascal Building")
+        building_box.setObjectName("mapStudioDirectBuildingGroup")
+        building_layout = QtWidgets.QVBoxLayout(building_box)
+        self.buildingGuideLabel = QtWidgets.QLabel(
+            "Choose a vanilla module style, then draw connected walls directly in the viewport or drag a trained room piece below. "
+            "Endpoints, closed loops, openings, levels, and compatible doorway magnets behave as one construction workflow."
+        )
+        self.buildingGuideLabel.setObjectName("mapStudioDirectBuildingGuide")
+        self.buildingGuideLabel.setWordWrap(True)
+        building_layout.addWidget(self.buildingGuideLabel)
+        tool_row = QtWidgets.QHBoxLayout()
+        self.buildingToolButtonGroup = QtWidgets.QButtonGroup(self)
+        self.buildingToolButtonGroup.setExclusive(True)
+        self.buildingToolButtons: dict[str, QtWidgets.QToolButton] = {}
+        for label, key in (
+            ("Select", "select"),
+            ("Draw Walls", "walls"),
+            ("Door", "door"),
+            ("Window", "window"),
+        ):
+            button = QtWidgets.QToolButton(building_box)
+            button.setText(label)
+            button.setCheckable(True)
+            button.setAutoRaise(False)
+            button.setObjectName(f"mapStudioBuilding{key.title()}ToolButton")
+            button.setToolTip(
+                "Click a room wall to insert this opening."
+                if key in {"door", "window"}
+                else "Click successive floor points; click the first point to close the room."
+                if key == "walls"
+                else "Return to normal viewport selection."
+            )
+            self.buildingToolButtonGroup.addButton(button)
+            self.buildingToolButtons[key] = button
+            tool_row.addWidget(button)
+        self.buildingToolButtons["select"].setChecked(True)
+        building_layout.addLayout(tool_row)
+        building_form = QtWidgets.QFormLayout()
+        self.buildingLevelComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingLevelComboBox.setObjectName("mapStudioBuildingLevelComboBox")
+        self.buildingLevelComboBox.addItem("Level 1 (0.00 m)", {"index": 0, "name": "Level 1", "floor_z": 0.0})
+        self.addBuildingLevelButton = QtWidgets.QPushButton("Add Level", building_box)
+        self.addBuildingLevelButton.setObjectName("mapStudioAddBuildingLevelButton")
+        level_row = QtWidgets.QWidget(building_box)
+        level_row_layout = QtWidgets.QHBoxLayout(level_row)
+        level_row_layout.setContentsMargins(0, 0, 0, 0)
+        level_row_layout.addWidget(self.buildingLevelComboBox, 1)
+        level_row_layout.addWidget(self.addBuildingLevelButton)
+        self.buildingStyleComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingStyleComboBox.setObjectName("mapStudioBuildingStyleComboBox")
+        self.buildingStyleComboBox.setEditable(True)
+        self.buildingStyleComboBox.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.buildingStyleComboBox.setMaxVisibleItems(18)
+        self.buildingStyleComboBox.completer().setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+        self.buildingStyleComboBox.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
+        self.buildingStyleComboBox.addItem("PLCaa Neutral Blockout", {"style_id": "plcaa_graybox"})
+        self._buildingStyleRows: list[dict[str, object]] = []
+        self.buildingKindComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingKindComboBox.setObjectName("mapStudioBuildingKindComboBox")
+        self.buildingKindComboBox.addItem("Interior rooms", "interior")
+        self.buildingKindComboBox.addItem("Exterior buildings", "exterior")
+        self.buildingKindComboBox.addItem("All module styles", "")
+        self.buildingKindComboBox.setToolTip("Choose whether the style list comes from interior or exterior vanilla modules.")
+        self.browseVanillaRoomKitsButton = QtWidgets.QPushButton("Browse Vanilla Room Kits…", building_box)
+        self.browseVanillaRoomKitsButton.setObjectName("mapStudioBrowseVanillaRoomKitsButton")
+        self.browseVanillaRoomKitsButton.setToolTip(
+            "Browse complete retail room geometry when a palette-driven wall layout is not enough."
+        )
+        self.browseVanillaRoomKitsButton.setVisible(False)
+        self.browseVanillaRoomKitsButton.clicked.connect(lambda _checked=False: self.browseVanillaRoomKitsRequested.emit())
+        self.buildingWallHeightSpinBox = self._make_transform_spin(
+            "mapStudioBuildingWallHeightSpinBox", 0.25, 50.0, " m", value=3.0, step=0.25
+        )
+        self.buildingFloorZSpinBox = self._make_transform_spin(
+            "mapStudioBuildingFloorZSpinBox", -1000.0, 1000.0, " m", value=0.0, step=0.25
+        )
+        self.buildingGridSizeSpinBox = self._make_transform_spin(
+            "mapStudioBuildingGridSizeSpinBox", 0.05, 10.0, " m", value=0.25, step=0.05
+        )
+        self.buildingSnapCheckBox = QtWidgets.QCheckBox("Snap wall corners to grid", building_box)
+        self.buildingSnapCheckBox.setObjectName("mapStudioBuildingSnapCheckBox")
+        self.buildingSnapCheckBox.setChecked(True)
+        self.buildingCeilingCheckBox = QtWidgets.QCheckBox("Create ceiling", building_box)
+        self.buildingCeilingCheckBox.setObjectName("mapStudioBuildingCeilingCheckBox")
+        self.buildingCeilingCheckBox.setChecked(True)
+        self.buildingOpeningWidthSpinBox = self._make_transform_spin(
+            "mapStudioBuildingOpeningWidthSpinBox", 0.25, 20.0, " m", value=1.25, step=0.05
+        )
+        self.buildingOpeningHeightSpinBox = self._make_transform_spin(
+            "mapStudioBuildingOpeningHeightSpinBox", 0.25, 20.0, " m", value=2.2, step=0.05
+        )
+        self.buildingWindowSillSpinBox = self._make_transform_spin(
+            "mapStudioBuildingWindowSillSpinBox", 0.0, 20.0, " m", value=1.0, step=0.05
+        )
+        building_form.addRow("Level:", level_row)
+        building_form.addRow("Build type:", self.buildingKindComboBox)
+        building_form.addRow("Module style:", self.buildingStyleComboBox)
+        building_layout.addLayout(building_form)
+        self.buildingSettingsToggle = QtWidgets.QToolButton(building_box)
+        self.buildingSettingsToggle.setObjectName("mapStudioPascalBuildingSettingsToggle")
+        self.buildingSettingsToggle.setText("Building settings")
+        self.buildingSettingsToggle.setCheckable(True)
+        self.buildingSettingsToggle.setChecked(False)
+        self.buildingSettingsToggle.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.buildingSettingsToggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        building_layout.addWidget(self.buildingSettingsToggle)
+        self.buildingSettingsContainer = QtWidgets.QWidget(building_box)
+        self.buildingSettingsContainer.setObjectName("mapStudioPascalBuildingSettingsContainer")
+        building_settings_form = QtWidgets.QFormLayout(self.buildingSettingsContainer)
+        building_settings_form.setContentsMargins(0, 0, 0, 0)
+        building_settings_form.addRow("Wall height:", self.buildingWallHeightSpinBox)
+        building_settings_form.addRow("Floor elevation:", self.buildingFloorZSpinBox)
+        building_settings_form.addRow("Grid:", self.buildingGridSizeSpinBox)
+        building_settings_form.addRow(self.buildingSnapCheckBox)
+        building_settings_form.addRow(self.buildingCeilingCheckBox)
+        building_settings_form.addRow("Opening width:", self.buildingOpeningWidthSpinBox)
+        building_settings_form.addRow("Opening height:", self.buildingOpeningHeightSpinBox)
+        building_settings_form.addRow("Window sill:", self.buildingWindowSillSpinBox)
+        self.buildingSettingsContainer.setVisible(False)
+        building_layout.addWidget(self.buildingSettingsContainer)
+        self.buildingStatusLabel = QtWidgets.QLabel(
+            "Select Draw Walls and click the floor, or drag a typed vanilla piece from the kit browser below."
+        )
+        self.buildingStatusLabel.setObjectName("mapStudioBuildingStatusLabel")
+        self.buildingStatusLabel.setWordWrap(True)
+        building_layout.addWidget(self.buildingStatusLabel)
+        self.buildingSettingsToggle.toggled.connect(
+            lambda visible: (
+                self.buildingSettingsContainer.setVisible(bool(visible)),
+                self.buildingSettingsToggle.setArrowType(
+                    QtCore.Qt.ArrowType.DownArrow if visible else QtCore.Qt.ArrowType.RightArrow
+                ),
+            )
+        )
+        self._roomPrimaryLayout.addWidget(building_box)
         modeling_box = QtWidgets.QGroupBox("Modeling Mode + Snap")
         modeling_layout = QtWidgets.QFormLayout(modeling_box)
         self.modelingModeGuideLabel = QtWidgets.QLabel(
@@ -101,7 +303,7 @@ class BuilderTab(QtWidgets.QWidget):
         modeling_layout.addRow("Snap:", self.snapModeComboBox)
         modeling_layout.addRow(self.modelingToolHintLabel)
         modeling_layout.addRow(self.modelingStatusLabel)
-        layout.addWidget(modeling_box)
+        self._roomAdvancedLayout.addWidget(modeling_box)
         primitive_box = QtWidgets.QGroupBox("Authored Room Primitive")
         primitive_layout = QtWidgets.QFormLayout(primitive_box)
         self.roomGeometryWorkflowLabel = QtWidgets.QLabel(
@@ -126,7 +328,24 @@ class BuilderTab(QtWidgets.QWidget):
         primitive_layout.addRow("Primitive:", self.roomPrimitivePresetComboBox)
         primitive_layout.addRow(self.roomPrimitiveDescriptionLabel)
         primitive_layout.addRow(self.createPrimitiveButton)
-        layout.addWidget(primitive_box)
+        self._roomAdvancedLayout.addWidget(primitive_box)
+        magnetic_box = QtWidgets.QGroupBox("Magnetic Room Assembly")
+        magnetic_box.setObjectName("mapStudioMagneticRoomAssemblyGroup")
+        magnetic_layout = QtWidgets.QVBoxLayout(magnetic_box)
+        magnetic_hint = QtWidgets.QLabel(
+            "Place room pieces, then snap matching doorway seams or selected pieces to the construction grid. "
+            "Hold V for corner/vertex snapping and J for same-level alignment while transforming."
+        )
+        magnetic_hint.setObjectName("mapStudioMagneticRoomAssemblyHint")
+        magnetic_hint.setWordWrap(True)
+        self.snapRoomsAtDoorwayButton = QtWidgets.QPushButton("Snap Rooms at Doorway...")
+        self.snapRoomsAtDoorwayButton.setObjectName("mapStudioSnapRoomsAtDoorwayButton")
+        self.snapRoomsToGridButton = QtWidgets.QPushButton("Snap Selected Rooms to Grid")
+        self.snapRoomsToGridButton.setObjectName("mapStudioSnapSelectedRoomsToGridButton")
+        magnetic_layout.addWidget(magnetic_hint)
+        magnetic_layout.addWidget(self.snapRoomsAtDoorwayButton)
+        magnetic_layout.addWidget(self.snapRoomsToGridButton)
+        self._roomAdvancedLayout.addWidget(magnetic_box)
         operation_box = QtWidgets.QGroupBox("Shape Current Room")
         operation_layout = QtWidgets.QFormLayout(operation_box)
         self.roomOperationHintLabel = QtWidgets.QLabel(
@@ -179,7 +398,7 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Width:", self.cutWidthSpinBox)
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
-        layout.addWidget(operation_box)
+        self._roomAdvancedLayout.addWidget(operation_box)
         extrusion_box = QtWidgets.QGroupBox("Floor-Plan Extrusion")
         extrusion_layout = QtWidgets.QFormLayout(extrusion_box)
         self.floorPlanExtrusionHintLabel = QtWidgets.QLabel(
@@ -205,7 +424,7 @@ class BuilderTab(QtWidgets.QWidget):
         extrusion_layout.addRow(self.floorPlanIncludeWallsCheckBox)
         extrusion_layout.addRow("WOK surface:", self.floorPlanSurfaceComboBox)
         extrusion_layout.addRow(self.applyFloorPlanExtrusionButton)
-        layout.addWidget(extrusion_box)
+        self._roomAdvancedLayout.addWidget(extrusion_box)
         opening_box = QtWidgets.QGroupBox("Floor-Plan Wall Opening")
         opening_layout = QtWidgets.QFormLayout(opening_box)
         self.floorPlanOpeningHintLabel = QtWidgets.QLabel(
@@ -235,7 +454,7 @@ class BuilderTab(QtWidgets.QWidget):
         opening_layout.addRow("Height:", self.floorPlanOpeningHeightSpinBox)
         opening_layout.addRow("Bottom:", self.floorPlanOpeningBottomSpinBox)
         opening_layout.addRow(self.applyFloorPlanOpeningButton)
-        layout.addWidget(opening_box)
+        self._roomAdvancedLayout.addWidget(opening_box)
         marker_box = QtWidgets.QGroupBox("Opening Transition Marker")
         marker_layout = QtWidgets.QFormLayout(marker_box)
         self.floorPlanOpeningMarkerLayout = marker_layout
@@ -294,7 +513,7 @@ class BuilderTab(QtWidgets.QWidget):
         marker_layout.addRow("Target type:", self.floorPlanOpeningMarkerTargetTypeComboBox)
         marker_layout.addRow("Destination name StringRef:", self.floorPlanOpeningMarkerTransitionDestSpinBox)
         marker_layout.addRow(self.createFloorPlanOpeningMarkerButton)
-        layout.addWidget(marker_box)
+        self._roomAdvancedLayout.addWidget(marker_box)
         vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
         vertex_layout = QtWidgets.QFormLayout(vertex_box)
         self.floorPlanVertexHintLabel = QtWidgets.QLabel(
@@ -373,14 +592,18 @@ class BuilderTab(QtWidgets.QWidget):
         vertex_layout.addRow(self.splitFloorPlanFaceButton)
         vertex_layout.addRow(self.triangulateFloorPlanFaceButton)
         vertex_layout.addRow(self.cleanupFloorPlanNormalsButton)
-        layout.addWidget(vertex_box)
-        terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
-        terrain_layout = QtWidgets.QFormLayout(terrain_box)
+        self._roomAdvancedLayout.addWidget(vertex_box)
+        terrain_box = QtWidgets.QGroupBox("Sculpt Terrain")
+        terrain_box.setObjectName("mapStudioTerrainSculptGroup")
+        terrain_layout = QtWidgets.QVBoxLayout(terrain_box)
         self.terrainWorkflowLabel = QtWidgets.QLabel(
-            "Terrain workflow: create a terrain patch, choose the heightfield room, apply a shape preset, then sculpt with raise/lower/smooth/flatten/plateau/ramp/terrace/pinch/erode/noise brushes. Validate WOK slopes and walkability before export."
+            "Create or select a terrain surface. Sculpt Mode then opens a compact brush shelf above the viewport so the common tools stay beside your terrain."
         )
         self.terrainWorkflowLabel.setObjectName("mapStudioTerrainWorkflowLabel")
         self.terrainWorkflowLabel.setWordWrap(True)
+        self.createTerrainSurfaceButton = QtWidgets.QPushButton("Create Terrain Surface")
+        self.createTerrainSurfaceButton.setObjectName("mapStudioCreateTerrainSurfaceButton")
+        self.createTerrainSurfaceButton.setToolTip("Create a walkable terrain heightfield and immediately enable viewport sculpting.")
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
         self.terrainBrushComboBox = QtWidgets.QComboBox()
@@ -397,6 +620,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainRadiusSpinBox = QtWidgets.QSpinBox()
         self.terrainRadiusSpinBox.setObjectName("mapStudioTerrainRadiusSpinBox")
         self.terrainRadiusSpinBox.setRange(0, 64)
+        self.terrainRadiusSpinBox.setValue(3)
+        self.terrainRadiusSpinBox.setSuffix(" cells")
         self.terrainSmoothIterationsSpinBox = QtWidgets.QSpinBox()
         self.terrainSmoothIterationsSpinBox.setObjectName("mapStudioTerrainSmoothIterationsSpinBox")
         self.terrainSmoothIterationsSpinBox.setRange(1, 32)
@@ -408,11 +633,20 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainHardnessSpinBox.setToolTip(
             "Inner brush hardness: 0 gives a soft eased falloff; 1 applies full strength across the radius."
         )
-        self.terrainHintLabel = QtWidgets.QLabel("Create a terrain heightfield preset to sculpt terrain samples.")
+        self.terrainSculptEnabledCheckBox = QtWidgets.QCheckBox("Enable viewport Sculpt Mode")
+        self.terrainSculptEnabledCheckBox.setObjectName("mapStudioTerrainViewportSculptCheckBox")
+        self.terrainSculptEnabledCheckBox.setChecked(True)
+        self.terrainSculptEnabledCheckBox.setToolTip(
+            "Left-drag sculpts, Shift+left-drag temporarily lowers, Shift+wheel resizes, right-drag orbits, "
+            "and Alt+right-drag adjusts size horizontally and hardness vertically."
+        )
+        self.terrainHintLabel = QtWidgets.QLabel(
+            "Tip: shape with the clean surface view, then enable Slope / WOK overlay in the viewport shelf before export."
+        )
         self.terrainHintLabel.setObjectName("mapStudioTerrainHintLabel")
         self.terrainHintLabel.setWordWrap(True)
         self.terrainBrushStatusLabel = QtWidgets.QLabel(
-            "Brush: choose a terrain sculpt brush. Continuous strokes must stay local, coalesce input, and defer full MDL/WOK rebuilds."
+            "Choose a brush here or from the viewport shelf. Each mouse drag is one undoable terrain stroke."
         )
         self.terrainBrushStatusLabel.setObjectName("mapStudioTerrainBrushStatusLabel")
         self.terrainBrushStatusLabel.setWordWrap(True)
@@ -440,32 +674,68 @@ class BuilderTab(QtWidgets.QWidget):
         self.checkLiveTerrainBrushFrameButton.setObjectName("mapStudioCheckLiveTerrainBrushFrameButton")
         self.applyTerrainShapeButton = QtWidgets.QPushButton("Apply Terrain Shape")
         self.applyTerrainShapeButton.setObjectName("mapStudioApplyTerrainShapePresetButton")
-        terrain_layout.addRow(self.terrainWorkflowLabel)
-        terrain_layout.addRow("Terrain:", self.terrainRoomComboBox)
-        terrain_layout.addRow("Brush:", self.terrainBrushComboBox)
-        terrain_layout.addRow("Shape:", self.terrainShapePresetComboBox)
-        terrain_layout.addRow("Shape height:", self.terrainShapeHeightSpinBox)
-        terrain_layout.addRow("Row:", self.terrainRowSpinBox)
-        terrain_layout.addRow("Column:", self.terrainColumnSpinBox)
-        terrain_layout.addRow("Height:", self.terrainHeightSpinBox)
-        terrain_layout.addRow("Delta:", self.terrainDeltaSpinBox)
-        terrain_layout.addRow("Radius:", self.terrainRadiusSpinBox)
-        terrain_layout.addRow("Smooth passes:", self.terrainSmoothIterationsSpinBox)
-        terrain_layout.addRow("Strength:", self.terrainSmoothStrengthSpinBox)
-        terrain_layout.addRow("Falloff hardness:", self.terrainHardnessSpinBox)
-        terrain_layout.addRow(self.terrainHintLabel)
-        terrain_layout.addRow(self.terrainBrushStatusLabel)
-        terrain_layout.addRow(self.checkLiveTerrainBrushFrameButton)
-        terrain_layout.addRow(self.applyTerrainBrushButton)
-        terrain_layout.addRow(self.setTerrainHeightButton)
-        terrain_layout.addRow(self.raiseTerrainButton)
-        terrain_layout.addRow(self.lowerTerrainButton)
-        terrain_layout.addRow(self.smoothTerrainButton)
-        terrain_layout.addRow(self.flattenTerrainButton)
-        terrain_layout.addRow(self.carveTerrainHoleButton)
-        terrain_layout.addRow(self.fillTerrainHoleButton)
-        terrain_layout.addRow(self.applyTerrainShapeButton)
-        layout.addWidget(terrain_box)
+        terrain_layout.addWidget(self.terrainWorkflowLabel)
+        terrain_layout.addWidget(self.createTerrainSurfaceButton)
+        terrain_brush_form = QtWidgets.QFormLayout()
+        terrain_brush_form.addRow("Terrain:", self.terrainRoomComboBox)
+        terrain_brush_form.addRow("Brush:", self.terrainBrushComboBox)
+        terrain_brush_form.addRow("Brush size:", self.terrainRadiusSpinBox)
+        terrain_brush_form.addRow("Falloff hardness:", self.terrainHardnessSpinBox)
+        terrain_brush_form.addRow("Strength:", self.terrainSmoothStrengthSpinBox)
+        terrain_brush_form.addRow("Height change:", self.terrainDeltaSpinBox)
+        terrain_brush_form.addRow(self.terrainSculptEnabledCheckBox)
+        terrain_layout.addLayout(terrain_brush_form)
+        terrain_layout.addWidget(self.terrainHintLabel)
+        terrain_layout.addWidget(self.terrainBrushStatusLabel)
+
+        self.terrainAdvancedToggle = QtWidgets.QToolButton(terrain_box)
+        self.terrainAdvancedToggle.setObjectName("mapStudioTerrainAdvancedToolsButton")
+        self.terrainAdvancedToggle.setText("Advanced heightfield tools")
+        self.terrainAdvancedToggle.setCheckable(True)
+        self.terrainAdvancedToggle.setChecked(False)
+        self.terrainAdvancedToggle.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.terrainAdvancedToggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        terrain_layout.addWidget(self.terrainAdvancedToggle)
+        self.terrainAdvancedWidget = QtWidgets.QWidget(terrain_box)
+        self.terrainAdvancedWidget.setObjectName("mapStudioTerrainAdvancedTools")
+        terrain_advanced_form = QtWidgets.QFormLayout(self.terrainAdvancedWidget)
+        terrain_advanced_form.setContentsMargins(0, 0, 0, 0)
+        terrain_advanced_form.addRow("Shape:", self.terrainShapePresetComboBox)
+        terrain_advanced_form.addRow("Shape height:", self.terrainShapeHeightSpinBox)
+        terrain_advanced_form.addRow("Row:", self.terrainRowSpinBox)
+        terrain_advanced_form.addRow("Column:", self.terrainColumnSpinBox)
+        terrain_advanced_form.addRow("Exact height:", self.terrainHeightSpinBox)
+        terrain_advanced_form.addRow("Smooth passes:", self.terrainSmoothIterationsSpinBox)
+        terrain_advanced_form.addRow(self.checkLiveTerrainBrushFrameButton)
+        terrain_advanced_form.addRow(self.applyTerrainBrushButton)
+        terrain_advanced_form.addRow(self.setTerrainHeightButton)
+        terrain_advanced_form.addRow(self.raiseTerrainButton)
+        terrain_advanced_form.addRow(self.lowerTerrainButton)
+        terrain_advanced_form.addRow(self.smoothTerrainButton)
+        terrain_advanced_form.addRow(self.flattenTerrainButton)
+        terrain_advanced_form.addRow(self.carveTerrainHoleButton)
+        terrain_advanced_form.addRow(self.fillTerrainHoleButton)
+        terrain_advanced_form.addRow(self.applyTerrainShapeButton)
+        self.terrainAdvancedWidget.setVisible(False)
+        terrain_layout.addWidget(self.terrainAdvancedWidget)
+        self._terrainBuildingLayout.insertWidget(self._terrainBuildingLayout.count() - 1, terrain_box)
+
+        terrain_dressing_box = QtWidgets.QGroupBox("Terrain Dressing and Surface Painting")
+        terrain_dressing_box.setObjectName("mapStudioTerrainDressingGroup")
+        terrain_dressing_layout = QtWidgets.QVBoxLayout(terrain_dressing_box)
+        terrain_dressing_hint = QtWidgets.QLabel(
+            "Drag rocks, foliage, and other placeables from the Content Browser onto the terrain; they floor-snap at the drop point. Paintable planes and terrain textures use Surface Painting."
+        )
+        terrain_dressing_hint.setObjectName("mapStudioTerrainDressingHint")
+        terrain_dressing_hint.setWordWrap(True)
+        self.browseTerrainDressingButton = QtWidgets.QPushButton("Browse Rocks & Foliage...")
+        self.browseTerrainDressingButton.setObjectName("mapStudioBrowseTerrainDressingButton")
+        self.openTerrainPaintingButton = QtWidgets.QPushButton("Open Surface Painting")
+        self.openTerrainPaintingButton.setObjectName("mapStudioOpenTerrainPaintingButton")
+        terrain_dressing_layout.addWidget(terrain_dressing_hint)
+        terrain_dressing_layout.addWidget(self.browseTerrainDressingButton)
+        terrain_dressing_layout.addWidget(self.openTerrainPaintingButton)
+        self._terrainBuildingLayout.insertWidget(self._terrainBuildingLayout.count() - 1, terrain_dressing_box)
         union_box = QtWidgets.QGroupBox("Boolean Union Rooms")
         union_layout = QtWidgets.QFormLayout(union_box)
         self.floorPlanUnionFirstRoomComboBox = QtWidgets.QComboBox()
@@ -487,7 +757,7 @@ class BuilderTab(QtWidgets.QWidget):
         union_layout.addRow("Result:", self.floorPlanUnionResultRoomLineEdit)
         union_layout.addRow(self.mapStudioRectangularUnionHintLabel)
         union_layout.addRow(self.mapStudioApplyRectangularUnionButton)
-        layout.addWidget(union_box)
+        self._roomAdvancedLayout.addWidget(union_box)
         bridge_box = QtWidgets.QGroupBox("Bridge Floor-Plan Edges")
         bridge_layout = QtWidgets.QFormLayout(bridge_box)
         self.floorPlanBridgeFirstRoomComboBox = QtWidgets.QComboBox()
@@ -517,7 +787,7 @@ class BuilderTab(QtWidgets.QWidget):
         bridge_layout.addRow("Connector:", self.floorPlanBridgeResultRoomLineEdit)
         bridge_layout.addRow(self.floorPlanBridgeHintLabel)
         bridge_layout.addRow(self.bridgeFloorPlanEdgesButton)
-        layout.addWidget(bridge_box)
+        self._roomAdvancedLayout.addWidget(bridge_box)
         add_primitive_box = QtWidgets.QGroupBox("Add Room Primitive")
         add_primitive_layout = QtWidgets.QFormLayout(add_primitive_box)
         self.compositionPrimitiveKindComboBox = QtWidgets.QComboBox()
@@ -534,7 +804,7 @@ class BuilderTab(QtWidgets.QWidget):
         add_primitive_layout.addRow("Name:", self.compositionPrimitiveNameLineEdit)
         add_primitive_layout.addRow(self.compositionPrimitiveKindHintLabel)
         add_primitive_layout.addRow(self.addCompositionPrimitiveButton)
-        layout.addWidget(add_primitive_box)
+        self._roomAdvancedLayout.addWidget(add_primitive_box)
         transform_box = QtWidgets.QGroupBox("Transform Room Primitive")
         transform_layout = QtWidgets.QFormLayout(transform_box)
         self.roomPrimitiveTransformComboBox = QtWidgets.QComboBox()
@@ -581,7 +851,7 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow("Extract as:", self.roomPrimitiveSeparateResultLineEdit)
         transform_layout.addRow(self.separatePrimitiveButton)
         transform_layout.addRow(self.removePrimitiveButton)
-        layout.addWidget(transform_box)
+        self._roomAdvancedLayout.addWidget(transform_box)
         duplicate_box = QtWidgets.QGroupBox("Duplicate Special")
         duplicate_layout = QtWidgets.QFormLayout(duplicate_box)
         self.duplicateSpecialHintLabel = QtWidgets.QLabel(
@@ -650,7 +920,7 @@ class BuilderTab(QtWidgets.QWidget):
         duplicate_layout.addRow("Scale X:", self.duplicateSpecialScaleXSpinBox)
         duplicate_layout.addRow("Scale Y:", self.duplicateSpecialScaleYSpinBox)
         duplicate_layout.addRow("Scale Z:", self.duplicateSpecialScaleZSpinBox)
-        layout.addWidget(duplicate_box)
+        self._roomAdvancedLayout.addWidget(duplicate_box)
         dimensions_box = QtWidgets.QGroupBox("Primitive Construction History")
         dimensions_box.setObjectName("mapStudioPrimitiveConstructionHistoryGroupBox")
         dimensions_layout = QtWidgets.QFormLayout(dimensions_box)
@@ -700,7 +970,7 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.cancelPrimitivePropertiesShortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.cancelPrimitivePropertiesShortcut.setEnabled(False)
-        layout.addWidget(dimensions_box)
+        self._roomAdvancedLayout.addWidget(dimensions_box)
         primitive_style_box = QtWidgets.QGroupBox("Primitive Material + Walkmesh")
         primitive_style_layout = QtWidgets.QFormLayout(primitive_style_box)
         self.primitiveTextureLineEdit = QtWidgets.QLineEdit()
@@ -717,7 +987,7 @@ class BuilderTab(QtWidgets.QWidget):
         primitive_style_layout.addRow("WOK surface:", self.primitiveSurfaceComboBox)
         primitive_style_layout.addRow(self.primitiveSurfaceHintLabel)
         primitive_style_layout.addRow(self.applyPrimitiveStyleButton)
-        layout.addWidget(primitive_style_box)
+        self._roomAdvancedLayout.addWidget(primitive_style_box)
         style_box = QtWidgets.QGroupBox("Room Material + Walkmesh")
         style_layout = QtWidgets.QFormLayout(style_box)
         self.roomTextureLineEdit = QtWidgets.QLineEdit("ruler01")
@@ -734,7 +1004,7 @@ class BuilderTab(QtWidgets.QWidget):
         style_layout.addRow("WOK surface:", self.roomSurfaceComboBox)
         style_layout.addRow(self.roomSurfaceHintLabel)
         style_layout.addRow(self.applyRoomStyleButton)
-        layout.addWidget(style_box)
+        self._roomAdvancedLayout.addWidget(style_box)
         curve_box = QtWidgets.QGroupBox("Construction Curve Guide")
         curve_layout = QtWidgets.QFormLayout(curve_box)
         self.curveGuideHintLabel = QtWidgets.QLabel(
@@ -773,7 +1043,7 @@ class BuilderTab(QtWidgets.QWidget):
         curve_layout.addRow("P3 X:", self.curveGuidePoint3XSpinBox)
         curve_layout.addRow("P3 Y:", self.curveGuidePoint3YSpinBox)
         curve_layout.addRow("P3 Z:", self.curveGuidePoint3ZSpinBox)
-        layout.addWidget(curve_box)
+        self._roomAdvancedLayout.addWidget(curve_box)
         light_box = QtWidgets.QGroupBox("Room Lighting")
         light_layout = QtWidgets.QFormLayout(light_box)
         self.roomLightRoomLineEdit = QtWidgets.QLineEdit()
@@ -808,7 +1078,8 @@ class BuilderTab(QtWidgets.QWidget):
         light_layout.addRow("Radius:", self.roomLightRadiusSpinBox)
         light_layout.addRow("Intensity:", self.roomLightIntensitySpinBox)
         light_layout.addRow(self.addRoomLightButton)
-        layout.addWidget(light_box)
+        self.roomLightingGroup = light_box
+        self._legacyToolsLayout.addWidget(light_box)
         entry_box = QtWidgets.QGroupBox("Module Entry Point")
         entry_layout = QtWidgets.QFormLayout(entry_box)
         self.entryPointGuideLabel = QtWidgets.QLabel(
@@ -837,7 +1108,7 @@ class BuilderTab(QtWidgets.QWidget):
         entry_layout.addRow("Facing:", self.entryPointFacingSpinBox)
         entry_layout.addRow(self.entryPointStatusLabel)
         entry_layout.addRow(self.applyEntryPointButton)
-        layout.addWidget(entry_box)
+        self._legacyToolsLayout.addWidget(entry_box)
         placement_box = QtWidgets.QGroupBox("Gameplay Placement")
         placement_layout = QtWidgets.QFormLayout(placement_box)
         self.gameplayPlacementKindComboBox = QtWidgets.QComboBox()
@@ -904,7 +1175,7 @@ class BuilderTab(QtWidgets.QWidget):
         placement_layout.addRow("Pos Z:", self.gameplayPosZSpinBox)
         placement_layout.addRow("Bearing:", self.gameplayBearingSpinBox)
         placement_layout.addRow(self.addGameplayPlacementButton)
-        layout.addWidget(placement_box)
+        self._legacyToolsLayout.addWidget(placement_box)
         script_box = QtWidgets.QGroupBox("Script Hooks")
         script_layout = QtWidgets.QFormLayout(script_box)
         self._script_hook_fields: dict[str, tuple[str, ...]] = {"area": (), "module": ()}
@@ -939,15 +1210,51 @@ class BuilderTab(QtWidgets.QWidget):
         script_layout.addRow(self.assignScriptHookButton)
         script_layout.addRow(self.clearScriptHookButton)
         script_layout.addRow(self.editScriptHookButton)
-        layout.addWidget(script_box)
+        self.scriptHooksGroup = script_box
+        self._legacyToolsLayout.addWidget(script_box)
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
-            layout.addWidget(button)
+            self._legacyToolsLayout.addWidget(button)
         self.note = QtWidgets.QLabel("KOTOR archive writing is experimental; preview manifests are generated first.")
         self.note.setWordWrap(True)
-        layout.addWidget(self.note)
-        layout.addStretch(1)
+        self._legacyToolsLayout.addWidget(self.note)
+        self.roomAdvancedToggle.toggled.connect(
+            lambda visible: self._set_advanced_container_visible(
+                self.roomAdvancedToggle, self._roomAdvancedContainer, visible
+            )
+        )
+        self.terrainAdvancedToggle.toggled.connect(
+            lambda visible: self._set_advanced_container_visible(
+                self.terrainAdvancedToggle, self.terrainAdvancedWidget, visible
+            )
+        )
+        self.buildSectionTabs.currentChanged.connect(self._emit_build_section_changed)
+        self.createTerrainSurfaceButton.clicked.connect(lambda _checked=False: self.terrainCreateRequested.emit())
+        self.browseTerrainDressingButton.clicked.connect(lambda _checked=False: self.terrainDressingRequested.emit())
+        self.openTerrainPaintingButton.clicked.connect(lambda _checked=False: self.terrainPaintRequested.emit())
+        self.snapRoomsAtDoorwayButton.clicked.connect(lambda _checked=False: self.snapRoomsAtDoorwayRequested.emit())
+        self.snapRoomsToGridButton.clicked.connect(lambda _checked=False: self.snapRoomsToGridRequested.emit())
+        for key, button in self.buildingToolButtons.items():
+            button.clicked.connect(lambda _checked=False, tool=key: self._emit_building_tool(tool))
+        self.addBuildingLevelButton.clicked.connect(self._add_building_level)
+        self.buildingLevelComboBox.currentIndexChanged.connect(self._on_building_level_changed)
+        self.buildingKindComboBox.currentIndexChanged.connect(self._rebuild_building_style_choices)
+        self.buildingStyleComboBox.currentIndexChanged.connect(self._on_building_style_changed)
+        for control in (
+            self.buildingStyleComboBox,
+            self.buildingWallHeightSpinBox,
+            self.buildingFloorZSpinBox,
+            self.buildingGridSizeSpinBox,
+            self.buildingSnapCheckBox,
+            self.buildingCeilingCheckBox,
+            self.buildingOpeningWidthSpinBox,
+            self.buildingOpeningHeightSpinBox,
+            self.buildingWindowSillSpinBox,
+        ):
+            signal = getattr(control, "valueChanged", None) or getattr(control, "currentIndexChanged", None) or getattr(control, "toggled", None)
+            if signal is not None:
+                signal.connect(lambda _value=None: self._emit_building_settings())
         self.roomPrimitivePresetComboBox.currentIndexChanged.connect(self._update_preset_description)
         self.componentModeComboBox.currentIndexChanged.connect(self._update_modeling_tool_hint)
         self.modelingToolComboBox.currentIndexChanged.connect(self._update_modeling_tool_hint)
@@ -1065,6 +1372,208 @@ class BuilderTab(QtWidgets.QWidget):
         spin.setValue(value)
         spin.setSuffix(suffix)
         return spin
+
+    @staticmethod
+    def _set_advanced_container_visible(
+        toggle: QtWidgets.QToolButton,
+        container: QtWidgets.QWidget,
+        visible: bool,
+    ) -> None:
+        container.setVisible(bool(visible))
+        toggle.setArrowType(
+            QtCore.Qt.ArrowType.DownArrow if visible else QtCore.Qt.ArrowType.RightArrow
+        )
+
+    def _emit_build_section_changed(self, index: int) -> None:
+        keys = ("room", "terrain", "skybox")
+        key = keys[index] if 0 <= int(index) < len(keys) else "room"
+        self.buildSectionChanged.emit(key)
+
+    def _building_settings(self) -> dict[str, object]:
+        level = dict(self.buildingLevelComboBox.currentData() or {})
+        style = dict(self.buildingStyleComboBox.currentData() or {})
+        return {
+            "level_index": int(level.get("index", max(0, self.buildingLevelComboBox.currentIndex()))),
+            "level_name": str(level.get("name") or self.buildingLevelComboBox.currentText().split(" (")[0]),
+            "floor_z": float(self.buildingFloorZSpinBox.value()),
+            "wall_height": float(self.buildingWallHeightSpinBox.value()),
+            "grid_size": float(self.buildingGridSizeSpinBox.value()),
+            "snap_to_grid": bool(self.buildingSnapCheckBox.isChecked()),
+            "include_ceiling": bool(self.buildingCeilingCheckBox.isChecked()),
+            "style_id": str(style.get("style_id") or "plcaa_graybox"),
+            "opening_width": float(self.buildingOpeningWidthSpinBox.value()),
+            "opening_height": float(self.buildingOpeningHeightSpinBox.value()),
+            "window_sill": float(self.buildingWindowSillSpinBox.value()),
+        }
+
+    def _emit_building_settings(self) -> None:
+        self.buildingSettingsChanged.emit(self._building_settings())
+
+    def _emit_building_tool(self, tool: str) -> None:
+        key = str(tool or "select").strip().lower()
+        self.buildingStatusLabel.setText(
+            "Click successive floor points; click the first point to close and build the room. Esc cancels, Backspace removes the last point."
+            if key == "walls"
+            else "Click the wall where the opening should be placed."
+            if key in {"door", "window"}
+            else "Normal selection is active."
+        )
+        self.buildingToolChanged.emit(key)
+        self._emit_building_settings()
+
+    def _on_building_level_changed(self, _index: int = -1) -> None:
+        level = dict(self.buildingLevelComboBox.currentData() or {})
+        self.buildingFloorZSpinBox.blockSignals(True)
+        self.buildingFloorZSpinBox.setValue(float(level.get("floor_z", 0.0) or 0.0))
+        self.buildingFloorZSpinBox.blockSignals(False)
+        self._emit_building_settings()
+
+    def _add_building_level(self) -> None:
+        next_index = max(
+            (int(dict(self.buildingLevelComboBox.itemData(index) or {}).get("index", index)) for index in range(self.buildingLevelComboBox.count())),
+            default=-1,
+        ) + 1
+        floor_z = float(self.buildingFloorZSpinBox.value()) + float(self.buildingWallHeightSpinBox.value())
+        name = f"Level {next_index + 1}"
+        self.buildingLevelComboBox.addItem(
+            f"{name} ({floor_z:.2f} m)",
+            {"index": next_index, "name": name, "floor_z": floor_z},
+        )
+        self.buildingLevelComboBox.setCurrentIndex(self.buildingLevelComboBox.count() - 1)
+
+    def set_building_styles(self, styles) -> None:
+        preserve = bool(self._buildingStyleRows)
+        current = str(dict(self.buildingStyleComboBox.currentData() or {}).get("style_id", "")) if preserve else ""
+        self._buildingStyleRows = [dict(style or {}) for style in tuple(styles or ())]
+        self._rebuild_building_style_choices(preferred_style_id=current)
+
+    def _rebuild_building_style_choices(
+        self,
+        _index: int = -1,
+        *,
+        preferred_style_id: str = "",
+    ) -> None:
+        current = preferred_style_id or str(dict(self.buildingStyleComboBox.currentData() or {}).get("style_id", ""))
+        wanted_kind = str(self.buildingKindComboBox.currentData() or "").lower()
+        rows = [
+            row for row in self._buildingStyleRows
+            if not wanted_kind or str(row.get("environment_kind") or "both").lower() in {wanted_kind, "both"}
+        ]
+        rows.sort(
+            key=lambda row: (
+                1 if str(row.get("environment_kind") or "both").lower() == "both" else 0,
+                str(row.get("source_module") or "").lower(),
+                str(row.get("label") or "").lower(),
+            )
+        )
+        self.buildingStyleComboBox.blockSignals(True)
+        self.buildingStyleComboBox.clear()
+        for row in rows:
+            style_id = str(row.get("style_id") or "")
+            if style_id:
+                self.buildingStyleComboBox.addItem(str(row.get("label") or style_id), row)
+        if self.buildingStyleComboBox.count() <= 0:
+            self.buildingStyleComboBox.addItem("PLCaa Neutral Blockout", {"style_id": "plcaa_graybox"})
+        index = self.buildingStyleComboBox.findData(current, role=QtCore.Qt.ItemDataRole.UserRole)
+        if index < 0:
+            for candidate in range(self.buildingStyleComboBox.count()):
+                if str(dict(self.buildingStyleComboBox.itemData(candidate) or {}).get("style_id", "")) == current:
+                    index = candidate
+                    break
+        self.buildingStyleComboBox.setCurrentIndex(max(0, index))
+        self.buildingStyleComboBox.blockSignals(False)
+        self._on_building_style_changed()
+
+    def select_building_style(self, style_id: str, environment_kind: str = "") -> bool:
+        wanted = str(style_id or "").strip().lower()
+        row = next(
+            (candidate for candidate in self._buildingStyleRows if str(candidate.get("style_id") or "").lower() == wanted),
+            None,
+        )
+        if row is None:
+            return False
+        kind = str(environment_kind or row.get("environment_kind") or "").lower()
+        kind_index = self.buildingKindComboBox.findData(kind)
+        if kind_index >= 0:
+            self.buildingKindComboBox.blockSignals(True)
+            self.buildingKindComboBox.setCurrentIndex(kind_index)
+            self.buildingKindComboBox.blockSignals(False)
+        self._rebuild_building_style_choices(preferred_style_id=wanted)
+        return True
+
+    def _on_building_style_changed(self, _index: int = -1) -> None:
+        row = dict(self.buildingStyleComboBox.currentData() or {})
+        style_id = str(row.get("style_id") or "plcaa_graybox")
+        kind = str(row.get("environment_kind") or self.buildingKindComboBox.currentData() or "both")
+        source = str(row.get("source_module") or "PLCaa")
+        self.buildingStatusLabel.setText(
+            f"{self.buildingStyleComboBox.currentText()} selected from {source}. Draw Walls uses this palette; the kit browser shows matching pieces."
+        )
+        self.buildingStyleChanged.emit(style_id, kind)
+        self._emit_building_settings()
+
+    def set_building_levels(self, levels) -> None:
+        current = int(dict(self.buildingLevelComboBox.currentData() or {}).get("index", 0))
+        rows = tuple(levels or ())
+        if not rows:
+            return
+        self.buildingLevelComboBox.blockSignals(True)
+        self.buildingLevelComboBox.clear()
+        selected = 0
+        for offset, level in enumerate(rows):
+            index = int(getattr(level, "level_index", offset))
+            name = str(getattr(level, "name", "") or f"Level {index + 1}")
+            floor_z = float(getattr(level, "floor_z", 0.0) or 0.0)
+            self.buildingLevelComboBox.addItem(
+                f"{name} ({floor_z:.2f} m)",
+                {"index": index, "name": name, "floor_z": floor_z},
+            )
+            if index == current:
+                selected = offset
+        self.buildingLevelComboBox.setCurrentIndex(selected)
+        self.buildingLevelComboBox.blockSignals(False)
+        self._on_building_level_changed(selected)
+
+    def focus_build_section(self, section: str) -> None:
+        """Show one of the three task-oriented Build sections."""
+
+        index = {"room": 0, "terrain": 1, "skybox": 2}.get(str(section or "").strip().lower(), 0)
+        self.buildSectionTabs.setCurrentIndex(index)
+
+    def adopt_terrain_kit_browser(self, browser: QtWidgets.QWidget) -> None:
+        """Place the terrain asset browser at the top of Terrain Building."""
+
+        if browser is None:
+            return
+        browser.setParent(self.terrainBuildingPage)
+        self._terrainBuildingLayout.insertWidget(0, browser, 1)
+
+    def adopt_environment_kit_browser(self, browser: QtWidgets.QWidget) -> None:
+        """Place the visual module-kit content browser in Room Building."""
+
+        if browser is None:
+            return
+        browser.setParent(self.roomBuildingPage)
+        self._roomPrimaryLayout.addWidget(browser, 1)
+
+    def adopt_skybox_tools(
+        self,
+        sky_group: QtWidgets.QWidget,
+        sky_traffic_group: QtWidgets.QWidget,
+    ) -> None:
+        """Present Environment-owned sky authoring controls in Build / Skybox."""
+
+        for group in (sky_group, sky_traffic_group):
+            group.setParent(self.skyboxBuildingPage)
+            self._skyboxBuildingLayout.insertWidget(
+                self._skyboxBuildingLayout.count() - 1,
+                group,
+            )
+            group.show()
+        self.skyboxBuildGuideLabel.setText(
+            "Create a KOTOR visual-only sky dome from five engine textures, or choose an HDR/panorama and let "
+            "Ghost Studio project and tone-map it into the game-compatible texture set."
+        )
 
     def set_modeling_component_modes(self, modes) -> None:
         """Populate object/component mode choices for manual Map Studio modeling."""
@@ -1345,7 +1854,12 @@ class BuilderTab(QtWidgets.QWidget):
         brush = self._current_terrain_brush_data()
         operation = str(brush.get("operation") or "").strip()
         return {
-            "enabled": bool(terrain) and bool(operation) and bool(brush.get("implemented")),
+            "enabled": (
+                self.terrainSculptEnabledCheckBox.isChecked()
+                and bool(terrain)
+                and bool(operation)
+                and bool(brush.get("implemented"))
+            ),
             "room_resref": str(terrain.get("room_resref") or "").strip(),
             "row_count": int(terrain.get("row_count", 0) or 0),
             "column_count": int(terrain.get("column_count", 0) or 0),
@@ -1378,11 +1892,12 @@ class BuilderTab(QtWidgets.QWidget):
         continuous = "continuous preview" if brush.get("continuous") else "commit-only"
         description = str(brush.get("description") or "").strip()
         guardrail = str(brush.get("guardrail") or "").strip()
-        text = f"Brush: {brush.get('key')} ({state}, {continuous})."
+        label = str(brush.get("label") or brush.get("key") or "Brush")
+        text = f"{label}: {state}, {continuous}."
         if description:
             text += f" {description}"
-        if guardrail:
-            text += f" KOTOR: {guardrail}"
+        if guardrail and brush.get("implemented"):
+            text += " Check Slope / WOK overlay before export."
         self.terrainBrushStatusLabel.setText(text)
         enabled = bool(brush.get("implemented")) and bool(self._current_terrain_data())
         self.applyTerrainBrushButton.setEnabled(enabled)
@@ -1408,6 +1923,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.terrainSmoothIterationsSpinBox,
             self.terrainSmoothStrengthSpinBox,
             self.terrainHardnessSpinBox,
+            self.terrainSculptEnabledCheckBox,
             self.setTerrainHeightButton,
             self.raiseTerrainButton,
             self.lowerTerrainButton,
@@ -1421,8 +1937,8 @@ class BuilderTab(QtWidgets.QWidget):
         ):
             widget.setEnabled(enabled)
         if not enabled:
-            self.terrainHintLabel.setText("Create a terrain heightfield preset to sculpt terrain samples.")
-            self.terrainBrushStatusLabel.setText("Brush: create or select a terrain room before sculpting.")
+            self.terrainHintLabel.setText("Create a terrain surface, then drag on it in the viewport to sculpt.")
+            self.terrainBrushStatusLabel.setText("No terrain surface selected.")
             return
         blocked = int(data.get("non_walk_triangle_count", 0) or 0)
         warnings = tuple(data.get("warnings", ()) or ())

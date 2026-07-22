@@ -99,7 +99,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "cfa7d11eebc4cde95d7b982a9d279142f8a5fcc2ab0c6719adaf6415be5eb651"
+            "sha256": "c63b097deab74a57ac49e0b13b4634d6dbaec770c9081ec05a2db8c25b7f2656"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -333,7 +333,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_LIGHTING_SOLVER",
             "source_path": "src/core/lighting/lightmap_lighting_solver.py",
             "packaged_path": "Python/src/core/lighting/lightmap_lighting_solver.py",
-            "sha256": "740dc04c953cd8ac9c388b09b86fcb41342116128e50431362ae94c353496663"
+            "sha256": "4e6181bf409d9641736a4f0f97dc07eca1d8fc2aa10b3176b633fb149279deff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_MANIFEST",
@@ -369,13 +369,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_SHADOW_SOLVER",
             "source_path": "src/core/lighting/lightmap_shadow_solver.py",
             "packaged_path": "Python/src/core/lighting/lightmap_shadow_solver.py",
-            "sha256": "0b9b5062624436df6932d095f9896ac677607599b2fa8de13eb546814186fa26"
+            "sha256": "f57e6c1b1ad75fc1a8b50917c8fc56e5b176b8afbaba971c47f42c5f766ad6ab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_UV_VALIDATOR",
             "source_path": "src/core/lighting/lightmap_uv_validator.py",
             "packaged_path": "Python/src/core/lighting/lightmap_uv_validator.py",
-            "sha256": "2390bde09a6b770f3b3f40f5936130934178c46305aa98b7d29523a12071adcf"
+            "sha256": "3719211065e2f4d0dc8ff3a09428ba4bdcd8f952efe0b6fdfc5cfec01f9ffb11"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_MATERIAL_MAP_CONTROLLER",

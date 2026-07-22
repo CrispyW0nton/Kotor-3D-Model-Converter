@@ -581,6 +581,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioApplyTerrainBrushButton" in source
         assert "def set_terrain_brushes" in source
         assert "def _emit_selected_terrain_brush" in source
+        assert 'self.buildSectionTabs.addTab(self.roomBuildingPage, "Room Building")' in source
+        assert 'self.buildSectionTabs.addTab(self.terrainBuildingPage, "Terrain Building")' in source
+        assert 'self.buildSectionTabs.addTab(self.skyboxBuildingPage, "Skybox")' in source
+        assert "mapStudioMagneticRoomAssemblyGroup" in source
+        assert "mapStudioCreateTerrainSurfaceButton" in source
+        assert "mapStudioTerrainViewportSculptCheckBox" in source
+        assert "mapStudioTerrainDressingGroup" in source
+        assert "def adopt_skybox_tools" in source
 
     for source in (tools_source, tools_mirror_source):
         assert "class MapStudioToolBeltAction" in source
@@ -1626,7 +1634,7 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     ]
     assert "apply_map_studio_terrain_sculpt_frame" in live_apply_source
     assert "apply_terrain_height_patch" in live_apply_source
-    assert "KMAP encode and full walkability rebuild deferred" in live_apply_source
+    assert "Release to create one undo step and refresh slope checks" in live_apply_source
     assert "_refresh_all" not in live_apply_source
     commit_source = window_source[
         window_source.index("def commit_map_studio_viewport_terrain_brush_stroke") :
@@ -1636,7 +1644,8 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     assert "rebuild_viewport_model=False" in commit_source
     assert "refresh_scene_tree=False" in commit_source
     assert "validation_delay_ms=250" in commit_source
-    assert "set_terrain_walkability_overlay(None)" in commit_source
+    assert "set_terrain_walkability_overlay(None)" not in commit_source
+    assert "Keep the existing overlay as the XY hit-test proxy" in commit_source
     assert "self.controller.authored_terrain_walkability_overlay()" not in commit_source
     assert "_refresh_all" not in commit_source
     assert "def preview_map_studio_terrain_sculpt_frame" in window_source
@@ -1677,7 +1686,7 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "can_export_candidate" in source
         assert 'pathing.get("blocking_messages"' in source
         assert 'pathing.get("blocking_targets"' in source
-        assert "Blocked by PTH/WOK pathing" in source
+        assert "walkmesh/pathing needs attention" in source
         assert "Blocks authored .mod package, stage, and install actions." in source
         assert "def _set_fix_action_state" in source
         assert "def _emit_fix_target" in source
@@ -1690,7 +1699,7 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "mapStudioExportActionGuideLabel" in source
         assert "mapStudioExportActionGuideTable" in source
         assert 'setHorizontalHeaderLabels(("Action", "Writes", "Use when", "Game proof"))' in source
-        assert "authored KMAP module as a KOTOR .mod package" in source
+        assert "current KMAP as a complete KOTOR .mod package" in source
         assert "install to a chosen Modules folder with backup" in source
         assert "not game-ready until a live warp test is recorded" in source
         assert "Preview the export/install action without writing final files" in source
@@ -1701,6 +1710,118 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert ".mod, checklist, proof manifest" in source
         assert ".mod copied to selected Modules folder with backup" in source
         assert "Requires live warp test and recorded evidence." in source
+
+
+def test_t2600_map_studio_export_uses_progressive_disclosure_without_horizontal_overflow() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.panels.module_editor.export_panel import ModuleExportPanel
+    from src.gui.panels.module_editor.workflow_panel import MapStudioWorkflowPanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    workflow = MapStudioWorkflowPanel()
+    export = ModuleExportPanel()
+    try:
+        workflow.show()
+        export.show()
+        app.processEvents()
+
+        assert workflow.advanced_details_toggle.isChecked() is False
+        assert workflow.smoke_test_recipe_table.isHidden()
+        assert workflow.resources_label.isHidden()
+        assert workflow.secondary_actions_widget.isHidden()
+        assert workflow.next_action_label.isHidden() is False
+        assert (
+            workflow.smoke_test_recipe_table.horizontalScrollBarPolicy()
+            == QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+
+        workflow.advanced_details_toggle.setChecked(True)
+        app.processEvents()
+        assert workflow.smoke_test_recipe_table.isVisible()
+        assert workflow.resources_label.isVisible()
+        assert workflow.secondary_actions_widget.isVisible()
+
+        assert export.details_toggle.isChecked() is False
+        assert export.export_blocker_table.isHidden()
+        assert export.blocker_summary_label.isHidden()
+        assert export.action_guide_toggle.isHidden()
+        assert export.action_guide_table.isHidden()
+        assert export.export_button.isHidden()
+        assert export.dev_test_button.isHidden()
+        assert export.authored_stage_button.isHidden()
+        assert export.dry_run.isChecked() is False
+        assert export.authored_module_button.text() == "Export .mod Package..."
+        assert export.authored_install_button.text() == "Install .mod for Game Test..."
+        assert (
+            export.export_blocker_table.horizontalScrollBarPolicy()
+            == QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        assert (
+            export.action_guide_table.horizontalScrollBarPolicy()
+            == QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        export.details_toggle.setChecked(True)
+        app.processEvents()
+        assert export.export_blocker_table.isHidden()
+        assert export.blocker_summary_label.isVisible()
+        assert export.action_guide_toggle.isVisible()
+        assert export.action_guide_table.isHidden()
+        export.action_guide_toggle.setChecked(True)
+        app.processEvents()
+        assert export.action_guide_label.isVisible()
+        assert export.action_guide_table.isHidden()
+    finally:
+        workflow.close()
+        export.close()
+
+
+def test_t2907_build_workspace_has_three_task_sections_and_direct_terrain_sculpting() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+    from src.gui.panels.module_editor.builder_tab import BuilderTab
+    from src.gui.panels.module_editor.environment_tab import MapStudioEnvironmentTab
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    environment = MapStudioEnvironmentTab()
+    builder = BuilderTab()
+    try:
+        labels = tuple(builder.buildSectionTabs.tabText(index) for index in range(builder.buildSectionTabs.count()))
+        assert labels == ("Room Building", "Terrain Building", "Skybox")
+        assert builder.roomAdvancedToggle.isChecked() is False
+        assert builder._roomAdvancedContainer.isHidden()
+        assert builder.terrainAdvancedToggle.isChecked() is False
+        assert builder.terrainAdvancedWidget.isHidden()
+        assert builder.terrainRadiusSpinBox.value() == 3
+        assert builder.terrainSculptEnabledCheckBox.isChecked() is True
+
+        create_requests: list[bool] = []
+        builder.terrainCreateRequested.connect(lambda: create_requests.append(True))
+        builder.createTerrainSurfaceButton.click()
+        assert create_requests == [True]
+
+        builder.adopt_skybox_tools(environment.sky_group, environment.sky_traffic_group)
+        environment.adopt_room_lighting_tools(builder.roomLightingGroup)
+        assert environment.sky_group.parentWidget() is builder.skyboxBuildingPage
+        assert environment.sky_traffic_group.parentWidget() is builder.skyboxBuildingPage
+        assert builder.roomLightingGroup.parentWidget() is environment
+        assert environment.world_group.title() == "Lighting, Weather and Fog (ARE)"
+    finally:
+        builder.close()
+        environment.close()
+        app.processEvents()
+
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
+    assert "mapStudioExportDiagnosticsButton" in window_source
+    assert "self.readiness_panel.setVisible(False)" in window_source
+    assert "self.workflow_panel.setVisible(False)" in window_source
+    assert "self.right_tabs_scroll.setHorizontalScrollBarPolicy" in window_source
 
 
 def test_t3104_package_wizard_reviews_template_and_script_dependencies() -> None:
@@ -2522,9 +2643,9 @@ def test_t2907_live_terrain_sculpt_interpolates_segments_and_exposes_hardness() 
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     assert "mapStudioTerrainHardnessSpinBox" in builder
-    assert 'terrain_layout.addRow("Falloff hardness:"' in builder
+    assert 'terrain_brush_form.addRow("Falloff hardness:"' in builder
     assert "key == QtCore.Qt.Key_Space" in viewport
-    assert "self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(segment))" in viewport
+    assert "tuple(segment[start_index : start_index + 8])" in viewport
 
 
 def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_reset(monkeypatch) -> None:
@@ -3946,3 +4067,169 @@ def test_map_studio_live_terrain_stroke_redoes_the_same_kmap_heights() -> None:
     assert authored_project_from_kmap_payload(
         controller.project.extra_sections["authored_module"]
     ).rooms[0].primitive.heights == after
+
+
+def test_map_studio_terrain_sculpt_workspace_is_viewport_local_and_kotor_safe() -> None:
+    """The terrain UX exposes paint-mode gestures without promising unsupported runtime terrain."""
+
+    shelf_sources = (
+        _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/terrain_sculpt_shelf.py"),
+        _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/terrain_sculpt_shelf.py"),
+    )
+    viewport_sources = (
+        _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"),
+        _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"),
+    )
+    window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+    overlay_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    )
+    rendering_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+    )
+    navigation_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
+    )
+
+    for source in shelf_sources:
+        assert "class TerrainSculptShelf" in source
+        assert "mapStudioTerrainSculptShelf" in source
+        assert "mapStudioTerrainSlopeOverlayCheckBox" in source
+        assert "Shift+wheel resize" in source
+        assert "RMB orbit" in source
+        assert "Alt+MMB pan" in source
+        assert "KOTOR-safe static heightfield" in source
+        for brush in ("raise", "lower", "smooth", "flatten", "plateau", "ramp", "terrace", "erode", "noise"):
+            assert f'(\"{brush}\",' in source
+
+    for source in viewport_sources:
+        assert "TerrainSculptShelf" in source
+        assert "terrainBrushSelected = QtCore.Signal(str)" in source
+        assert "def _resize_terrain_brush_from_wheel" in source
+        assert "def _begin_terrain_camera_drag" in source
+        assert 'navigation="pan"' in source
+        assert "camera.pan(dx, dy, viewport_height)" in source
+        assert "def _set_terrain_camera_top" in source
+        assert "def _set_terrain_camera_angled" in source
+        assert 'set_selected(None, source="terrain sculpt")' in source
+        assert 'set_selected(previous, source="terrain sculpt exit")' in source
+        assert "ShiftModifier" in source
+        assert 'brush = "lower"' in source
+        assert "terrain_sculpt_shelf.walkability_box.isChecked()" in source
+        assert "set_map_studio_terrain_sculpt_input_lock" in source
+
+    assert "terrainBrushSelected.connect(self._select_map_studio_terrain_brush)" in window_source
+    assert "terrainSculptModeChanged.connect(self._set_map_studio_terrain_sculpt_enabled)" in window_source
+    assert "strength=float(context.get" in window_source
+    assert "delta=float(context.get" in window_source
+    assert "inner_radius = max(4.0, radius * hardness)" in overlay_source
+    # All editor feedback shares one disposable layer.  This prevents brushes,
+    # placement ghosts, selections, gizmos, and future kit previews from being
+    # painted into a renderer-owned frame that a retained backend may reuse.
+    gpu_overlay_source = rendering_source[
+        rendering_source.index("def _draw_gpu_viewport_overlays") :
+        rendering_source.index("def _draw_renderer_statistics_overlay")
+    ]
+    assert 'overlay_img = Image.new("RGBA", scene_img.size, (0, 0, 0, 0))' in gpu_overlay_source
+    assert 'draw = ImageDraw.Draw(overlay_img, "RGBA")' in gpu_overlay_source
+    assert "return Image.alpha_composite(scene_img, overlay_img)" in gpu_overlay_source
+    assert "ImageDraw.Draw(scene_img" not in gpu_overlay_source
+    # The protection is deliberately asset-agnostic: every current editor
+    # visual is routed through the same disposable compositor.  New room or
+    # terrain assets therefore cannot opt out and paint into a retained frame.
+    for transient_overlay in (
+        "_draw_map_studio_terrain_brush_cursor",
+        "_draw_map_studio_texture_paint_cursor",
+        "_draw_map_studio_building_preview",
+        "_draw_map_studio_universal_transform_overlay",
+        "_draw_map_studio_placement_markers",
+        "_draw_map_studio_terrain_walkability",
+        "_draw_map_studio_component_selection",
+        "_draw_map_studio_hover_highlight",
+        "_draw_wgpu_helper_markers",
+        "_draw_transform_gizmo",
+        "_draw_selected_model_outline",
+        "_draw_mesh_subobject_selection",
+        "_draw_measurement_overlay",
+        "_draw_active_camera_overlays",
+    ):
+        assert f"self.{transient_overlay}" in gpu_overlay_source
+    assert "def _consume_map_studio_terrain_navigation_event" in navigation_source
+    assert "QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton | QtCore.Qt.RightButton" in navigation_source
+    cursor_source = overlay_source[
+        overlay_source.index("def _draw_map_studio_terrain_brush_cursor") :
+        overlay_source.index("def _draw_map_studio_texture_paint_cursor")
+    ]
+    assert "room_resref" not in cursor_source
+    assert "[{int(sample" not in cursor_source
+
+
+def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+    from src.gui.panels.module_editor.builder_tab import BuilderTab
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    builder = BuilderTab()
+    try:
+        assert builder.findChild(QtWidgets.QGroupBox, "mapStudioDirectBuildingGroup") is not None
+        assert builder._roomAdvancedContainer.isAncestorOf(builder.componentModeComboBox)
+        assert builder._roomAdvancedContainer.isAncestorOf(builder.roomPrimitivePresetComboBox)
+        assert builder._roomPrimaryContainer.isAncestorOf(builder.buildingToolButtons["walls"])
+        assert builder.roomAdvancedToggle.isChecked() is False
+
+        tools: list[str] = []
+        settings: list[dict[str, object]] = []
+        builder.buildingToolChanged.connect(tools.append)
+        builder.buildingSettingsChanged.connect(lambda value: settings.append(dict(value)))
+        builder.buildingToolButtons["walls"].click()
+        builder.buildingWallHeightSpinBox.setValue(3.5)
+        builder.addBuildingLevelButton.click()
+
+        assert tools == ["walls"]
+        assert settings[-1]["level_index"] == 1
+        assert settings[-1]["floor_z"] == 3.5
+        assert settings[-1]["wall_height"] == 3.5
+        assert settings[-1]["style_id"] == "plcaa_graybox"
+    finally:
+        builder.close()
+        app.processEvents()
+
+
+def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_overlay() -> None:
+    viewport_sources = (
+        _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"),
+        _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"),
+    )
+    overlay_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    )
+    rendering_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+    )
+    window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+
+    for source in viewport_sources:
+        for token in (
+            "buildingRoomRequested = QtCore.Signal(object)",
+            "buildingOpeningRequested = QtCore.Signal(object)",
+            "def set_pascal_building_tool",
+            "def _building_world_at_event",
+            "ray_from_mouse",
+            "snap_to_grid",
+            "Click the first corner to close",
+            "Key_Backspace",
+            "Key_Escape",
+        ):
+            assert token in source
+    assert "def _draw_map_studio_building_preview" in overlay_source
+    compositor = rendering_source[
+        rendering_source.index("def _draw_gpu_viewport_overlays") :
+        rendering_source.index("def _draw_renderer_statistics_overlay")
+    ]
+    assert "self._draw_map_studio_building_preview(draw, w, h)" in compositor
+    assert "return Image.alpha_composite(scene_img, overlay_img)" in compositor
+    assert "buildingRoomRequested.connect(self._build_map_studio_room_from_viewport)" in window_source
+    assert "buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)" in window_source

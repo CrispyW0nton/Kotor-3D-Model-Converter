@@ -52,7 +52,11 @@ from .authored_module_objects import (
     patch_preserved_stock_git_bytes,
     validate_authored_gameplay_placement_against_walkmesh,
 )
-from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
+from .authored_module_pathing import (
+    AuthoredPathAnchor,
+    AuthoredPathingRoom,
+    compile_authored_pathing_for_rooms,
+)
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
 from .authored_room_materials import compile_authored_room_material_preflight
@@ -1039,6 +1043,53 @@ def _merged_validation_wok(room_woks: dict[str, "WOKData"]) -> "WOKData | None":
     if not faces:
         return None
     return WOKData(name="validation_merged.wok", verts=verts, faces=faces)
+
+
+def _lyt_ordered_pathing_rooms(layout: Any, room_geometries: dict[str, AuthoredRoomGeometry]) -> tuple[AuthoredPathingRoom, ...]:
+    """Return every compiled room in the exact LYT index/coordinate contract.
+
+    WOK transition destinations are LYT room indices, so omitting an empty
+    backdrop room or sorting by resref silently retargets portals.  Authored
+    WOKs remain room-local and receive their LYT translation here.  Imported
+    WOKs have already been normalized to module space in ``build_authored_module``
+    and must not receive that translation a second time.
+    """
+
+    lyt_rows = tuple(getattr(getattr(layout, "lyt", None), "rooms", ()) or ())
+    lyt_order = tuple(normalise_resref(getattr(row, "model", "")) for row in lyt_rows)
+    declared_order = tuple(normalise_resref(value) for value in tuple(getattr(layout, "room_resrefs", ()) or ()))
+    if not lyt_rows:
+        raise ValueError("Authored PTH generation requires at least one LYT room row.")
+    if lyt_order != declared_order:
+        raise ValueError(
+            "Authored PTH generation requires layout.room_resrefs to match the exact LYT room order."
+        )
+    if any(not room_resref for room_resref in lyt_order):
+        raise ValueError("Authored PTH generation found an empty LYT room resref.")
+    if len(set(lyt_order)) != len(lyt_order):
+        raise ValueError("Authored PTH generation requires unique LYT room resrefs.")
+
+    missing = tuple(room_resref for room_resref in lyt_order if room_resref not in room_geometries)
+    extra = tuple(room_resref for room_resref in room_geometries if room_resref not in set(lyt_order))
+    if missing or extra:
+        details: list[str] = []
+        if missing:
+            details.append(f"missing compiled rooms: {', '.join(missing)}")
+        if extra:
+            details.append(f"compiled rooms absent from LYT: {', '.join(extra)}")
+        raise ValueError("Authored PTH room set does not match LYT (" + "; ".join(details) + ").")
+
+    result: list[AuthoredPathingRoom] = []
+    for room_resref, row in zip(lyt_order, lyt_rows, strict=True):
+        geometry = room_geometries[room_resref]
+        imported_wok = bool(dict(getattr(geometry, "metadata", {}) or {}).get("imported_wok"))
+        position = (
+            (0.0, 0.0, 0.0)
+            if imported_wok
+            else (float(getattr(row, "x", 0.0)), float(getattr(row, "y", 0.0)), float(getattr(row, "z", 0.0)))
+        )
+        result.append(AuthoredPathingRoom(room_resref=room_resref, wok=geometry.wok, position=position))
+    return tuple(result)
 
 
 def _entry_room_wok(project: AuthoredModuleProject, room_geometries: dict[str, AuthoredRoomGeometry]) -> tuple[str, WOKData | None]:
@@ -2094,15 +2145,21 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     except Exception as exc:
         blocking.append(f"Authored module metadata could not be compiled: {exc}")
 
-    if validation_wok is not None and preserved_stock_pth is None:
+    if layout is not None and room_geometries and preserved_stock_pth is None:
         try:
-            # Pathing anchors span every room, so the graph builds on the
-            # merged walkmesh just like the walkability checks above.
+            # Transition targets are indices into the exact LYT room order.
+            # Keep every row (including empty visual/backdrop rooms), preserve
+            # per-room indexed-face adjacency, and bridge only reciprocal WOK
+            # transition edges whose module-space boundaries actually match.
             # Skipped when we emit a preserved stock PTH (below): the original
             # graph spans the full module -- including reference/skybox rooms
             # not editable here -- so a regenerated graph over the editable
             # subset would false-positive "point outside the walkmesh".
-            pathing = compile_authored_pathing_for_module(validation_wok, anchors=_path_anchors_from_walkability(project.placements, walkability))
+            pathing_rooms = _lyt_ordered_pathing_rooms(layout, room_geometries)
+            pathing = compile_authored_pathing_for_rooms(
+                pathing_rooms,
+                anchors=_path_anchors_from_walkability(project.placements, walkability),
+            )
             warnings.extend(pathing.validation.warnings)
             blocking.extend(pathing.validation.blocking_issues)
         except Exception as exc:

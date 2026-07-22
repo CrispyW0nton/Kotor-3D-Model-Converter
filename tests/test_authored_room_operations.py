@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def _install_native_payload_paths() -> None:
@@ -104,6 +105,34 @@ def test_t2604_controller_updates_module_entry_point_for_ifo_export() -> None:
     assert payload["placements"]["entry_point"]["facing"] == math.pi
     assert payload["game_tested"] is False
     assert result.readiness is not None
+
+
+def test_t2908_controller_deletes_and_undoes_player_start_without_rehydrating_marker() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grentrydel")
+
+    row = controller.authored_module_entry_point_preview_row()
+    assert row is not None
+    assert row.placement_id == "entry_point"
+    assert row.model_resref == "pmbam"
+    assert row.head_model_resref == "pmhc01"
+
+    result = controller.clear_authored_module_entry_point()
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["placements"]["entry_point"]["area_resref"] == ""
+    assert controller.authored_module_entry_point().area_resref == ""
+    assert controller.authored_module_entry_point_preview_row() is None
+    assert all(marker.placement_id != "entry_point" for marker in controller.authored_gameplay_fallback_preview_markers())
+    assert result.readiness.can_export_candidate is False
+
+    controller.undo_map_studio_command()
+    assert controller.authored_module_entry_point().area_resref == "grentrydel"
+    assert controller.authored_module_entry_point_preview_row() is not None
 
 
 def test_t2911_walkmesh_surface_assignment_preserves_room_texture() -> None:
@@ -2858,3 +2887,488 @@ def test_t2601_controller_batch_transform_records_one_undo_and_restores_selectio
     restored = {row.primitive_name: row for row in controller.authored_room_primitive_transforms()}
     assert restored["left_cube"].translation == (-1.0, 0.0, 0.0)
     assert restored["right_cube"].translation == (1.0, 0.0, 0.0)
+
+
+def test_t2907_pascal_concave_room_compiles_floor_ceiling_and_walkmesh() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import (
+        FloorPlanRoomPrimitive,
+        compile_floor_plan_room_geometry,
+        validate_floor_plan_room_primitive,
+    )
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grpascal_l",
+        points=((0.0, 0.0), (6.0, 0.0), (6.0, 2.0), (2.0, 2.0), (2.0, 6.0), (0.0, 6.0)),
+        z=1.0,
+        wall_height=3.5,
+        material=PrimitiveMaterial(texture="floor_tex"),
+        wall_material=PrimitiveMaterial(texture="wall_tex"),
+        ceiling_material=PrimitiveMaterial(texture="ceil_tex"),
+        include_walls=True,
+        include_ceiling=True,
+    )
+
+    validation = validate_floor_plan_room_primitive(primitive)
+    geometry = compile_floor_plan_room_geometry(primitive)
+
+    assert validation.ok is True
+    assert len(geometry.room_mesh.faces) == 4
+    assert len(geometry.wok.faces) == 4
+    assert geometry.room_mesh.texture == "floor_tex"
+    assert geometry.metadata["wall_count"] == 6
+    assert geometry.metadata["has_ceiling"] is True
+    assert geometry.helper_meshes[-1].texture == "ceil_tex"
+    assert geometry.helper_meshes[-1].normals[0] == (0.0, 0.0, -1.0)
+
+
+def test_t2907_pascal_room_rejects_crossing_wall_loop() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, validate_floor_plan_room_primitive
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grpascal_x",
+        points=((0.0, 0.0), (4.0, 4.0), (0.0, 4.0), (4.0, 0.0)),
+    )
+    validation = validate_floor_plan_room_primitive(primitive)
+
+    assert validation.ok is False
+    assert any("cannot cross or overlap" in message for message in validation.blocking_issues)
+
+
+def test_t2907_pascal_room_kmap_roundtrip_preserves_surface_materials_and_level() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+    from src.core.modules.map_studio_pascal_building import add_pascal_building_room, pascal_building_levels
+
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grpascal", game="K1"),
+        rooms=(),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grpascal")),
+    )
+    project, room_resref = add_pascal_building_room(
+        project,
+        points=((0.0, 0.0), (5.0, 0.0), (5.0, 3.0), (0.0, 3.0)),
+        floor_z=3.0,
+        wall_height=3.25,
+        level_index=1,
+        level_name="Upper Floor",
+        floor_texture="floor_tex",
+        wall_texture="wall_tex",
+        ceiling_texture="ceil_tex",
+    )
+    restored = authored_project_from_kmap_payload(authored_project_to_kmap_payload(project))
+    primitive = restored.rooms[0].primitive
+    levels = pascal_building_levels(restored)
+
+    assert room_resref == "grpascalr001"
+    assert primitive.material.texture == "floor_tex"
+    assert primitive.wall_material.texture == "wall_tex"
+    assert primitive.ceiling_material.texture == "ceil_tex"
+    assert primitive.include_ceiling is True
+    assert levels[0].level_index == 1
+    assert levels[0].name == "Upper Floor"
+    assert levels[0].floor_z == 3.0
+    assert restored.placements.entry_point.position == (2.5, 1.5, 3.05)
+
+
+def test_t2907_controller_builds_room_and_door_as_two_undoable_actions() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grhouse", game="K2")
+    room_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (4.0, 0.0), (4.0, 5.0), (0.0, 5.0)),
+        wall_height=3.0,
+        level_name="Ground Floor",
+    )
+    controller.set_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="door",
+        center_fraction=0.5,
+        width=1.25,
+        height=2.2,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    opening = authored.rooms[0].primitive.openings[0]
+
+    assert room_resref == "grhouser001"
+    assert opening.edge_index == 0
+    assert opening.metadata["opening_kind"] == "door"
+    assert [record.action_key for record in controller.command_history.undo_stack] == [
+        "map_studio.building.room.create",
+        "map_studio.building.door.create",
+    ]
+    assert controller.available_map_studio_building_styles()[0]["style_id"] == "plcaa_graybox"
+    assert controller.map_studio_building_levels()[0].name == "Ground Floor"
+
+
+def test_t2907_vanilla_building_style_catalog_learns_surface_roles_and_roundtrips(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules import map_studio_terrain_kit
+    from src.core.modules.map_studio_pascal_building import (
+        scan_vanilla_pascal_building_styles,
+        vanilla_pascal_building_styles,
+        write_vanilla_pascal_style_catalog,
+    )
+
+    def surface(name: str, texture: str, normal_z: float, triangles: int):
+        return SimpleNamespace(
+            name=name,
+            texture=texture,
+            texture_names=(texture,),
+            normals=((0.0, 0.0, normal_z),) * 3,
+            faces=((0, 1, 2),) * triangles,
+            render=True,
+            children=(),
+        )
+
+    root = SimpleNamespace(
+        name="room_root",
+        texture="",
+        texture_names=(),
+        normals=(),
+        faces=(),
+        render=False,
+        children=(
+            surface("main_floor", "dan_floor", 1.0, 8),
+            surface("main_wall", "dan_wall", 0.0, 12),
+            surface("main_ceiling", "dan_ceil", -1.0, 6),
+        ),
+    )
+    manager = SimpleNamespace(load_model_strict=lambda *_args, **_kwargs: SimpleNamespace(root_node=root))
+    monkeypatch.setattr(
+        map_studio_terrain_kit,
+        "_base_game_lyt_rooms",
+        lambda *_args, **_kwargs: {"danm13aa_01": "m13aa"},
+    )
+
+    styles = scan_vanilla_pascal_building_styles(manager, games=("K1",))
+    target = write_vanilla_pascal_style_catalog(styles, tmp_path / "styles.json")
+    vanilla_pascal_building_styles.cache_clear()
+    restored = vanilla_pascal_building_styles(str(target))
+
+    assert len(restored) == 1
+    assert restored[0].game == "K1"
+    assert restored[0].floor_texture == "dan_floor"
+    assert restored[0].wall_texture == "dan_wall"
+    assert restored[0].ceiling_texture == "dan_ceil"
+    assert restored[0].source_module == "m13aa"
+
+
+def test_t2907_environment_kit_catalog_indexes_both_games_with_real_provenance_and_magnets() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import vanilla_environment_kit_collections
+
+    collections = vanilla_environment_kit_collections()
+    pieces = tuple(piece for collection in collections for piece in collection.pieces)
+    terrain = tuple(piece for piece in pieces if piece.role == "terrain")
+    room_tiles = tuple(piece for piece in pieces if piece.role in {"room_tile", "exterior_tile"})
+
+    assert len(collections) >= 200
+    assert {collection.game for collection in collections} == {"K1", "K2"}
+    assert len(pieces) >= 9_000
+    assert len(terrain) >= 6_500
+    assert len(room_tiles) >= 2_600
+    assert all(piece.module_resref and piece.model_resref for piece in pieces)
+    assert all(piece.terrain_asset_id and piece.surface_index >= 0 for piece in terrain)
+    assert all(len(piece.magnets) == 4 for piece in terrain)
+    assert any(piece.magnets for piece in room_tiles)
+
+
+def test_t2907_environment_kit_nearest_snap_aligns_compatible_edge_magnets() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        EnvironmentKitPiece,
+        nearest_environment_kit_snap,
+    )
+    from src.core.modules.map_studio_environment_kits import _terrain_edge_magnets
+
+    source = EnvironmentKitPiece(
+        piece_id="source_cliff",
+        collection_id="k1_test",
+        label="Source cliff",
+        game="K1",
+        module_resref="m13aa",
+        room_resref="m13aa_01",
+        role="terrain",
+        class_id="terrain:cliff",
+        model_resref="m13aa_01",
+        dimensions_m=(2.0, 2.0, 1.0),
+        magnets=_terrain_edge_magnets((2.0, 2.0, 1.0)),
+    )
+    target = EnvironmentKitPiece(
+        piece_id="target_cliff",
+        collection_id="k1_test",
+        label="Target cliff",
+        game="K1",
+        module_resref="m13aa",
+        room_resref="m13aa_02",
+        role="terrain",
+        class_id="terrain:cliff",
+        model_resref="m13aa_02",
+        dimensions_m=(2.0, 2.0, 1.0),
+        magnets=_terrain_edge_magnets((2.0, 2.0, 1.0)),
+    )
+
+    snap = nearest_environment_kit_snap(
+        source,
+        proposed_position=(0.15, 0.05, 0.0),
+        proposed_yaw=0.0,
+        source_scale=1.0,
+        targets=((target, (2.0, 0.0, 0.0), 0.0, 1.0, "grtk0001"),),
+        max_distance=0.5,
+    )
+
+    assert snap is not None
+    assert snap.source_magnet_id == "east"
+    assert snap.target_magnet_id == "west"
+    assert snap.target_piece_id == "target_cliff"
+    assert snap.target_room_resref == "grtk0001"
+    assert math.isclose(snap.position[0], 0.0, abs_tol=1.0e-6)
+    assert math.isclose(snap.position[1], 0.0, abs_tol=1.0e-6)
+    assert math.isclose(snap.yaw_radians % (math.pi * 2.0), 0.0, abs_tol=1.0e-6)
+
+
+def test_t2907_environment_kit_classifies_room_doorway_topology() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        EnvironmentKitMagnet,
+        _doorway_archetype,
+        _yaw_quaternion,
+    )
+
+    def doorway(name: str, yaw: float) -> EnvironmentKitMagnet:
+        return EnvironmentKitMagnet(
+            magnet_id=name,
+            kind="doorway",
+            magnet_class="doorway",
+            local_position=(0.0, 0.0, 0.0),
+            local_orientation=_yaw_quaternion(yaw),
+            source="test",
+        )
+
+    assert _doorway_archetype(()) == "chamber"
+    assert _doorway_archetype((doorway("end", 0.0),)) == "dead_end"
+    assert _doorway_archetype((doorway("a", 0.0), doorway("b", math.pi))) == "straight"
+    assert _doorway_archetype((doorway("a", 0.0), doorway("b", math.pi * 0.5))) == "corner"
+    assert _doorway_archetype(tuple(doorway(str(index), index * math.pi * 0.5) for index in range(4))) == "cross"
+
+
+def test_t2907_environment_piece_browser_rows_and_drag_payload_are_typed() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        ENVIRONMENT_KIT_PAYLOAD_SCHEMA,
+        environment_kit_drag_payload,
+        environment_kit_piece_rows,
+    )
+
+    rows = environment_kit_piece_rows(game="K1")
+    assert len(rows) >= 1_000
+    assert all(row["game"] == "K1" for row in rows)
+    assert all(row["role"] in {"room_tile", "exterior_tile"} for row in rows)
+    assert all(":" in row["class_id"] for row in rows)
+    assert all(row["collection_id"] and row["collection_label"] for row in rows)
+
+    payload = environment_kit_drag_payload(rows[0]["piece_id"], rotation_degrees_z=45.0, scale=1.25)
+    assert payload["schema"] == ENVIRONMENT_KIT_PAYLOAD_SCHEMA
+    assert payload["piece_id"] == rows[0]["piece_id"]
+    assert payload["snap_to_magnets"] is True
+    assert payload["rotation_degrees_z"] == 45.0
+    assert payload["scale"] == 1.25
+
+
+def test_t2907_terrain_kit_transform_keeps_render_mesh_and_wok_aligned() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
+    from src.core.modules.map_studio_terrain_kit import transform_terrain_kit_primitive
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="terrain_piece",
+        surfaces=(
+            ImportedMeshSurface(
+                name="terrain",
+                texture="ground",
+                vertices=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0)),
+                faces=((0, 1, 2),),
+                normals=((1.0, 0.0, 0.0),) * 3,
+            ),
+        ),
+        wok=WOKData(
+            name="terrain_piece",
+            verts=[(1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0)],
+            faces=[WOKFace(0, 1, 2, 4)],
+            raw=b"stale stock bytes",
+            relative_hook1=(1.0, 0.0, 0.0),
+        ),
+    )
+
+    transformed = transform_terrain_kit_primitive(primitive, rotation_degrees_z=90.0, scale=2.0)
+
+    assert transformed.surfaces[0].vertices[0] == pytest.approx((0.0, 2.0, 0.0))
+    assert transformed.wok is not None
+    assert transformed.wok.verts[0] == pytest.approx((0.0, 2.0, 0.0))
+    assert transformed.wok.relative_hook1 == pytest.approx((0.0, 2.0, 0.0))
+    assert transformed.wok.raw is None
+
+
+def test_t2907_controller_places_environment_piece_with_unique_room_and_provenance(monkeypatch) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules import module_editor_controller as controller_module
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
+    from src.core.modules.map_studio_environment_kits import environment_kit_piece_rows
+    from src.core.modules.module_editor_controller import ModuleEditorController
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    source = environment_kit_piece_rows(game="K1")[0]
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="source_room",
+        source_model=str(source["room_resref"]),
+        game="K1",
+        surfaces=(
+            ImportedMeshSurface(
+                name="floor",
+                texture="metal_floor",
+                lightmap="old_lightmap",
+                uvs_lm=((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+                vertices=((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)),
+                faces=((0, 1, 2),),
+                normals=((0.0, 0.0, 1.0),) * 3,
+            ),
+        ),
+        wok=WOKData(
+            name="source_room",
+            verts=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)],
+            faces=[WOKFace(0, 1, 2, 4)],
+            raw=b"source wok",
+        ),
+    )
+    monkeypatch.setattr(controller_module, "load_stock_kotor_model", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        controller_module,
+        "build_imported_mesh_primitive_from_stock_model",
+        lambda *_args, **_kwargs: primitive,
+    )
+
+    controller = ModuleEditorController()
+    controller.new_project(name="kit_test", game="K1")
+    monkeypatch.setattr(controller, "_stock_room_wok_bytes", lambda *_args, **_kwargs: None)
+    room_resref = controller.add_authored_environment_kit_piece(
+        piece_id=str(source["piece_id"]),
+        position=(3.0, 4.0, 0.5),
+        rotation_degrees_z=90.0,
+        scale=2.0,
+        resource_manager=object(),
+    )
+
+    assert room_resref == "grkit0001"
+    payload = controller.project.extra_sections["authored_module"]
+    room = payload["rooms"][0]
+    assert room["room_resref"] == "grkit0001"
+    assert room["position"] == [3.0, 4.0, 0.5]
+    assert room["metadata"]["environment_kit_piece_id"] == source["piece_id"]
+    assert room["metadata"]["environment_kit_collection_id"] == source["collection_id"]
+    assert room["metadata"]["environment_kit_rotation_degrees_z"] == 90.0
+    assert room["metadata"]["environment_kit_scale"] == 2.0
+    assert room["primitive"]["surfaces"][0]["lightmap"] == ""
+    assert "raw" not in room["primitive"]["wok"]
+
+
+def test_t2907_maya_multi_move_includes_player_start_as_one_authored_object() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="selection_proof", game="K1")
+    controller.create_authored_room_preset_module(
+        preset_id="rectangular_dev_room",
+        module_root="grselect",
+    )
+    entry_before = controller.authored_module_entry_point()
+    controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="Bench A",
+        position=(1.0, 2.0, 0.0),
+    )
+    controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="Bench B",
+        position=(4.0, 5.0, 0.0),
+    )
+    rows_before = {row.placement_id: row for row in controller.authored_gameplay_placements()}
+    ids = tuple(rows_before)
+
+    moved = controller.translate_authored_gameplay_placements(
+        ("entry_point", *ids),
+        world_delta=(2.0, -1.0, 0.5),
+    )
+
+    assert moved == ("entry_point", *ids)
+    entry_after = controller.authored_module_entry_point()
+    assert entry_after.position == tuple(
+        entry_before.position[index] + (2.0, -1.0, 0.5)[index] for index in range(3)
+    )
+    rows_after = {row.placement_id: row for row in controller.authored_gameplay_placements()}
+    for placement_id in ids:
+        assert rows_after[placement_id].position == tuple(
+            rows_before[placement_id].position[index] + (2.0, -1.0, 0.5)[index]
+            for index in range(3)
+        )
+    assert controller.command_history.undo_stack[-1].action_key == "map_studio.gameplay.move_placements"
+
+
+def test_t2907_selected_authored_objects_delete_in_one_undo_transaction() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="delete_proof", game="K1")
+    controller.create_authored_room_preset_module(
+        preset_id="elevation_test_room",
+        module_root="grdelete",
+    )
+    rows_before = controller.authored_room_primitive_transforms()
+    assert len(rows_before) >= 2
+    removable = [row for row in rows_before if "floor" not in row.primitive_name.lower()]
+    selected = tuple((row.room_resref, row.primitive_name) for row in removable[:2])
+    assert len(selected) == 2
+
+    removed = controller.remove_authored_room_primitives(selected)
+
+    assert removed == selected
+    remaining = {
+        (row.room_resref, row.primitive_name)
+        for row in controller.authored_room_primitive_transforms()
+    }
+    assert not remaining.intersection(selected)
+    assert controller.command_history.undo_stack[-1].action_key == "map_studio.primitive.remove_many"

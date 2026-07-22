@@ -123,15 +123,16 @@ class LightmapUVValidator:
         if outside:
             result.warnings.append(f"{outside} UV coordinate(s) are outside the 0-1 range.")
 
-        result.degenerate_triangles = self.detect_degenerate_triangles(mesh, uv_channel)
+        triangles = self._face_uv_triangles(mesh, uv_channel)
+        result.degenerate_triangles = _detect_degenerate_triangles(triangles)
         if result.degenerate_triangles:
             result.warnings.append(f"{len(result.degenerate_triangles)} degenerate or zero-area UV triangle(s).")
 
-        inverted = self._detect_inverted(mesh, uv_channel)
+        inverted = _detect_inverted_triangles(triangles)
         if inverted:
             result.warnings.append(f"{len(inverted)} UV triangle(s) have inverted winding.")
 
-        result.overlaps = self.detect_overlaps(mesh, uv_channel)
+        result.overlaps = _detect_overlaps_from_triangles(triangles)
         if result.overlaps:
             result.warnings.append(f"{len(result.overlaps)} possible overlapping UV island pair(s).")
 
@@ -155,43 +156,17 @@ class LightmapUVValidator:
         return -1
 
     def detect_overlaps(self, mesh: object, uv_channel: int) -> list[tuple[int, int]]:
-        boxes: list[tuple[float, float, float, float, int]] = []
-        for fi, tri in enumerate(self._face_uv_triangles(mesh, uv_channel)):
-            if tri is None:
-                continue
-            xs = [p[0] for p in tri]
-            ys = [p[1] for p in tri]
-            area = abs(_area2(tri))
-            if area <= 1.0e-10:
-                continue
-            boxes.append((min(xs), min(ys), max(xs), max(ys), fi))
-
-        overlaps: list[tuple[int, int]] = []
-        for idx, a in enumerate(boxes):
-            for b in boxes[idx + 1:]:
-                if len(overlaps) >= 128:
-                    return overlaps
-                if a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]:
-                    continue
-                if _triangles_overlap_2d(
-                    self._face_uv_triangles(mesh, uv_channel)[a[4]],
-                    self._face_uv_triangles(mesh, uv_channel)[b[4]],
-                ):
-                    overlaps.append((a[4], b[4]))
-        return overlaps
+        return _detect_overlaps_from_triangles(self._face_uv_triangles(mesh, uv_channel))
 
     def detect_degenerate_triangles(self, mesh: object, uv_channel: int) -> list[int]:
-        result: list[int] = []
-        for fi, tri in enumerate(self._face_uv_triangles(mesh, uv_channel)):
-            if tri is None or abs(_area2(tri)) <= 1.0e-10:
-                result.append(fi)
-        return result
+        return _detect_degenerate_triangles(self._face_uv_triangles(mesh, uv_channel))
 
     def estimate_texel_density(self, mesh: object, uv_channel: int, resolution: int) -> dict[str, float]:
         values: list[float] = []
         verts = list(getattr(mesh, "vertices", []) or [])
+        triangles = self._face_uv_triangles(mesh, uv_channel)
         for fi, face in enumerate(getattr(mesh, "faces", []) or []):
-            tri_uv = self._face_uv_triangle(mesh, uv_channel, fi)
+            tri_uv = triangles[fi] if fi < len(triangles) else None
             if tri_uv is None:
                 continue
             try:
@@ -235,7 +210,21 @@ class LightmapUVValidator:
         return faces[face_index]
 
     def _face_uv_triangles(self, mesh: object, uv_channel: int) -> list[tuple[tuple[float, float], ...] | None]:
-        return [self._face_uv_triangle(mesh, uv_channel, fi) for fi, _face in enumerate(getattr(mesh, "faces", []) or [])]
+        faces = list(getattr(mesh, "faces", []) or [])
+        uvs = self._uvs(mesh, uv_channel)
+        face_uvs = list(getattr(mesh, face_uv_attr_for_channel(uv_channel), []) or [])
+        if not uvs:
+            return [None] * len(faces)
+        triangles: list[tuple[tuple[float, float], ...] | None] = []
+        for face_index, face in enumerate(faces):
+            indices = face_uvs[face_index] if face_index < len(face_uvs) else face
+            try:
+                triangles.append(
+                    tuple((float(uvs[int(index)][0]), float(uvs[int(index)][1])) for index in indices)
+                )
+            except Exception:
+                triangles.append(None)
+        return triangles
 
     def _face_uv_triangle(self, mesh: object, uv_channel: int, face_index: int) -> tuple[tuple[float, float], ...] | None:
         faces = getattr(mesh, "faces", []) or []
@@ -252,7 +241,7 @@ class LightmapUVValidator:
             return None
 
     def _detect_inverted(self, mesh: object, uv_channel: int) -> list[int]:
-        return [fi for fi, tri in enumerate(self._face_uv_triangles(mesh, uv_channel)) if tri is not None and _area2(tri) < -1.0e-10]
+        return _detect_inverted_triangles(self._face_uv_triangles(mesh, uv_channel))
 
     def _highest_existing_channel(self, mesh: object) -> int:
         highest = -1
@@ -260,6 +249,64 @@ class LightmapUVValidator:
             if self._uvs(mesh, channel):
                 highest = channel
         return highest
+
+
+def _detect_overlaps_from_triangles(
+    triangles: list[tuple[tuple[float, float], ...] | None],
+) -> list[tuple[int, int]]:
+    """Find exact triangle overlaps after a sweep-line AABB broadphase.
+
+    Atlas-scale rooms can contain tens of thousands of triangles.  Cache the
+    UV triangle stream once and only compare boxes whose X intervals are
+    simultaneously active; the former nested scan rebuilt the complete stream
+    twice for every candidate pair and became effectively unusable on imported
+    cave meshes.
+    """
+
+    boxes: list[tuple[float, float, float, float, int]] = []
+    for face_index, triangle in enumerate(triangles):
+        if triangle is None or abs(_area2(triangle)) <= 1.0e-10:
+            continue
+        xs = (triangle[0][0], triangle[1][0], triangle[2][0])
+        ys = (triangle[0][1], triangle[1][1], triangle[2][1])
+        boxes.append((min(xs), min(ys), max(xs), max(ys), face_index))
+    boxes.sort(key=lambda box: (box[0], box[2], box[1], box[3], box[4]))
+
+    active: list[tuple[float, float, float, float, int]] = []
+    overlaps: set[tuple[int, int]] = set()
+    for current in boxes:
+        current_min_x = current[0]
+        active = [candidate for candidate in active if candidate[2] > current_min_x]
+        for candidate in active:
+            if candidate[3] <= current[1] or current[3] <= candidate[1]:
+                continue
+            first_index, second_index = sorted((candidate[4], current[4]))
+            if _triangles_overlap_2d(triangles[first_index], triangles[second_index]):
+                overlaps.add((first_index, second_index))
+                if len(overlaps) >= 128:
+                    return sorted(overlaps)
+        active.append(current)
+    return sorted(overlaps)
+
+
+def _detect_degenerate_triangles(
+    triangles: list[tuple[tuple[float, float], ...] | None],
+) -> list[int]:
+    return [
+        face_index
+        for face_index, triangle in enumerate(triangles)
+        if triangle is None or abs(_area2(triangle)) <= 1.0e-10
+    ]
+
+
+def _detect_inverted_triangles(
+    triangles: list[tuple[tuple[float, float], ...] | None],
+) -> list[int]:
+    return [
+        face_index
+        for face_index, triangle in enumerate(triangles)
+        if triangle is not None and _area2(triangle) < -1.0e-10
+    ]
 
 
 def uv_attr_for_channel(uv_channel: int) -> str:

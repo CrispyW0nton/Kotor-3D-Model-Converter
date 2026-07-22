@@ -81,6 +81,7 @@ manifold3d>=3.5.2
 trimesh[easy]>=4.0
 embreex>=4.4.0
 xatlas>=0.0.11
+fast-simplification>=0.1.13
 pygltflib>=1.15.0
 
 # pyassimp>=5.2.0              # FBX importer — OPTIONAL, requires Assimp native DLL

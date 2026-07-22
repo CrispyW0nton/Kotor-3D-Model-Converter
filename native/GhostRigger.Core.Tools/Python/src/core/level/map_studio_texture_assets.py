@@ -141,8 +141,15 @@ def import_project_texture_asset(
     source_path: str | Path,
     *,
     resref: str = "",
+    max_dimension: int = 0,
 ) -> ProjectTextureAsset:
-    """Import a standard image as an editable unique TGA project asset."""
+    """Import a standard image as an editable unique TGA project asset.
+
+    ``max_dimension`` is an explicit authoring policy rather than a silent
+    global resize.  Custom room imports use the empirically proven Odyssey
+    ceiling of 2048 pixels; ordinary texture-paint imports retain their source
+    resolution unless their caller opts into the same policy.
+    """
 
     source = Path(source_path).resolve()
     if not source.is_file():
@@ -151,6 +158,17 @@ def import_project_texture_asset(
     if source.suffix.lower() not in allowed:
         raise ValueError("Import PNG, TGA, DDS, JPG, BMP, WEBP, or TIFF; TPC cloning stays on the game-resource path.")
     width, height, rgba = decode_image_rgba(source.read_bytes())
+    source_width, source_height = int(width), int(height)
+    limit = int(max_dimension or 0)
+    if limit < 0 or limit > 4096:
+        raise ValueError("Texture maximum dimension must be 0 (preserve) or 1..4096 pixels.")
+    if limit and max(width, height) > limit:
+        from PIL import Image
+
+        image = Image.frombytes("RGBA", (width, height), rgba)
+        image.thumbnail((limit, limit), Image.Resampling.LANCZOS)
+        width, height = image.size
+        rgba = image.tobytes()
     existing = [item.resref for item in project.textures]
     clean_ref = validate_kotor_texture_resref(resref) if str(resref or "").strip() else suggest_kotor_texture_resref(source.name, existing)
     sibling_txi = source.with_suffix(".txi")
@@ -163,7 +181,14 @@ def import_project_texture_asset(
         rgba=rgba,
         source="map_studio:imported_custom_texture",
         txi_text=txi_text,
-        metadata={"import_source": str(source), "paint_unique_copy": True},
+        metadata={
+            "import_source": str(source),
+            "paint_unique_copy": True,
+            "source_width": source_width,
+            "source_height": source_height,
+            "resize_max_dimension": limit,
+            "resized_for_kotor": (int(width), int(height)) != (source_width, source_height),
+        },
     )
 
 

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
@@ -22,6 +23,7 @@ from src.core.level import (
     MapStudioTextureSidecarJournal,
     MapStudioTextureSidecarPatch,
     clone_game_texture_asset,
+    create_project_texture_asset,
     create_project_tpc_texture_asset,
     import_project_texture_asset,
     managed_project_texture_sidecars,
@@ -32,6 +34,12 @@ from src.core.level import (
     tga_dirty_tile_byte_ranges,
 )
 from src.core.scene.module_scene_import import resolve_module_room_placement
+from src.io.obj_room_document import load_obj_room_document
+from src.io.skybox_panorama_conversion import (
+    PanoramaSkyboxOptions,
+    SKYBOX_PANORAMA_FACE_ORDER,
+    load_and_convert_equirectangular_panorama,
+)
 
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
@@ -88,6 +96,14 @@ from .map_studio_stock_content_preview import (
 )
 from .map_studio_pie_resources import inspect_map_studio_pie_resource
 from .stock_module_importer import import_stock_module
+from .authored_obj_room_import import (
+    ObjRoomAuthoringOptions,
+    analyze_obj_walkmesh_candidate_components,
+    apply_obj_walkmesh_component_review,
+    build_obj_room_primitive,
+    generate_adaptive_obj_walkmesh,
+    suggested_obj_texture_resref,
+)
 from .authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
@@ -165,6 +181,34 @@ from .map_studio_terrain_sculpt_session import (
     begin_terrain_sculpt_stroke,
     prepare_terrain_sculpt_frame_for_project,
 )
+from .map_studio_terrain_kit import (
+    build_terrain_kit_preview_model,
+    build_terrain_kit_primitive,
+    scan_vanilla_terrain_kit_assets,
+    terrain_kit_asset,
+    terrain_kit_asset_rows,
+    transform_terrain_kit_primitive,
+    vanilla_terrain_kit_assets,
+    write_vanilla_terrain_kit_catalog,
+)
+from .map_studio_environment_kits import (
+    environment_kit_collection_rows,
+    environment_kit_piece,
+    environment_kit_piece_rows,
+    nearest_environment_kit_snap,
+    scan_vanilla_environment_kits,
+    vanilla_environment_kit_collections,
+    write_vanilla_environment_kit_catalog,
+)
+from .map_studio_pascal_building import (
+    add_pascal_building_room as add_pascal_building_room_to_project,
+    available_pascal_building_styles,
+    pascal_building_levels as pascal_building_levels_for_project,
+    scan_vanilla_pascal_building_styles,
+    set_pascal_building_opening as set_pascal_building_opening_in_project,
+    vanilla_pascal_building_styles,
+    write_vanilla_pascal_style_catalog,
+)
 from .map_studio_texture_paint import suggest_kotor_texture_resref, validate_kotor_texture_resref
 from .map_studio_tool_belt_preferences import (
     MAP_STUDIO_TOOL_BELT_SECTION,
@@ -183,6 +227,7 @@ from .authored_gameplay_marker_geometry import (
 from .authored_gameplay_preview import (
     authored_gameplay_preview_markers,
     authored_module_entry_point_preview_marker,
+    authored_module_entry_point_preview_row,
 )
 from .authored_module_lighting import (
     add_authored_room_light as add_authored_room_light_to_project,
@@ -224,6 +269,7 @@ from .authored_module_placements import (
     authored_gameplay_placement_rows,
     duplicate_authored_gameplay_placement,
     parse_authored_gameplay_placement_id,
+    remove_authored_module_entry_point,
     remove_authored_gameplay_placement,
     rename_authored_gameplay_placement,
     snap_authored_gameplay_placement_to_walkmesh,
@@ -532,6 +578,66 @@ class DeferredAuthoredModuleReadiness:
 
 class MapStudioTextureCloneCancelled(RuntimeError):
     """Raised when a user cancels the atomic game-texture clone transaction."""
+
+
+@dataclass(frozen=True)
+class MapStudioObjRoomImportPreparation:
+    """Immutable result of the background-safe OBJ room analysis pass.
+
+    Parsing and topology analysis are intentionally separate from commit.  A
+    Qt worker may build this value, but only the GUI thread may pass it to the
+    commit method that mutates KMAP state and project texture sidecars.
+    """
+
+    source_path: str
+    project_path: str
+    project_texture_resrefs: tuple[str, ...]
+    module_root: str
+    options: ObjRoomAuthoringOptions
+    document: Any
+    primitive: ImportedMeshRoomPrimitive
+    report: Any
+    components: tuple[Any, ...]
+    material_texture_resrefs: tuple[tuple[str, str], ...]
+    texture_imports: tuple[tuple[str, str, str], ...]
+    neutral_texture_resref: str = ""
+
+
+@dataclass(frozen=True)
+class MapStudioObjRoomImportResult:
+    """Committed OBJ room, texture, and walkmesh summary for Map Studio UI."""
+
+    module_root: str
+    room_resref: str
+    game: str
+    imported_texture_resrefs: tuple[str, ...]
+    selected_component_ids: tuple[str, ...]
+    walkmesh_report: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MapStudioPanoramaSkyboxPreparation:
+    """Immutable background conversion plus the KMAP state it was based on."""
+
+    source_path: str
+    source_sha256: str
+    project_path: str
+    project_texture_resrefs: tuple[str, ...]
+    authored_state_token: tuple[Any, ...]
+    room_resref: str
+    face_texture_resrefs: tuple[tuple[str, str], ...]
+    conversion: Any
+
+
+@dataclass(frozen=True)
+class MapStudioPanoramaSkyboxResult:
+    """Atomic panorama-texture and authored-room commit summary."""
+
+    room_resref: str
+    texture_resrefs: tuple[str, ...]
+    source_is_hdr: bool
+    face_size: int
+    message: str
 
 
 class ModuleEditorController:
@@ -1448,6 +1554,353 @@ class ModuleEditorController:
         if count:
             self.model.log(f"Discarded unsaved changes to {count} project texture sidecar(s).")
         return int(count)
+
+    def prepare_obj_room_import(
+        self,
+        path: str | Path,
+        *,
+        module_root: str = "",
+        room_resref: str = "",
+        game: str = "",
+        source_units: str = "auto",
+        source_up_axis: str = "y",
+        scale_override: float | None = None,
+        center_xy: bool = True,
+        ground_to_zero: bool = False,
+    ) -> MapStudioObjRoomImportPreparation:
+        """Parse and analyze an OBJ room without mutating the active KMAP.
+
+        This method is safe to run in Map Studio's import worker.  It captures
+        the project path and texture-resref set so the GUI-thread commit can
+        reject a stale analysis instead of overwriting intervening work.
+        """
+
+        source = Path(path).expanduser().resolve()
+        document = load_obj_room_document(source)
+        current_root = str(module_root or getattr(self.project, "name", "") or "").strip()
+        if not current_root or current_root.lower() == "new_level":
+            current_root = suggested_obj_texture_resref(source.stem, "", used=set())
+        current_room = str(room_resref or "").strip()
+        if not current_room:
+            current_room = suggested_obj_texture_resref(source.stem, "", used=set())
+        root_issue = authored_resref_blocking_issue("Authored module", current_root)
+        if root_issue:
+            raise ValueError(root_issue)
+
+        target_game = str(game or getattr(self.project, "game", "K2") or "K2").strip().upper()
+        existing_texture_resrefs = tuple(
+            sorted(
+                {
+                    str(getattr(texture, "resref", "") or "").strip().lower()
+                    for texture in tuple(getattr(self.project, "textures", ()) or ())
+                    if str(getattr(texture, "resref", "") or "").strip()
+                }
+            )
+        )
+        reserved = set(existing_texture_resrefs)
+        used_material_names = tuple(
+            dict.fromkeys(str(surface.material_name or "") for surface in document.surfaces)
+        )
+        material_rows = {str(material.name or ""): material for material in document.materials}
+        source_resrefs: dict[str, str] = {}
+        material_texture_resrefs: dict[str, str] = {}
+        texture_imports: list[tuple[str, str, str]] = []
+        unresolved_material_names: list[str] = []
+        for material_name in used_material_names:
+            material = material_rows.get(material_name)
+            texture_path = str(getattr(material, "diffuse_texture_path", "") or "")
+            resolved = str(Path(texture_path).resolve()) if texture_path and Path(texture_path).is_file() else ""
+            if not resolved:
+                unresolved_material_names.append(material_name)
+                continue
+            source_key = str(Path(resolved)).lower()
+            texture_resref = source_resrefs.get(source_key)
+            if not texture_resref:
+                texture_resref = suggested_obj_texture_resref(
+                    material_name,
+                    resolved,
+                    used=reserved,
+                )
+                reserved.add(texture_resref)
+                source_resrefs[source_key] = texture_resref
+                texture_imports.append((material_name, texture_resref, resolved))
+            material_texture_resrefs[material_name] = texture_resref
+
+        neutral_texture_resref = ""
+        if unresolved_material_names:
+            neutral_texture_resref = suggested_obj_texture_resref("obj_neutral", "", used=reserved)
+            reserved.add(neutral_texture_resref)
+            for material_name in unresolved_material_names:
+                material_texture_resrefs[material_name] = neutral_texture_resref
+
+        options = ObjRoomAuthoringOptions(
+            room_resref=current_room,
+            game=target_game,
+            source_units=str(source_units or "auto"),
+            source_up_axis=str(source_up_axis or "y"),
+            scale_override=scale_override,
+            center_xy=bool(center_xy),
+            ground_to_zero=bool(ground_to_zero),
+        )
+        primitive, report = build_obj_room_primitive(
+            document,
+            options,
+            material_texture_resrefs=material_texture_resrefs,
+        )
+        components = analyze_obj_walkmesh_candidate_components(primitive)
+        if not components:
+            raise ValueError(
+                "The OBJ contains no up-facing floor candidates. Check its source-up axis, scale, and face winding."
+            )
+        return MapStudioObjRoomImportPreparation(
+            source_path=str(source),
+            project_path=str(getattr(self.project, "path", "") or ""),
+            project_texture_resrefs=existing_texture_resrefs,
+            module_root=normalise_resref(current_root),
+            options=options,
+            document=document,
+            primitive=primitive,
+            report=report,
+            components=tuple(components),
+            material_texture_resrefs=tuple(material_texture_resrefs.items()),
+            texture_imports=tuple(texture_imports),
+            neutral_texture_resref=neutral_texture_resref,
+        )
+
+    def commit_obj_room_import(
+        self,
+        preparation: MapStudioObjRoomImportPreparation,
+        *,
+        selected_component_ids: tuple[str, ...] | list[str],
+        module_root: str = "",
+        room_resref: str = "",
+        game: str = "",
+        target_face_budget: int = 1_800,
+        texture_max_dimension: int = 2_048,
+    ) -> MapStudioObjRoomImportResult:
+        """Commit one reviewed OBJ room, textures, and WOK atomically.
+
+        The KMAP must already have a stable path because imported pixels live
+        in project-relative sidecars.  Walkmesh component selection is
+        mandatory; recommendations from analysis never authorize collision by
+        themselves.
+        """
+
+        project_path = str(getattr(self.project, "path", "") or "").strip()
+        if not project_path:
+            raise ValueError("Save the KMAP before importing an OBJ map and its texture sidecars.")
+        if Path(project_path).resolve() != Path(str(preparation.project_path or "")).resolve():
+            raise ValueError("The active KMAP changed after OBJ analysis. Analyze the OBJ again before importing.")
+        current_texture_resrefs = tuple(
+            sorted(
+                {
+                    str(getattr(texture, "resref", "") or "").strip().lower()
+                    for texture in tuple(getattr(self.project, "textures", ()) or ())
+                    if str(getattr(texture, "resref", "") or "").strip()
+                }
+            )
+        )
+        if current_texture_resrefs != tuple(preparation.project_texture_resrefs):
+            raise ValueError("Project textures changed after OBJ analysis. Analyze the OBJ again to allocate safe ResRefs.")
+
+        selected_ids = tuple(dict.fromkeys(str(value) for value in tuple(selected_component_ids or ()) if str(value)))
+        if not selected_ids:
+            raise ValueError("Review and select at least one floor component before importing the OBJ room.")
+        clean_root = str(module_root or preparation.module_root or "").strip()
+        clean_room = str(room_resref or preparation.options.room_resref or "").strip()
+        target_game = str(game or preparation.options.game or "K2").strip().upper()
+        root_issue = authored_resref_blocking_issue("Authored module", clean_root)
+        room_issue = authored_resref_blocking_issue("OBJ room", clean_room)
+        if root_issue:
+            raise ValueError(root_issue)
+        if room_issue:
+            raise ValueError(room_issue)
+        if target_game not in {"K1", "K2"}:
+            raise ValueError("OBJ room target game must be K1 or K2.")
+        texture_limit = int(texture_max_dimension)
+        if texture_limit not in {1_024, 2_048}:
+            raise ValueError("OBJ room textures must use the engine-safe 1024 or 2048 maximum dimension policy.")
+
+        options = replace(
+            preparation.options,
+            room_resref=normalise_resref(clean_room),
+            game=target_game,
+        )
+        primitive, report = build_obj_room_primitive(
+            preparation.document,
+            options,
+            material_texture_resrefs=dict(preparation.material_texture_resrefs),
+        )
+        components = analyze_obj_walkmesh_candidate_components(primitive)
+        reviewed = apply_obj_walkmesh_component_review(
+            primitive,
+            components,
+            selected_component_ids=selected_ids,
+            reason=(
+                "Explicit Map Studio OBJ import review: only the checked up-facing connected components "
+                "are authorized as floor collision."
+            ),
+        )
+        room_primitive, walkmesh_report = generate_adaptive_obj_walkmesh(
+            reviewed,
+            components,
+            selected_component_ids=selected_ids,
+            target_face_budget=int(target_face_budget),
+        )
+
+        from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+        from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+        wok = room_primitive.wok
+        if wok is None or not wok.faces:
+            raise ValueError("The reviewed OBJ import did not produce a walkable WOK.")
+        entry_face = wok.faces[0]
+        entry_vertices = tuple(wok.verts[index] for index in (entry_face.v1, entry_face.v2, entry_face.v3))
+        entry_position = tuple(
+            sum(float(vertex[axis]) for vertex in entry_vertices) / 3.0
+            for axis in range(3)
+        )
+        room_key = normalise_resref(clean_room)
+        room = AuthoredRoomSpec(
+            room_resref=room_key,
+            primitive=room_primitive,
+            visible_rooms=(room_key,),
+            metadata={
+                "primitive": "imported_mesh",
+                "source": "map_studio:obj_room_import",
+                "source_path": str(preparation.source_path),
+                "source_sha256": str(report.source_sha256),
+                "walkmesh_component_review": list(selected_ids),
+                "walkmesh_structural_validation": str(walkmesh_report.get("structural_validation") or ""),
+            },
+        )
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            authored = AuthoredModuleProject(
+                metadata=AuthoredModuleMetadata(
+                    module_root=normalise_resref(clean_root),
+                    game=target_game,
+                    display_name=f"{Path(preparation.source_path).stem} custom map",
+                    tag=normalise_resref(clean_root),
+                    metadata={
+                        "source": "map_studio:obj_room_import",
+                        "source_path": str(preparation.source_path),
+                    },
+                ),
+                rooms=(room,),
+                placements=AuthoredGameplayPlacement(
+                    entry_point=ModuleEntryPoint(
+                        area_resref=normalise_resref(clean_root),
+                        position=entry_position,
+                    )
+                ),
+                notes=(
+                    "OBJ geometry and walkmesh are structurally validated authoring output; retail KOTOR proof remains required.",
+                ),
+            )
+        else:
+            if normalise_resref(clean_root) != authored.module_root:
+                raise ValueError(
+                    f"This KMAP already authors module {authored.module_root}; the OBJ import must use that module ResRef."
+                )
+            if target_game != authored.game:
+                raise ValueError(
+                    f"This KMAP targets {authored.game}; create a separate KMAP before importing the room for {target_game}."
+                )
+            if any(existing.normalised_resref() == room_key for existing in authored.rooms):
+                raise ValueError(f"Authored room {room_key} already exists. Choose a unique room ResRef.")
+            authored = replace(authored, rooms=tuple(authored.rooms) + (room,))
+
+        target_dir = project_texture_directory(self.project)
+        sidecar_paths = tuple(
+            path
+            for _material_name, texture_resref, _source in preparation.texture_imports
+            for path in (target_dir / f"{texture_resref}.tga", target_dir / f"{texture_resref}.txi")
+        )
+        if str(preparation.neutral_texture_resref or ""):
+            neutral_target = target_dir / f"{preparation.neutral_texture_resref}.tga"
+            sidecar_paths = tuple(sidecar_paths) + (neutral_target, neutral_target.with_suffix(".txi"))
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        created_paths = tuple(value for value, state in sidecar_before.states if state is None)
+        imported_assets: list[Any] = []
+        try:
+            if str(preparation.neutral_texture_resref or ""):
+                imported_assets.append(
+                    create_project_texture_asset(
+                        self.project,
+                        resref=str(preparation.neutral_texture_resref),
+                        width=2,
+                        height=2,
+                        rgba=bytes((160, 160, 160, 255)) * 4,
+                        source="map_studio:obj_room_neutral_fallback",
+                        metadata={
+                            "fallback_scope": "obj_material_without_diffuse_image",
+                            "source_path": str(preparation.source_path),
+                        },
+                    )
+                )
+            for _material_name, texture_resref, source_path in preparation.texture_imports:
+                imported_assets.append(
+                    import_project_texture_asset(
+                        self.project,
+                        source_path,
+                        resref=texture_resref,
+                        max_dimension=texture_limit,
+                    )
+                )
+            self._store_authored_project(authored)
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        sidecar_patches = self.texture_sidecar_journal.finish(
+            self.project,
+            sidecar_before,
+            paths=sidecar_paths,
+            created_paths=created_paths,
+        )
+        self.model.log(
+            f"Imported OBJ room {room_key}: {report.triangle_count} render triangle(s), "
+            f"{walkmesh_report.get('generated_face_count', 0)} WOK face(s), "
+            f"{len(imported_assets)} project texture(s)."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.room.import_obj",
+            label=f"Import OBJ room {room_key}",
+            before=before,
+            metadata={
+                "source_path": str(preparation.source_path),
+                "source_sha256": str(report.source_sha256),
+                "module_root": normalise_resref(clean_root),
+                "room_resref": room_key,
+                "game": target_game,
+                "render_triangle_count": int(report.triangle_count),
+                "selected_component_ids": list(selected_ids),
+                "walkmesh_report": dict(walkmesh_report),
+                "texture_resrefs": [str(asset.resref) for asset in imported_assets],
+                "texture_max_dimension": texture_limit,
+            },
+            stale_outputs=("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", "ARE", "IFO", "GIT", "TGA", ".mod"),
+            readiness_impact=(
+                "The custom room must pass Map Studio readiness, vanilla-structural comparison, and a manual retail warp/traversal proof."
+            ),
+            sidecar_patches=sidecar_patches,
+        )
+        return MapStudioObjRoomImportResult(
+            module_root=normalise_resref(clean_root),
+            room_resref=room_key,
+            game=target_game,
+            imported_texture_resrefs=tuple(str(asset.resref) for asset in imported_assets),
+            selected_component_ids=selected_ids,
+            walkmesh_report=dict(walkmesh_report),
+        )
 
     def import_project_texture(self, path: str | Path, *, resref: str = ""):
         """Import one unique editable texture beside the saved KMAP."""
@@ -2586,6 +3039,674 @@ class ModuleEditorController:
                 "connection_points": serialised_hooks,
             },
         )
+
+    def available_map_studio_terrain_kit_assets(self) -> tuple[dict[str, Any], ...]:
+        """Return portable static-geometry assets for Terrain Building."""
+
+        return terrain_kit_asset_rows(game=str(getattr(self.project, "game", "K1") or "K1").upper())
+
+    def available_map_studio_environment_kits(self, *, kind: str = "") -> tuple[dict[str, Any], ...]:
+        """Return the trained vanilla module collections for the active game."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        return environment_kit_collection_rows(game=game, kind=kind)
+
+    def available_map_studio_environment_kit_pieces(self, *, kind: str = "") -> tuple[dict[str, Any], ...]:
+        """Return typed vanilla room/exterior tiles for the visual kit browser."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        return environment_kit_piece_rows(game=game, kind=kind)
+
+    def available_map_studio_building_styles(self) -> tuple[dict[str, Any], ...]:
+        """Return KOTOR-safe surface styles for the direct wall tool."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        return tuple(
+            {
+                "style_id": style.style_id,
+                "label": style.label,
+                "game": style.game,
+                "floor_texture": style.floor_texture,
+                "wall_texture": style.wall_texture,
+                "ceiling_texture": style.ceiling_texture,
+                "source_module": style.source_module,
+                "source_room": style.source_room,
+                "environment_kind": next(
+                    (tag for tag in tuple(style.tags) if tag in {"interior", "exterior"}),
+                    "both",
+                ),
+                "collection_id": style.style_id[4:] if style.style_id.startswith("kit:") else "",
+                "tags": tuple(style.tags),
+            }
+            for style in available_pascal_building_styles(game)
+        )
+
+    def map_studio_building_levels(self):
+        """Return authored Pascal-style levels without changing KMAP state."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        return () if authored is None else pascal_building_levels_for_project(authored)
+
+    def refresh_map_studio_vanilla_building_styles(
+        self,
+        *,
+        resource_manager: Any,
+        progress: Any = None,
+    ) -> tuple[tuple[dict[str, Any], ...], str]:
+        """Rebuild the local retail room-surface palette catalog."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        styles = scan_vanilla_pascal_building_styles(
+            resource_manager,
+            games=(game,),
+            progress=progress,
+        )
+        retained = tuple(style for style in vanilla_pascal_building_styles() if style.game != game)
+        path = write_vanilla_pascal_style_catalog(retained + styles)
+        return self.available_map_studio_building_styles(), str(path)
+
+    def refresh_map_studio_vanilla_environment_kits(
+        self,
+        *,
+        resource_manager: Any,
+        progress: Any = None,
+    ) -> tuple[tuple[dict[str, Any], ...], str]:
+        """Retrain module collections from the configured base-game layouts."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        collections = scan_vanilla_environment_kits(
+            resource_manager,
+            games=(game,),
+            progress=progress,
+        )
+        retained = tuple(
+            collection for collection in vanilla_environment_kit_collections() if collection.game != game
+        )
+        path = write_vanilla_environment_kit_catalog(retained + collections)
+        return self.available_map_studio_environment_kit_pieces(), str(path)
+
+    def add_map_studio_building_room(
+        self,
+        *,
+        points: Any,
+        floor_z: float = 0.0,
+        wall_height: float = 3.0,
+        level_index: int = 0,
+        level_name: str = "",
+        style_id: str = "plcaa_graybox",
+        include_ceiling: bool = True,
+        floor_surface_id: int | str = 4,
+    ) -> str:
+        """Create one exportable room from a closed direct-wall loop."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+            from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+            root = normalise_resref(str(getattr(self.project, "name", "") or "")) or "grbuild"
+            authored = AuthoredModuleProject(
+                metadata=AuthoredModuleMetadata(
+                    module_root=root,
+                    game=str(getattr(self.project, "game", "K1") or "K1").upper(),
+                    display_name=f"{root} authored map",
+                    tag=root,
+                ),
+                rooms=(),
+                placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
+            )
+        styles = {style.style_id: style for style in available_pascal_building_styles(authored.game)}
+        style = styles.get(str(style_id or "")) or next(iter(styles.values()))
+        before = self._capture_map_studio_command_state()
+        updated, room_resref = add_pascal_building_room_to_project(
+            authored,
+            points=points,
+            floor_z=float(floor_z),
+            wall_height=float(wall_height),
+            level_index=int(level_index),
+            level_name=str(level_name or ""),
+            floor_texture=style.floor_texture,
+            wall_texture=style.wall_texture,
+            ceiling_texture=style.ceiling_texture,
+            include_ceiling=bool(include_ceiling),
+            floor_surface_id=floor_surface_id,
+            style_id=style.style_id,
+            style_source_module=style.source_module,
+            style_source_room=style.source_room,
+        )
+        self._store_authored_project(updated)
+        self.model.log(f"Built room {room_resref} from a closed wall loop on {level_name or f'Level {int(level_index) + 1}' }.")
+        self._record_map_studio_command(
+            action_key="map_studio.building.room.create",
+            label=f"Build room {room_resref}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "point_count": len(tuple(points or ())),
+                "level_index": int(level_index),
+                "floor_z": float(floor_z),
+                "wall_height": float(wall_height),
+                "style_id": style.style_id,
+                "include_ceiling": bool(include_ceiling),
+            },
+        )
+        return room_resref
+
+    def set_map_studio_building_opening(
+        self,
+        *,
+        room_resref: str,
+        edge_index: int,
+        opening_kind: str,
+        center_fraction: float,
+        width: float,
+        height: float,
+        bottom: float = 0.0,
+    ) -> None:
+        """Cut one engine-safe door or window opening into a wall edge."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            raise ValueError("Draw and close a room before adding a door or window.")
+        before = self._capture_map_studio_command_state()
+        updated = set_pascal_building_opening_in_project(
+            authored,
+            room_resref=room_resref,
+            edge_index=int(edge_index),
+            opening_kind=opening_kind,
+            center_fraction=float(center_fraction),
+            width=float(width),
+            height=float(height),
+            bottom=float(bottom),
+        )
+        self._store_authored_project(updated)
+        kind = str(opening_kind or "door").strip().lower()
+        self.model.log(f"Added {kind} opening to {normalise_resref(room_resref)} wall {int(edge_index) + 1}.")
+        self._record_map_studio_command(
+            action_key=f"map_studio.building.{kind}.create",
+            label=f"Add {kind} to {normalise_resref(room_resref)}",
+            before=before,
+            metadata={
+                "room_resref": normalise_resref(room_resref),
+                "edge_index": int(edge_index),
+                "opening_kind": kind,
+                "center_fraction": float(center_fraction),
+                "width": float(width),
+                "height": float(height),
+                "bottom": float(bottom),
+            },
+        )
+
+    def refresh_map_studio_vanilla_terrain_kit_assets(
+        self,
+        *,
+        resource_manager: Any,
+        progress: Any = None,
+    ) -> tuple[tuple[dict[str, Any], ...], str]:
+        """Rebuild the local retail-terrain metadata index for the target game."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        assets = scan_vanilla_terrain_kit_assets(
+            resource_manager,
+            games=(game,),
+            outdoor_only=True,
+            progress=progress,
+        )
+        retained = tuple(asset for asset in vanilla_terrain_kit_assets() if asset.game != game)
+        path = write_vanilla_terrain_kit_catalog(retained + assets)
+        return terrain_kit_asset_rows(game=game), str(path)
+
+    def map_studio_terrain_kit_preview_model(self, asset_id: str, *, resource_manager: Any = None):
+        """Build one isolated Terrain Kit model for a lazy browser thumbnail."""
+
+        return build_terrain_kit_preview_model(
+            str(asset_id or ""),
+            game=str(getattr(self.project, "game", "K1") or "K1").upper(),
+            resource_manager=resource_manager,
+        )
+
+    def map_studio_environment_kit_preview_model(self, piece_id: str, *, resource_manager: Any = None):
+        """Load one trained vanilla room tile for a lazy content-browser thumbnail."""
+
+        piece = environment_kit_piece(str(piece_id or ""))
+        if piece is None or resource_manager is None:
+            return None
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        if piece.game != game:
+            return None
+        return load_stock_kotor_model(resource_manager, piece.model_resref or piece.room_resref, game)
+
+    def preview_authored_terrain_kit_placement(
+        self,
+        *,
+        asset_id: str,
+        position: Any,
+        rotation_degrees_z: float = 0.0,
+        scale: float = 1.0,
+    ) -> dict[str, Any]:
+        """Return the surface position or nearest compatible trained-kit snap.
+
+        All positions are authored-module world space in metres. Piece magnet
+        positions are stored in piece-local space and transformed here before
+        the placement transaction mutates the KMAP project.
+        """
+
+        values = tuple(position or (0.0, 0.0, 0.0))
+        point = tuple(float(value) for value in values[:3])
+        uniform_scale = float(scale)
+        yaw_degrees = float(rotation_degrees_z)
+        if len(point) < 3 or not all(math.isfinite(value) for value in point):
+            raise ValueError("Terrain kit placement requires a finite 3D surface position.")
+        if not math.isfinite(uniform_scale) or uniform_scale <= 0.0:
+            raise ValueError("Terrain kit scale must be a finite value greater than zero.")
+        if not math.isfinite(yaw_degrees):
+            raise ValueError("Terrain kit rotation must be finite.")
+
+        result: dict[str, Any] = {
+            "position": point,
+            "rotation_degrees_z": yaw_degrees,
+            "scale": uniform_scale,
+            "magnet_snapped": False,
+            "source_magnet_id": "",
+            "target_magnet_id": "",
+            "target_piece_id": "",
+            "target_room_resref": "",
+            "cursor_distance": 0.0,
+        }
+        source_piece = environment_kit_piece(str(asset_id or ""))
+        authored = self._map_studio_authored_project_snapshot()
+        if source_piece is None or authored is None:
+            return result
+
+        targets: list[tuple[Any, tuple[float, float, float], float, float, str]] = []
+        for room in tuple(authored.rooms or ()):
+            room_metadata = dict(getattr(room, "metadata", {}) or {})
+            primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
+            target_asset_id = str(
+                room_metadata.get("environment_kit_piece_id")
+                or primitive_metadata.get("environment_kit_piece_id")
+                or room_metadata.get("terrain_kit_asset_id")
+                or primitive_metadata.get("terrain_kit_asset_id")
+                or ""
+            )
+            target_piece = environment_kit_piece(target_asset_id)
+            room_position = tuple(getattr(room, "position", ()) or ())
+            if target_piece is None or len(room_position) < 3:
+                continue
+            try:
+                target_point = tuple(float(value) for value in room_position[:3])
+                target_rotation = float(
+                    room_metadata.get(
+                        "environment_kit_rotation_degrees_z",
+                        primitive_metadata.get(
+                            "environment_kit_rotation_degrees_z",
+                            room_metadata.get(
+                                "terrain_kit_rotation_degrees_z",
+                                primitive_metadata.get("terrain_kit_rotation_degrees_z", 0.0),
+                            ),
+                        ),
+                    )
+                    or 0.0
+                )
+                target_scale = float(
+                    room_metadata.get(
+                        "environment_kit_scale",
+                        primitive_metadata.get(
+                            "environment_kit_scale",
+                            room_metadata.get("terrain_kit_scale", primitive_metadata.get("terrain_kit_scale", 1.0)),
+                        ),
+                    )
+                    or 1.0
+                )
+            except (TypeError, ValueError):
+                continue
+            if not all(math.isfinite(value) for value in target_point) or target_scale <= 0.0:
+                continue
+            targets.append(
+                (
+                    target_piece,
+                    target_point,
+                    math.radians(target_rotation),
+                    target_scale,
+                    room.normalised_resref(),
+                )
+            )
+        if not targets:
+            return result
+
+        horizontal_span = max(0.01, *(float(value) for value in source_piece.dimensions_m[:2]))
+        snap = nearest_environment_kit_snap(
+            source_piece,
+            proposed_position=point,
+            proposed_yaw=math.radians(yaw_degrees),
+            source_scale=uniform_scale,
+            targets=tuple(targets),
+            max_distance=max(0.75, min(3.0, horizontal_span * 0.12)),
+        )
+        if snap is None:
+            return result
+        result.update(
+            {
+                "position": tuple(float(value) for value in snap.position),
+                "rotation_degrees_z": math.degrees(float(snap.yaw_radians)) % 360.0,
+                "magnet_snapped": True,
+                "source_magnet_id": snap.source_magnet_id,
+                "target_magnet_id": snap.target_magnet_id,
+                "target_piece_id": snap.target_piece_id,
+                "target_room_resref": snap.target_room_resref,
+                "cursor_distance": float(snap.cursor_distance),
+            }
+        )
+        return result
+
+    def add_authored_terrain_kit_asset(
+        self,
+        *,
+        asset_id: str,
+        position: Any,
+        rotation_degrees_z: float = 0.0,
+        scale: float = 1.0,
+        target_room_resref: str = "",
+        resource_manager: Any = None,
+    ) -> str:
+        """Surface-place a terrain mesh as one visual-only Odyssey room.
+
+        KOTOR's GIT placeable list cannot own arbitrary static cliff geometry.
+        A small visual-only room is the engine-accurate export boundary, while
+        its zero-face WOK leaves collision with the sculpted terrain below.
+        """
+
+        entry = terrain_kit_asset(asset_id)
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+            from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+            root = normalise_resref(str(getattr(self.project, "name", "") or "")) or "grterrain"
+            authored = AuthoredModuleProject(
+                metadata=AuthoredModuleMetadata(
+                    module_root=root,
+                    game=str(getattr(self.project, "game", "K1") or "K1").upper(),
+                    display_name=f"{root} terrain map",
+                    tag=root,
+                ),
+                rooms=(),
+                placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
+            )
+
+        placement = self.preview_authored_terrain_kit_placement(
+            asset_id=entry.asset_id,
+            position=position,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+        )
+        point = tuple(float(value) for value in tuple(placement["position"])[:3])
+        rotation_degrees_z = float(placement["rotation_degrees_z"])
+        scale = float(placement["scale"])
+
+        used = {room.normalised_resref() for room in tuple(authored.rooms or ())}
+        room_key = ""
+        for ordinal in range(1, 10_000):
+            candidate = f"grtk{ordinal:04d}"
+            if candidate not in used:
+                room_key = candidate
+                break
+        if not room_key:
+            raise ValueError("This map has exhausted its terrain-kit room identifiers.")
+
+        primitive = build_terrain_kit_primitive(
+            entry.asset_id,
+            room_key,
+            str(authored.game or "K1").upper(),
+            float(rotation_degrees_z),
+            float(scale),
+            resource_manager=resource_manager,
+        )
+        all_rooms = tuple(room.normalised_resref() for room in authored.rooms) + (room_key,)
+        updated_existing = tuple(
+            replace(
+                room,
+                visible_rooms=tuple(dict.fromkeys(tuple(room.visible_rooms or ()) + (room_key,))),
+            )
+            for room in authored.rooms
+        )
+        room = AuthoredRoomSpec(
+            room_resref=room_key,
+            primitive=primitive,
+            position=(point[0], point[1], point[2]),
+            visible_rooms=all_rooms,
+            metadata={
+                "primitive": "imported_mesh",
+                "source": "map_studio:terrain_kit",
+                "terrain_kit_asset_id": entry.asset_id,
+                "terrain_kit_label": entry.label,
+                "terrain_kit_source_kind": (
+                    "vanilla_game" if hasattr(entry, "module_resref") else "supplied_obj"
+                ),
+                "terrain_kit_source_game": str(getattr(entry, "game", "") or ""),
+                "terrain_kit_source_module": str(getattr(entry, "module_resref", "") or ""),
+                "terrain_kit_source_room": str(getattr(entry, "room_resref", "") or ""),
+                "terrain_kit_category": entry.category,
+                "terrain_kit_rotation_degrees_z": float(rotation_degrees_z),
+                "terrain_kit_scale": float(scale),
+                "terrain_kit_target_room_resref": normalise_resref(
+                    str(placement.get("target_room_resref") or target_room_resref)
+                ),
+                "terrain_kit_surface_target_room_resref": normalise_resref(target_room_resref),
+                "terrain_kit_magnet_snapped": bool(placement.get("magnet_snapped", False)),
+                "terrain_kit_source_magnet_id": str(placement.get("source_magnet_id") or ""),
+                "terrain_kit_target_magnet_id": str(placement.get("target_magnet_id") or ""),
+                "terrain_kit_target_piece_id": str(placement.get("target_piece_id") or ""),
+                "terrain_kit_snap_cursor_distance": float(placement.get("cursor_distance", 0.0) or 0.0),
+                "visual_only": True,
+                "surface_snapped": True,
+            },
+        )
+        before = self._capture_map_studio_command_state()
+        self._store_authored_project(replace(authored, rooms=updated_existing + (room,)))
+        snap_note = (
+            f"; magnet-snapped to {placement.get('target_room_resref')}"
+            if placement.get("magnet_snapped", False)
+            else ""
+        )
+        self.model.log(
+            f"Placed Terrain Kit asset {entry.label} as visual room {room_key} at "
+            f"{point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f}{snap_note}."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.terrain_kit.place",
+            label=f"Place terrain piece {entry.label}",
+            before=before,
+            metadata={
+                "asset_id": entry.asset_id,
+                "room_resref": room_key,
+                "position": list(point),
+                "rotation_degrees_z": float(rotation_degrees_z),
+                "scale": float(scale),
+                "visual_only": True,
+                "magnet_snapped": bool(placement.get("magnet_snapped", False)),
+                "source_magnet_id": str(placement.get("source_magnet_id") or ""),
+                "target_magnet_id": str(placement.get("target_magnet_id") or ""),
+                "target_piece_id": str(placement.get("target_piece_id") or ""),
+                "target_room_resref": str(placement.get("target_room_resref") or ""),
+            },
+        )
+        return room_key
+
+    def add_authored_environment_kit_piece(
+        self,
+        *,
+        piece_id: str,
+        position: Any,
+        rotation_degrees_z: float = 0.0,
+        scale: float = 1.0,
+        target_room_resref: str = "",
+        resource_manager: Any = None,
+    ) -> str:
+        """Place a reusable vanilla room tile as uniquely named authored geometry.
+
+        Retail model/WOK bytes are resolved from the user's game installation,
+        transformed together, and compiled under a fresh room resref. The KMAP
+        keeps only source provenance, transform, and typed magnet metadata.
+        """
+
+        piece = environment_kit_piece(str(piece_id or ""))
+        if piece is None or piece.role not in {"room_tile", "exterior_tile"}:
+            raise ValueError("Choose a trained vanilla room or exterior tile.")
+        if resource_manager is None:
+            raise ValueError(f"Connect the {piece.game} game installation before placing {piece.label}.")
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        if piece.game != game:
+            raise ValueError(f"{piece.label} is a {piece.game} kit piece and cannot be placed in a {game} map.")
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+            from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+            root = normalise_resref(str(getattr(self.project, "name", "") or "")) or "grmodule"
+            authored = AuthoredModuleProject(
+                metadata=AuthoredModuleMetadata(
+                    module_root=root,
+                    game=game,
+                    display_name=f"{root} environment kit map",
+                    tag=root,
+                ),
+                rooms=(),
+                placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
+            )
+
+        placement = self.preview_authored_terrain_kit_placement(
+            asset_id=piece.piece_id,
+            position=position,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+        )
+        point = tuple(float(value) for value in tuple(placement["position"])[:3])
+        rotation_degrees_z = float(placement["rotation_degrees_z"])
+        scale = float(placement["scale"])
+
+        used = {room.normalised_resref() for room in tuple(authored.rooms or ())}
+        room_key = next((f"grkit{ordinal:04d}" for ordinal in range(1, 10_000) if f"grkit{ordinal:04d}" not in used), "")
+        if not room_key:
+            raise ValueError("This map has exhausted its environment-kit room identifiers.")
+
+        model = load_stock_kotor_model(resource_manager, piece.model_resref or piece.room_resref, game)
+        if model is None:
+            raise ValueError(
+                f"Vanilla room model {piece.model_resref or piece.room_resref} was not found in the configured {game} installation."
+            )
+        wok_bytes = self._stock_room_wok_bytes(piece.room_resref, resource_manager, authored)
+        primitive = build_imported_mesh_primitive_from_stock_model(
+            model,
+            room_resref=room_key,
+            source_model=piece.model_resref or piece.room_resref,
+            game=game,
+            wok_bytes=wok_bytes,
+        )
+        if not primitive.surfaces:
+            raise ValueError(f"{piece.label} has no renderable room geometry.")
+        had_lightmaps = any(bool(surface.lightmap) for surface in primitive.surfaces)
+        primitive = replace(
+            primitive,
+            room_resref=room_key,
+            surfaces=tuple(replace(surface, lightmap="", uvs_lm=()) for surface in primitive.surfaces),
+            wok=(replace(primitive.wok, name=room_key, raw=None) if primitive.wok is not None else None),
+            metadata={
+                **dict(primitive.metadata or {}),
+                "source": "map_studio:environment_kit",
+                "environment_kit_piece_id": piece.piece_id,
+                "environment_kit_collection_id": piece.collection_id,
+                "environment_kit_source_game": piece.game,
+                "environment_kit_source_module": piece.module_resref,
+                "environment_kit_source_room": piece.room_resref,
+                "environment_kit_class_id": piece.class_id,
+                "environment_kit_rotation_degrees_z": rotation_degrees_z,
+                "environment_kit_scale": scale,
+                "source_lightmaps_removed_for_relighting": had_lightmaps,
+            },
+        )
+        primitive = transform_terrain_kit_primitive(
+            primitive,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+        )
+
+        angle = math.radians(rotation_degrees_z)
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        connection_points: list[dict[str, Any]] = []
+        for magnet in piece.magnets:
+            x = float(magnet.local_position[0]) * scale
+            y = float(magnet.local_position[1]) * scale
+            z = float(magnet.local_position[2]) * scale
+            yaw = magnet.yaw_radians + angle
+            connection_points.append(
+                {
+                    "door": magnet.magnet_id,
+                    "kind": magnet.kind,
+                    "magnet_class": magnet.magnet_class,
+                    "local_position": [(x * cosine) - (y * sine), (x * sine) + (y * cosine), z],
+                    "orientation": [0.0, 0.0, math.sin(yaw * 0.5), math.cos(yaw * 0.5)],
+                    "source": magnet.source,
+                }
+            )
+
+        all_rooms = tuple(room.normalised_resref() for room in authored.rooms) + (room_key,)
+        existing = tuple(
+            replace(room, visible_rooms=tuple(dict.fromkeys(tuple(room.visible_rooms or ()) + (room_key,))))
+            for room in authored.rooms
+        )
+        room = AuthoredRoomSpec(
+            room_resref=room_key,
+            primitive=primitive,
+            position=point,
+            visible_rooms=all_rooms,
+            metadata={
+                "primitive": "imported_mesh",
+                "source": "map_studio:environment_kit",
+                "environment_kit_piece_id": piece.piece_id,
+                "environment_kit_collection_id": piece.collection_id,
+                "environment_kit_label": piece.label,
+                "environment_kit_class_id": piece.class_id,
+                "environment_kit_source_game": piece.game,
+                "environment_kit_source_module": piece.module_resref,
+                "environment_kit_source_room": piece.room_resref,
+                "environment_kit_rotation_degrees_z": rotation_degrees_z,
+                "environment_kit_scale": scale,
+                "environment_kit_magnet_snapped": bool(placement.get("magnet_snapped", False)),
+                "environment_kit_source_magnet_id": str(placement.get("source_magnet_id") or ""),
+                "environment_kit_target_magnet_id": str(placement.get("target_magnet_id") or ""),
+                "environment_kit_target_piece_id": str(placement.get("target_piece_id") or ""),
+                "environment_kit_target_room_resref": normalise_resref(
+                    str(placement.get("target_room_resref") or target_room_resref)
+                ),
+                "environment_kit_surface_target_room_resref": normalise_resref(target_room_resref),
+                "connection_points": connection_points,
+                "surface_snapped": True,
+            },
+        )
+        before = self._capture_map_studio_command_state()
+        self._store_authored_project(replace(authored, rooms=existing + (room,)))
+        self.model.log(
+            f"Placed environment-kit piece {piece.label} as {room_key} at "
+            f"{point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f}."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.environment_kit.place",
+            label=f"Place environment piece {piece.label}",
+            before=before,
+            metadata={
+                "piece_id": piece.piece_id,
+                "collection_id": piece.collection_id,
+                "room_resref": room_key,
+                "position": list(point),
+                "rotation_degrees_z": rotation_degrees_z,
+                "scale": scale,
+                "magnet_snapped": bool(placement.get("magnet_snapped", False)),
+            },
+        )
+        return room_key
 
     def _next_added_room_position(self) -> tuple[float, float, float]:
         """A non-overlapping drop point just east of the current module bounds."""
@@ -4082,6 +5203,19 @@ class ModuleEditorController:
             return None
         return authored.placements.entry_point
 
+    def authored_module_entry_point_preview_row(self):
+        """Return the selectable real-player viewport row for the IFO start."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return None
+        player_settings = dict((getattr(self.project, "extra", {}) or {}).get("pie_player") or {})
+        return authored_module_entry_point_preview_row(
+            authored,
+            body_model_resref=str(player_settings.get("body_resref") or "pmbam"),
+            head_model_resref=str(player_settings.get("head_resref") or "pmhc01"),
+        )
+
     def authored_room_lights(self):
         """Return selectable authored room lights for the current KMAP."""
 
@@ -4298,7 +5432,143 @@ class ModuleEditorController:
             lambda authored: tuple(room.normalised_resref() for room in authored.rooms if room.normalised_resref()),
         )
 
-    def create_authored_five_face_skybox(
+    @staticmethod
+    def _panorama_skybox_face_texture_rows(
+        *,
+        north_texture: str,
+        east_texture: str,
+        south_texture: str,
+        west_texture: str,
+        top_texture: str,
+    ) -> tuple[tuple[str, str], ...]:
+        return (
+            ("north", str(north_texture or "").strip()),
+            ("east", str(east_texture or "").strip()),
+            ("south", str(south_texture or "").strip()),
+            ("west", str(west_texture or "").strip()),
+            ("top", str(top_texture or "").strip()),
+        )
+
+    @staticmethod
+    def _validate_panorama_skybox_identity(
+        *,
+        room_resref: str,
+        face_texture_rows: tuple[tuple[str, str], ...],
+    ) -> tuple[str, tuple[tuple[str, str], ...]]:
+        room_issue = authored_resref_blocking_issue("Skybox room", room_resref)
+        if room_issue:
+            raise ValueError(room_issue)
+        clean_rows: list[tuple[str, str]] = []
+        for face, value in face_texture_rows:
+            issue = authored_resref_blocking_issue(f"Skybox {face} texture", value)
+            if issue:
+                raise ValueError(issue)
+            clean_rows.append((str(face), normalise_resref(value)))
+        texture_resrefs = tuple(value for _face, value in clean_rows)
+        if len(set(texture_resrefs)) != len(texture_resrefs):
+            raise ValueError("Each panorama skybox face requires a unique texture ResRef.")
+        return normalise_resref(room_resref), tuple(clean_rows)
+
+    def prepare_panorama_skybox(
+        self,
+        source_path: str | Path,
+        *,
+        room_resref: str,
+        north_texture: str,
+        east_texture: str,
+        south_texture: str,
+        west_texture: str,
+        top_texture: str,
+        face_size: int = 1_024,
+        exposure_ev: float = 0.0,
+        longitude_offset_degrees: float = 0.0,
+        tone_mapper: str = "aces",
+    ) -> MapStudioPanoramaSkyboxPreparation:
+        """Decode and project a panorama without mutating KMAP or sidecars.
+
+        This pass is intentionally safe for Map Studio's worker executor.  The
+        returned state token and texture set let the GUI-thread commit reject
+        intervening room or texture edits instead of silently overwriting them.
+        """
+
+        project_path = str(getattr(self.project, "path", "") or "").strip()
+        if not project_path:
+            raise ValueError("Save the KMAP before converting a panorama; generated TGAs live beside the project.")
+        authored_state_token = self._map_studio_authored_state_token()
+        authored = self._load_authored_project_or_raise()
+        if not tuple(authored.rooms or ()):
+            raise ValueError("Add or import at least one playable room before creating its skybox.")
+        face_rows = self._panorama_skybox_face_texture_rows(
+            north_texture=north_texture,
+            east_texture=east_texture,
+            south_texture=south_texture,
+            west_texture=west_texture,
+            top_texture=top_texture,
+        )
+        room_name, clean_rows = self._validate_panorama_skybox_identity(
+            room_resref=room_resref,
+            face_texture_rows=face_rows,
+        )
+        if any(room.normalised_resref() == room_name for room in authored.rooms):
+            raise ValueError(f"Authored room {room_name} already exists.")
+        existing_texture_resrefs = tuple(
+            sorted(
+                {
+                    str(getattr(texture, "resref", "") or "").strip().lower()
+                    for texture in tuple(getattr(self.project, "textures", ()) or ())
+                    if str(getattr(texture, "resref", "") or "").strip()
+                }
+            )
+        )
+        collisions = sorted(set(existing_texture_resrefs) & {value for _face, value in clean_rows})
+        if collisions:
+            raise ValueError(
+                "Panorama skybox texture ResRefs already exist in this project: " + ", ".join(collisions)
+            )
+        size = int(face_size)
+        if size not in {256, 512, 1_024, 2_048}:
+            raise ValueError("Map Studio skybox faces must use 256, 512, 1024, or 2048 pixels.")
+        mapper = str(tone_mapper or "aces").strip().lower()
+        if mapper not in {"aces", "reinhard"}:
+            raise ValueError("Map Studio panorama tone mapping must use ACES or Reinhard.")
+
+        source = Path(source_path).expanduser().resolve()
+        if not source.is_file():
+            raise FileNotFoundError(f"Skybox panorama does not exist: {source}")
+        stat_before = source.stat()
+        conversion = load_and_convert_equirectangular_panorama(
+            source,
+            options=PanoramaSkyboxOptions(
+                face_size=size,
+                exposure_ev=float(exposure_ev),
+                longitude_offset_degrees=float(longitude_offset_degrees),
+                tone_mapper=mapper,
+            ),
+        )
+        stat_after_conversion = source.stat()
+        source_bytes = source.read_bytes()
+        stat_after_hash = source.stat()
+        stat_key = lambda value: (int(value.st_size), int(value.st_mtime_ns))
+        if not (
+            stat_key(stat_before) == stat_key(stat_after_conversion) == stat_key(stat_after_hash)
+        ):
+            raise ValueError("The panorama changed while it was being converted. Run the conversion again.")
+        if tuple(face.name for face in conversion.faces) != tuple(SKYBOX_PANORAMA_FACE_ORDER):
+            raise ValueError("Panorama conversion returned an unexpected skybox face order.")
+        if self._map_studio_authored_state_token() != authored_state_token:
+            raise ValueError("Authored rooms changed while the panorama was being converted. Run the conversion again.")
+        return MapStudioPanoramaSkyboxPreparation(
+            source_path=str(source),
+            source_sha256=hashlib.sha256(source_bytes).hexdigest(),
+            project_path=project_path,
+            project_texture_resrefs=existing_texture_resrefs,
+            authored_state_token=authored_state_token,
+            room_resref=room_name,
+            face_texture_resrefs=clean_rows,
+            conversion=conversion,
+        )
+
+    def _append_authored_five_face_skybox(
         self,
         *,
         room_resref: str,
@@ -4307,15 +5577,12 @@ class ModuleEditorController:
         south_texture: str,
         west_texture: str,
         top_texture: str,
-        half_extent: float = 500.0,
-        bottom_z: float = -500.0,
-        top_z: float = 500.0,
-        visible_rooms: tuple[str, ...] = (),
+        half_extent: float,
+        bottom_z: float,
+        top_z: float,
+        visible_rooms: tuple[str, ...],
+        authoring_metadata: Mapping[str, Any] | None = None,
     ):
-        """Append one undoable vanilla-style visual sky room to the KMAP."""
-
-        from dataclasses import replace as _replace
-
         authored = self._load_authored_project_or_raise()
         room_name = normalise_resref(room_resref)
         if any(room.normalised_resref() == room_name for room in authored.rooms):
@@ -4327,7 +5594,6 @@ class ModuleEditorController:
                 if normalise_resref(value)
             )
         )
-        before = self._capture_map_studio_command_state()
         sky_room = build_five_face_skybox_room(
             FiveFaceSkyboxSpec(
                 room_resref=room_name,
@@ -4343,10 +5609,45 @@ class ModuleEditorController:
                 top_z=float(top_z),
                 visible_rooms=targets,
                 game=authored.game,
+                metadata=dict(authoring_metadata or {}),
             )
         )
-        updated = _replace(authored, rooms=tuple(authored.rooms) + (sky_room,))
+        updated = replace(authored, rooms=tuple(authored.rooms) + (sky_room,))
         self._store_authored_project(updated)
+        return sky_room, targets
+
+    def create_authored_five_face_skybox(
+        self,
+        *,
+        room_resref: str,
+        north_texture: str,
+        east_texture: str,
+        south_texture: str,
+        west_texture: str,
+        top_texture: str,
+        half_extent: float = 500.0,
+        bottom_z: float = -500.0,
+        top_z: float = 500.0,
+        visible_rooms: tuple[str, ...] = (),
+        authoring_metadata: Mapping[str, Any] | None = None,
+    ):
+        """Append one undoable vanilla-style visual sky room to the KMAP."""
+
+        before = self._capture_map_studio_command_state()
+        sky_room, targets = self._append_authored_five_face_skybox(
+            room_resref=room_resref,
+            north_texture=north_texture,
+            east_texture=east_texture,
+            south_texture=south_texture,
+            west_texture=west_texture,
+            top_texture=top_texture,
+            half_extent=half_extent,
+            bottom_z=bottom_z,
+            top_z=top_z,
+            visible_rooms=visible_rooms,
+            authoring_metadata=authoring_metadata,
+        )
+        room_name = sky_room.normalised_resref()
         self._record_map_studio_command(
             action_key="map_studio.environment.create_skybox",
             label=f"Create skybox room {room_name}",
@@ -4363,6 +5664,141 @@ class ModuleEditorController:
         )
         self.model.log(message)
         return sky_room, message
+
+    def commit_panorama_skybox(
+        self,
+        preparation: MapStudioPanoramaSkyboxPreparation,
+        *,
+        half_extent: float = 500.0,
+        bottom_z: float = -500.0,
+        top_z: float = 500.0,
+        visible_rooms: tuple[str, ...] = (),
+    ) -> MapStudioPanoramaSkyboxResult:
+        """Atomically create five TGA assets and their visual-only sky room."""
+
+        project_path = str(getattr(self.project, "path", "") or "").strip()
+        if not project_path:
+            raise ValueError("Save the KMAP before committing panorama skybox textures.")
+        if Path(project_path).resolve() != Path(str(preparation.project_path or "")).resolve():
+            raise ValueError("The active KMAP changed after panorama conversion. Convert the panorama again.")
+        if self._map_studio_authored_state_token() != tuple(preparation.authored_state_token):
+            raise ValueError("Authored rooms changed after panorama conversion. Convert the panorama again.")
+        current_texture_resrefs = tuple(
+            sorted(
+                {
+                    str(getattr(texture, "resref", "") or "").strip().lower()
+                    for texture in tuple(getattr(self.project, "textures", ()) or ())
+                    if str(getattr(texture, "resref", "") or "").strip()
+                }
+            )
+        )
+        if current_texture_resrefs != tuple(preparation.project_texture_resrefs):
+            raise ValueError("Project textures changed after panorama conversion. Convert the panorama again.")
+        if tuple(face for face, _resref in preparation.face_texture_resrefs) != tuple(SKYBOX_PANORAMA_FACE_ORDER):
+            raise ValueError("Prepared panorama skybox faces are incomplete or out of order.")
+        texture_resrefs = tuple(resref for _face, resref in preparation.face_texture_resrefs)
+        if set(texture_resrefs) & set(current_texture_resrefs):
+            raise ValueError("A prepared panorama skybox texture ResRef now collides with this project.")
+
+        conversion = preparation.conversion
+        target_dir = project_texture_directory(self.project)
+        sidecar_paths = tuple(
+            path
+            for resref in texture_resrefs
+            for path in (target_dir / f"{resref}.tga", target_dir / f"{resref}.txi")
+        )
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        created_paths = tuple(value for value, state in sidecar_before.states if state is None)
+        common_metadata = {
+            "panorama_source_path": str(preparation.source_path),
+            "panorama_source_sha256": str(preparation.source_sha256),
+            "panorama_source_width": int(conversion.source_width),
+            "panorama_source_height": int(conversion.source_height),
+            "panorama_source_is_hdr": bool(conversion.source_is_hdr),
+            "panorama_face_size": int(conversion.face_size),
+            "panorama_exposure_ev": float(conversion.exposure_ev),
+            "panorama_longitude_offset_degrees": float(conversion.longitude_offset_degrees),
+            "panorama_tone_mapper": str(conversion.tone_mapper),
+            "tone_mapped_for_kotor": True,
+            "engine_game_proof": False,
+        }
+        try:
+            for face_name, texture_resref in preparation.face_texture_resrefs:
+                face = conversion.face(face_name)
+                create_project_texture_asset(
+                    self.project,
+                    resref=texture_resref,
+                    width=int(face.width),
+                    height=int(face.height),
+                    rgba=bytes(face.rgba),
+                    source="map_studio:panorama_skybox",
+                    metadata={**common_metadata, "skybox_face": str(face_name)},
+                    asset_kind="map_studio_panorama_skybox",
+                )
+            texture_map = dict(preparation.face_texture_resrefs)
+            sky_room, targets = self._append_authored_five_face_skybox(
+                room_resref=preparation.room_resref,
+                north_texture=texture_map["north"],
+                east_texture=texture_map["east"],
+                south_texture=texture_map["south"],
+                west_texture=texture_map["west"],
+                top_texture=texture_map["top"],
+                half_extent=half_extent,
+                bottom_z=bottom_z,
+                top_z=top_z,
+                visible_rooms=visible_rooms,
+                authoring_metadata={
+                    **common_metadata,
+                    "panorama_projection": "equirectangular_to_five_face_box",
+                },
+            )
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        sidecar_patches = self.texture_sidecar_journal.finish(
+            self.project,
+            sidecar_before,
+            paths=sidecar_paths,
+            created_paths=created_paths,
+        )
+        room_name = sky_room.normalised_resref()
+        message = (
+            f"Converted {Path(preparation.source_path).name} into five {int(conversion.face_size)} px KOTOR TGA "
+            f"panels and created skybox room {room_name}; manual retail KOTOR visual proof is still required."
+        )
+        self.model.log(message)
+        self._record_map_studio_command(
+            action_key="map_studio.environment.create_panorama_skybox",
+            label=f"Create panorama skybox {room_name}",
+            before=before,
+            stale_outputs=("MDL", "MDX", "LYT", "VIS", "TGA", ".mod"),
+            readiness_impact=(
+                "The tone-mapped skybox textures and visual room must be repackaged and visually proven in retail KOTOR."
+            ),
+            metadata={
+                **common_metadata,
+                "room_resref": room_name,
+                "texture_resrefs": list(texture_resrefs),
+                "visible_rooms": list(targets),
+                "projection": "equirectangular_to_five_face_box",
+            },
+            sidecar_patches=sidecar_patches,
+        )
+        return MapStudioPanoramaSkyboxResult(
+            room_resref=room_name,
+            texture_resrefs=texture_resrefs,
+            source_is_hdr=bool(conversion.source_is_hdr),
+            face_size=int(conversion.face_size),
+            message=message,
+        )
 
     def authored_sky_traffic(self):
         """Return normalized room-animation traffic intent stored in KMAP."""
@@ -4555,7 +5991,10 @@ class ModuleEditorController:
         authored = self._map_studio_authored_project_snapshot()
         if authored is None:
             return placement_markers
-        return (authored_module_entry_point_preview_marker(authored),) + placement_markers
+        entry_marker = authored_module_entry_point_preview_marker(authored)
+        if entry_marker is None or "entry_point" in resolved:
+            return placement_markers
+        return (entry_marker,) + placement_markers
 
     def authored_gameplay_fallback_marker_geometry(self):
         """Renderer geometry for honest unresolved-model marker fallbacks."""
@@ -4635,6 +6074,13 @@ class ModuleEditorController:
 
         started = perf_counter()
         game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        entry_point_row = self.authored_module_entry_point_preview_row()
+        entry_point_signature = (
+            str(getattr(entry_point_row, "model_resref", "") or ""),
+            str(getattr(entry_point_row, "head_model_resref", "") or ""),
+            tuple(getattr(entry_point_row, "position", ()) or ()),
+            float(getattr(entry_point_row, "bearing", 0.0) or 0.0),
+        ) if entry_point_row is not None else ()
         cache_key = (
             id(resource_manager),
             int(getattr(resource_manager, "revision", 0) or 0) if resource_manager is not None else 0,
@@ -4642,6 +6088,7 @@ class ModuleEditorController:
             bool(include_backdrops),
             int(self._authored_placeable_preview_revision),
             self._map_studio_combined_preview_state_signature(),
+            entry_point_signature,
         )
         cached = self._map_studio_combined_preview_cache
         if resource_manager is not None and cached is not None and cached[0] == cache_key:
@@ -4656,7 +6103,9 @@ class ModuleEditorController:
         self.last_map_studio_preview_cache_hit = False
         authored = self.authored_room_preview_model(include_backdrops=include_backdrops)
         rooms = tuple(getattr(self.project, "rooms", ()) or ())
-        placements = tuple(self.authored_gameplay_placements() or ()) + tuple(
+        placements = ((entry_point_row,) if entry_point_row is not None else ()) + tuple(
+            self.authored_gameplay_placements() or ()
+        ) + tuple(
             self.authored_sky_traffic_preview_rows() or ()
         )
         self.last_map_studio_stock_preview_warnings = ()
@@ -4709,6 +6158,52 @@ class ModuleEditorController:
         self._map_studio_combined_preview_cache = (cache_key, model, stock_result)
         self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
         return model
+
+    def map_studio_palette_preview_model(self, entry: object, resource_manager=None):
+        """Resolve one Content Browser tile to its real KOTOR preview model."""
+
+        def value(key: str, default: Any = "") -> Any:
+            if isinstance(entry, dict):
+                return entry.get(key, default)
+            return getattr(entry, key, default)
+
+        manager = resource_manager
+        kind = str(value("kind", "") or "").strip().lower()
+        template_resref = str(value("template_resref", "") or "").strip().lower()
+        if manager is None or kind not in {"creature", "placeable", "door"} or not template_resref:
+            return None, ""
+        game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        entry_game = str(value("game", "") or "").strip().upper()
+        if entry_game and entry_game != game:
+            return None, ""
+        resolver = getattr(self, "_map_studio_stock_template_resolver", None)
+        if (
+            resolver is None
+            or getattr(resolver, "_game", "") != game
+            or getattr(resolver, "_manager", None) is not manager
+        ):
+            resolver = TemplateModelResolver(
+                manager,
+                game,
+                template_resources=(self._authored_placeable_resources + self._authored_creature_resources),
+                placeable_rows=self._authored_placeable_preview_rows,
+            )
+            self._map_studio_stock_template_resolver = resolver
+        model_resref = str(resolver.model_for_placement_kind(kind, template_resref) or "").strip().lower()
+        if not model_resref:
+            return None, ""
+        cache = getattr(self, "_map_studio_stock_model_cache", None)
+        if cache is None:
+            cache = {}
+            self._map_studio_stock_model_cache = cache
+        key = (game, model_resref)
+        if key not in cache:
+            override = resolver.model_resource_bytes(model_resref)
+            if override is not None:
+                cache[key] = load_kotor_model_from_bytes(*override, resref=model_resref)
+            else:
+                cache[key] = load_stock_kotor_model(manager, model_resref, game)
+        return cache[key], model_resref
 
     def map_studio_pie_context_settings(self) -> dict[str, Any]:
         """Return the normalized, preview-only dialogue sandbox stored in KMAP."""
@@ -8273,6 +9768,54 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def remove_authored_room_primitives(self, selections: Any) -> tuple[tuple[str, str], ...]:
+        """Delete an object multi-selection in one KMAP/Undo transaction."""
+
+        requested = tuple(
+            dict.fromkeys(
+                (str(room or "").strip(), str(name or "").strip())
+                for room, name in tuple(selections or ())
+                if str(room or "").strip() and str(name or "").strip()
+            )
+        )
+        if not requested:
+            return ()
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        removed: list[tuple[str, str]] = []
+        for room_resref, primitive_name in requested:
+            try:
+                authored = remove_authored_room_composition_primitive(
+                    authored,
+                    room_resref=room_resref,
+                    primitive_name=primitive_name,
+                )
+            except Exception as exc:
+                self.model.log(f"Map Studio object {room_resref}/{primitive_name} could not be removed: {exc}")
+                continue
+            removed.append((room_resref, primitive_name))
+        if not removed:
+            return ()
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.remove_many",
+            label=f"Remove {len(removed)} objects",
+            before=before,
+            metadata={"selections": removed},
+        )
+        self.model.log(f"Removed {len(removed)} selected Map Studio objects; previous exports/proofs are now stale.")
+        return tuple(removed)
+
     def separate_authored_room_primitive(
         self,
         *,
@@ -8493,6 +10036,38 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def clear_authored_module_entry_point(self):
+        """Remove the selectable IFO player start as one undoable command."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        if not str(authored.placements.entry_point.area_resref or "").strip():
+            return self.authored_module_readiness()
+        update = remove_authored_module_entry_point(authored)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log("Removed Map Studio module entry point/player start; export is blocked until a new start is set.")
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.remove_entry_point",
+            label="Remove player start",
+            before=before,
+            metadata={
+                "position": update.position,
+                "facing": update.facing,
+            },
+        )
+        return self.authored_module_readiness()
+
     def add_authored_room_light(
         self,
         *,
@@ -8604,6 +10179,69 @@ class ModuleEditorController:
         # Lazy: drag/property commits ignore this and the window's deferred
         # validation worker refreshes export gates off the Qt thread.
         return DeferredAuthoredModuleReadiness(self)
+
+    def translate_authored_gameplay_placements(self, placement_ids, *, world_delta: Any) -> tuple[str, ...]:
+        """Move a Maya-style multi-selection as one KMAP/Undo transaction."""
+
+        requested = tuple(dict.fromkeys(str(value or "").strip() for value in tuple(placement_ids or ()) if str(value or "").strip()))
+        delta = tuple(float(value) for value in tuple(world_delta or ())[:3])
+        if not requested or len(delta) != 3:
+            return ()
+        for placement_id in requested:
+            if placement_id != "entry_point":
+                parse_authored_gameplay_placement_id(placement_id)
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        rows = {row.placement_id: row for row in authored_gameplay_placement_rows(authored)}
+        before = self._capture_map_studio_command_state()
+        moved: list[str] = []
+        for placement_id in requested:
+            if placement_id == "entry_point":
+                entry = authored.placements.entry_point
+                if not str(entry.area_resref or "").strip():
+                    continue
+                position = tuple(float(entry.position[index]) + delta[index] for index in range(3))
+                update = update_authored_module_entry_point(
+                    authored,
+                    area_resref=str(entry.area_resref),
+                    position=position,
+                    facing=float(entry.facing),
+                )
+                authored = update.project
+                moved.append(placement_id)
+                continue
+            row = rows.get(placement_id)
+            if row is None or not bool(row.is_spatial):
+                continue
+            position = tuple(float(row.position[index]) + delta[index] for index in range(3))
+            update = update_authored_gameplay_placement_transform(
+                authored,
+                placement_id,
+                position=position,
+                bearing=float(row.bearing),
+            )
+            authored = update.project
+            moved.append(placement_id)
+        if not moved:
+            return ()
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.move_placements",
+            label=f"Move {len(moved)} placements",
+            before=before,
+            metadata={"placement_ids": moved, "world_delta": delta},
+        )
+        self.model.log(f"Moved {len(moved)} Map Studio objects together; previous exports/proofs are now stale.")
+        return tuple(moved)
 
     def rename_authored_gameplay_placement(self, placement_id: str, *, tag: Any):
         """Rename one authored gameplay placement by virtual id."""

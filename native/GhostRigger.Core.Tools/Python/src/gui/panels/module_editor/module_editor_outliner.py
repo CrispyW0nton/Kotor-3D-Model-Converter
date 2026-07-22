@@ -61,6 +61,7 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         authored_gameplay_placements=(),
         authored_room_lights=(),
         authored_room_primitives=(),
+        authored_room_resrefs=(),
     ) -> None:
         self._project = project
         self.blockSignals(True)
@@ -92,7 +93,13 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
             if not room:
                 continue
             primitive_rows_by_room.setdefault(room, []).append(row)
-        for room_resref in sorted(primitive_rows_by_room):
+        room_resrefs = {
+            str(value or "").strip()
+            for value in tuple(authored_room_resrefs or ())
+            if str(value or "").strip()
+        }
+        room_resrefs.update(primitive_rows_by_room)
+        for room_resref in sorted(room_resrefs):
             room_item = self._item(
                 room_resref,
                 f"authored_room:{room_resref}",
@@ -102,7 +109,10 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
             )
             room_item.setExpanded(True)
             authored_rooms.addChild(room_item)
-            for row in sorted(primitive_rows_by_room[room_resref], key=lambda value: str(getattr(value, "primitive_name", "") or "").lower()):
+            for row in sorted(
+                primitive_rows_by_room.get(room_resref, ()),
+                key=lambda value: str(getattr(value, "primitive_name", "") or "").lower(),
+            ):
                 primitive_name = str(getattr(row, "primitive_name", "") or "").strip()
                 primitive_type = str(getattr(row, "primitive_type", "") or "primitive").strip()
                 if not primitive_name:
@@ -161,10 +171,19 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
             kind = str(getattr(placement, "kind", "object") or "object")
             tag = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or placement_id)
             transition = str(getattr(placement, "transition_summary", "") or "")
-            label = f"{kind}: {tag}"
+            is_entry_point = placement_id == "entry_point"
+            label = "Player Start" if is_entry_point else f"{kind}: {tag}"
             if transition:
                 label = f"{label} ({transition})"
-            authored.addChild(self._item(label, placement_id, "authored_gameplay", type_text=kind.title()))
+            authored.addChild(
+                self._item(
+                    label,
+                    placement_id,
+                    "authored_entry_point" if is_entry_point else "authored_gameplay",
+                    type_text="Player Start" if is_entry_point else kind.title(),
+                    editable=not is_entry_point,
+                )
+            )
         authored_lights = self._category("Authored Room Lights")
         root.addChild(authored_lights)
         for light in authored_room_lights or ():

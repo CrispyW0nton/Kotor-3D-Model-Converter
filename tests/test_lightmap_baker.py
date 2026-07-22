@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,6 +19,7 @@ from src.core.lighting.lightmap_export_bridge import (
 from src.core.lighting.lightmap_lighting_solver import LightmapLightingSolver
 from src.core.lighting.lightmap_padding import LightmapPadding
 from src.core.lighting.lightmap_rasterizer import LightmapRasterizer
+from src.core.lighting.lightmap_shadow_solver import LightmapShadowSolver
 from src.core.lighting.lightmap_uv_validator import LightmapUVValidator
 from src.core.lighting.uv_atlas_generator import UVAtlasGenerator
 from src.core.geometry.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
@@ -414,6 +416,110 @@ def test_lighting_solver_vectorized_buffer_matches_scalar_path() -> None:
     scalar = solver._solve_buffer_scalar(buffer, lights, settings)
 
     assert np.allclose(vector, scalar, atol=1.0e-5)
+
+
+def test_shadow_solver_rejects_only_the_source_triangle_and_keeps_folded_self_shadow() -> None:
+    mesh = SimpleNamespace(
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (0.0, 1.0, 1.0),
+        ],
+        faces=[(0, 1, 2), (3, 4, 5)],
+        position=(0.0, 0.0, 0.0),
+        vertex_space=1,
+    )
+    settings = LightmapBakeSettings(use_shadows=True, normal_bias=0.002)
+    light = SimpleNamespace(
+        type="point",
+        position=(0.2, 0.2, 2.0),
+        casts_shadows=True,
+    )
+    solver = LightmapShadowSolver()
+    solver.build_acceleration_structure([mesh])
+    # Keep this contract deterministic even when a developer has Open3D.
+    solver._o3d_scene = None
+
+    shadowed = solver.calculate_shadow_factor(
+        {
+            "position": (0.2, 0.2, 0.0),
+            "normal": (0.0, 0.0, 1.0),
+            "mesh_id": id(mesh) & 0x7FFFFFFF,
+            "triangle_id": 0,
+        },
+        light,
+        settings,
+    )
+
+    assert shadowed == 0.0
+
+    source_only = SimpleNamespace(
+        vertices=mesh.vertices[:3],
+        faces=[(0, 1, 2)],
+        position=(0.0, 0.0, 0.0),
+        vertex_space=1,
+    )
+    solver.build_acceleration_structure([source_only])
+    solver._o3d_scene = None
+    acne_safe = solver.calculate_shadow_factor(
+        {
+            "position": (0.2, 0.2, 0.0),
+            # Deliberately point the bias behind the polygon. The exact source
+            # triangle must still be rejected without ignoring its whole mesh.
+            "normal": (0.0, 0.0, -1.0),
+            "mesh_id": id(source_only) & 0x7FFFFFFF,
+            "triangle_id": 0,
+        },
+        light,
+        settings,
+    )
+
+    assert acne_safe == 1.0
+
+
+def test_uv_overlap_validation_preserves_small_mesh_results_and_scales_to_room_atlases() -> None:
+    validator = LightmapUVValidator()
+    small = SimpleNamespace(
+        name="overlap_fixture",
+        uvs_lm=[
+            (0.0, 0.0),
+            (0.5, 0.0),
+            (0.0, 0.5),
+            (0.1, 0.1),
+            (0.6, 0.1),
+            (0.1, 0.6),
+            (0.5, 0.0),
+            (1.0, 0.0),
+            (0.5, 0.5),
+        ],
+        faces=[(0, 1, 2), (3, 4, 5), (6, 7, 8)],
+    )
+    assert validator.detect_overlaps(small, 1) == [(0, 1), (1, 2)]
+
+    grid_size = 64
+    uvs = [
+        (x / grid_size, y / grid_size)
+        for y in range(grid_size + 1)
+        for x in range(grid_size + 1)
+    ]
+    faces = []
+    stride = grid_size + 1
+    for y in range(grid_size):
+        for x in range(grid_size):
+            lower_left = y * stride + x
+            faces.append((lower_left, lower_left + 1, lower_left + stride + 1))
+            faces.append((lower_left, lower_left + stride + 1, lower_left + stride))
+    atlas = SimpleNamespace(name="room_atlas", uvs_lm=uvs, faces=faces)
+
+    started = time.perf_counter()
+    overlaps = validator.detect_overlaps(atlas, 1)
+    elapsed = time.perf_counter() - started
+
+    assert overlaps == []
+    assert elapsed < 2.0, f"8,192-triangle UV broadphase took {elapsed:.3f}s"
 
 
 def test_lightmap_export_bridge_discovers_generated_assignments(tmp_path: Path) -> None:

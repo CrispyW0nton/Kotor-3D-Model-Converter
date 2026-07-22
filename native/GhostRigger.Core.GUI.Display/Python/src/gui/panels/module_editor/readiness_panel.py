@@ -21,6 +21,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ModuleReadinessPanel")
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred)
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(6)
@@ -317,8 +319,35 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.launch_handoff_button.setObjectName("mapStudioOpenLaunchHandoffButton")
         self.launch_handoff_button.clicked.connect(self.launchHandoffRequested.emit)
         root.addWidget(self.launch_handoff_button)
+        for table in (
+            self.pathing_blocker_table,
+            self.component_edit_resource_table,
+            self.runtime_resource_table,
+            self.proof_acceptance_table,
+            self.export_objects_table,
+            self.template_reference_table,
+            self.transition_reference_table,
+            self.script_reference_table,
+            self.dialog_reference_table,
+        ):
+            self._make_table_fit_panel(table)
+        for widget in (
+            *self.findChildren(QtWidgets.QPushButton),
+            *self.findChildren(QtWidgets.QLineEdit),
+        ):
+            widget.setMinimumWidth(0)
         root.addStretch(1)
         self.set_readiness(None)
+
+    @staticmethod
+    def _make_table_fit_panel(table: QtWidgets.QTableWidget) -> None:
+        """Keep optional diagnostics readable inside the narrow Export rail."""
+
+        table.setWordWrap(True)
+        table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        table.horizontalHeader().setStretchLastSection(False)
+        table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
 
     def set_readiness(self, readiness: Any | None) -> None:
         """Display readiness from ``build_authored_module_readiness``."""

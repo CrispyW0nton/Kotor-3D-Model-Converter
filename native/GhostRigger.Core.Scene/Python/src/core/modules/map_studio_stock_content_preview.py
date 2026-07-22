@@ -975,7 +975,7 @@ def append_stock_content_to_preview_root(
         if not bool(getattr(placement, "is_spatial", True)):
             continue
         kind = str(getattr(placement, "kind", "") or "").strip().lower()
-        if kind not in {"creature", "placeable", "door", "sky_traffic"}:
+        if kind not in {"creature", "placeable", "door", "sky_traffic", "entry_point"}:
             continue
         template_resref = str(getattr(placement, "template_resref", "") or "").strip()
         resolver_template_resref = (
@@ -984,15 +984,16 @@ def append_stock_content_to_preview_root(
             else ""
         ) or template_resref
         placement_id = str(getattr(placement, "placement_id", "") or f"{kind}:{template_resref}")
-        if not template_resref or (active_resolver is None and kind != "sky_traffic"):
+        direct_model_kind = kind in {"sky_traffic", "entry_point"}
+        if not template_resref or (active_resolver is None and not direct_model_kind):
             unresolved_placement_ids.append(placement_id)
             continue
-        # Sky traffic is a viewport-only direct model reference. It deliberately
-        # bypasses UTP/UTC/UTD lookup and never enters the authored GIT lists;
-        # export targets a room MDL animation graph instead.
+        # Sky traffic and the IFO player start are viewport-only direct model
+        # references. They bypass UTP/UTC/UTD template lookup; neither is a GIT
+        # placement even though both must behave like editable scene objects.
         model_resref = (
             str(getattr(placement, "model_resref", "") or template_resref)
-            if kind == "sky_traffic"
+            if direct_model_kind
             else str(active_resolver.model_for_placement_kind(kind, resolver_template_resref) or "")
         )
         if not model_resref:
@@ -1055,40 +1056,41 @@ def append_stock_content_to_preview_root(
             unresolved_placement_ids.append(placement_id)
             continue
         head_for_kind = getattr(active_resolver, "head_model_for_placement_kind", None)
+        head_resref = str(getattr(placement, "head_model_resref", "") or "").strip().lower()
         if kind == "creature" and callable(head_for_kind):
             # Body-part appearances (modeltype B) carry no head geometry: the
             # engine grafts appearance.2da normalhead -> heads.2da at the
             # body's headhook.  Mirror that so previews aren't headless.
             head_resref = str(head_for_kind(kind, resolver_template_resref) or "")
-            if head_resref:
-                head_model = _model_for(head_resref)
-                hook = _model_node_named(source_model, "headhook")
-                if head_model is None:
-                    warnings.append(
-                        f"Creature {template_resref} head {head_resref} could not be loaded; the body previews headless."
-                    )
-                elif hook is None:
-                    warnings.append(
-                        f"Creature {template_resref} body {model_resref} has no headhook node; head {head_resref} skipped."
-                    )
-                else:
-                    try:
-                        hook_position, hook_rotation = hook.world_transform()
-                    except Exception:
-                        hook_position, hook_rotation = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
-                    head_meshes = _flattened_mesh_nodes(
-                        md,
-                        head_model,
-                        group,
-                        group_resref=placement_id,
-                        role=f"stock_{kind}_head",
-                        rotation=rotation,
-                        pre_transform=(
-                            tuple(float(value) for value in tuple(hook_position)[:3]),
-                            tuple(float(value) for value in tuple(hook_rotation)[:4]),
-                        ),
-                    )
-                    meshes.extend(head_meshes)
+        if head_resref and kind in {"creature", "entry_point"}:
+            head_model = _model_for(head_resref)
+            hook = _model_node_named(source_model, "headhook")
+            if head_model is None:
+                warnings.append(
+                    f"{kind.replace('_', ' ').title()} {template_resref} head {head_resref} could not be loaded; the body previews headless."
+                )
+            elif hook is None:
+                warnings.append(
+                    f"{kind.replace('_', ' ').title()} {template_resref} body {model_resref} has no headhook node; head {head_resref} skipped."
+                )
+            else:
+                try:
+                    hook_position, hook_rotation = hook.world_transform()
+                except Exception:
+                    hook_position, hook_rotation = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+                head_meshes = _flattened_mesh_nodes(
+                    md,
+                    head_model,
+                    group,
+                    group_resref=placement_id,
+                    role=f"stock_{kind}_head",
+                    rotation=rotation,
+                    pre_transform=(
+                        tuple(float(value) for value in tuple(hook_position)[:3]),
+                        tuple(float(value) for value in tuple(hook_rotation)[:4]),
+                    ),
+                )
+                meshes.extend(head_meshes)
         for mesh in meshes:
             setattr(mesh, "_gr_map_studio_placement_id", placement_id)
             setattr(mesh, "_gr_map_studio_placement_kind", kind)

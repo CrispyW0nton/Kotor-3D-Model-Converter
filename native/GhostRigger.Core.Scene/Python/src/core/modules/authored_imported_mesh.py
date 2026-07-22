@@ -21,8 +21,10 @@ from __future__ import annotations
 import base64
 import math
 import struct
+from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from typing import Any
+from weakref import ReferenceType, ref
 
 from src.core.geometry.mesh_topology import MeshTopology, compact_indexed_mesh
 from src.core.geometry.polygon_mesh_operations import AttributeChannel, IndexedPolygonMesh
@@ -141,6 +143,21 @@ class ImportedMeshValidation:
     ok: bool
     warnings: tuple[str, ...] = ()
     blocking_issues: tuple[str, ...] = ()
+
+
+# Export deliberately validates a project before compiling it, while imported
+# room compilation also validates its primitive for callers that use that API
+# directly.  A large seam-heavy OBJ makes the topology audit the dominant cost,
+# so retain a small process-local result for the same immutable primitive
+# instance.  The cache is identity checked through a weak reference (rather
+# than hashing the nested metadata/WOK objects) and cannot keep project data
+# alive.  Edits create a replacement frozen primitive, naturally missing the
+# cache.
+_IMPORTED_MESH_VALIDATION_CACHE_MAX = 16
+_IMPORTED_MESH_VALIDATION_CACHE: OrderedDict[
+    int,
+    tuple[ReferenceType[ImportedMeshRoomPrimitive], ImportedMeshValidation],
+] = OrderedDict()
 
 
 def authored_room_uses_unresolved_stock_geometry(room: Any) -> bool:
@@ -476,6 +493,15 @@ ROOM_TRIANGLE_WARNING_BUDGET = 15000
 
 
 def validate_imported_mesh_room_primitive(primitive: ImportedMeshRoomPrimitive) -> ImportedMeshValidation:
+    cache_key = id(primitive)
+    cached = _IMPORTED_MESH_VALIDATION_CACHE.get(cache_key)
+    if cached is not None and cached[0]() is primitive:
+        _IMPORTED_MESH_VALIDATION_CACHE.move_to_end(cache_key)
+        return cached[1]
+    if cached is not None:
+        # The previous weak target died and CPython reused its id.
+        _IMPORTED_MESH_VALIDATION_CACHE.pop(cache_key, None)
+
     warnings: list[str] = []
     blocking: list[str] = []
     if not primitive.surfaces:
@@ -537,7 +563,12 @@ def validate_imported_mesh_room_primitive(primitive: ImportedMeshRoomPrimitive) 
             f"Imported room {primitive.room_resref} has no imported WOK; Map Studio can show a red bounds-derived "
             "preview plane, but it is NON_WALK and export remains blocked until a real floor walkmesh is generated."
         )
-    return ImportedMeshValidation(ok=not blocking, warnings=tuple(warnings), blocking_issues=tuple(blocking))
+    result = ImportedMeshValidation(ok=not blocking, warnings=tuple(warnings), blocking_issues=tuple(blocking))
+    _IMPORTED_MESH_VALIDATION_CACHE[cache_key] = (ref(primitive), result)
+    _IMPORTED_MESH_VALIDATION_CACHE.move_to_end(cache_key)
+    while len(_IMPORTED_MESH_VALIDATION_CACHE) > _IMPORTED_MESH_VALIDATION_CACHE_MAX:
+        _IMPORTED_MESH_VALIDATION_CACHE.popitem(last=False)
+    return result
 
 
 def _surface_primitive_mesh(primitive: ImportedMeshRoomPrimitive, index: int) -> PrimitiveMesh:

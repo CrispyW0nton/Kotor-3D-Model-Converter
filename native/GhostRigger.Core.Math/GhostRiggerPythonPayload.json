@@ -117,7 +117,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MESH_TOPOLOGY",
             "source_path": "src/core/geometry/mesh_topology.py",
             "packaged_path": "Python/src/core/geometry/mesh_topology.py",
-            "sha256": "069eedf7260c3313bd41e36b09752a22ac39a154f7282fc376e3baba82ffc3ca"
+            "sha256": "241cd8975f6fa3e973227fe5979529abf725a2c05ebed7bd2ce4402743d16d4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MODEL_DATA",

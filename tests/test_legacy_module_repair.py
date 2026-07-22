@@ -440,3 +440,209 @@ def test_sharply_concave_path_route_uses_shared_indexed_edge_midpoint() -> None:
     assert compiled.validation.ok
     assert len(compiled.graph.points) >= 3
     assert any(point.metadata.get("source") == "gameplay_anchor" for point in compiled.graph.points)
+
+
+def _imported_room_surface(name: str, vertices, faces):
+    from src.core.modules.authored_imported_mesh import ImportedMeshSurface
+
+    return ImportedMeshSurface(
+        name=f"{name}_floor",
+        texture="test_floor",
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+    )
+
+
+def test_export_routes_sharply_concave_imported_room_through_indexed_face_midpoint() -> None:
+    _install_payload_paths()
+
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_objects import (
+        AuthoredGameplayPlacement,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+    )
+    from src.core.modules.authored_module_project import (
+        AuthoredModuleMetadata,
+        AuthoredModuleProject,
+        AuthoredRoomSpec,
+    )
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    room_resref = "pthconc_r"
+    wok = WOKData(
+        name=room_resref,
+        verts=[
+            (7.3749, -2.8144, 0.0),
+            (-6.3178, 0.0719, 0.0),
+            (0.0, 0.0, 0.0),
+            (-0.0901, 1.1697, 0.0),
+        ],
+        faces=[WOKFace(0, 3, 2, 1), WOKFace(1, 2, 3, 1)],
+    )
+    wok.rebuild_adjacencies()
+    first_face_center = tuple(
+        sum(wok.verts[index][axis] for index in (0, 3, 2)) / 3.0
+        for axis in range(3)
+    )
+    second_face_center = tuple(
+        sum(wok.verts[index][axis] for index in (1, 2, 3)) / 3.0
+        for axis in range(3)
+    )
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref=room_resref,
+        surfaces=(
+            _imported_room_surface(
+                room_resref,
+                wok.verts,
+                ((0, 3, 2), (1, 2, 3)),
+            ),
+        ),
+        wok=wok,
+        metadata={"wok_coordinate_space": "module"},
+    )
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root="pthconc",
+            game="K2",
+            display_name="Concave PTH export fixture",
+            tag="pthconc",
+        ),
+        rooms=(AuthoredRoomSpec(room_resref=room_resref, primitive=primitive),),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref="pthconc", position=first_face_center),
+            waypoints=(
+                AuthoredWaypointInstance(
+                    template_resref="wp_target",
+                    tag="target",
+                    position=second_face_center,
+                ),
+            ),
+        ),
+    )
+
+    build = build_authored_module(project)
+
+    assert build.blocking_issues == []
+    pathing = build.metadata["pathing"]
+    assert pathing["path_graph_component_count"] == 1
+    assert pathing["point_count"] >= 3
+    assert pathing["connection_count"] >= 4
+    assert pathing["anchor_labels"] == ["entry_point", "waypoint:target"]
+    assert build.resources[("pthconc", "pth")].data.startswith(b"PTH ")
+
+
+def test_export_bridges_reciprocal_transitions_in_exact_lyt_room_order() -> None:
+    _install_payload_paths()
+
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import (
+        AuthoredModuleMetadata,
+        AuthoredModuleProject,
+        AuthoredRoomSpec,
+    )
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    local_vertices = (
+        (0.0, 0.0, 0.0),
+        (2.0, 0.0, 0.0),
+        (2.0, 2.0, 0.0),
+        (0.0, 2.0, 0.0),
+    )
+    faces = ((0, 1, 2), (0, 2, 3))
+
+    def room(name: str, x: float, target_index: int, transition_side: str, visible_room: str):
+        module_vertices = [(vx + x, vy, vz) for vx, vy, vz in local_vertices]
+        wok = WOKData(
+            name=name,
+            verts=module_vertices,
+            faces=[WOKFace(0, 1, 2, 1), WOKFace(0, 2, 3, 1)],
+        )
+        wok.rebuild_adjacencies()
+        if transition_side == "right":
+            wok.faces[0].trans2 = target_index
+        else:
+            wok.faces[1].trans3 = target_index
+        primitive = ImportedMeshRoomPrimitive(
+            room_resref=name,
+            surfaces=(_imported_room_surface(name, local_vertices, faces),),
+            wok=wok,
+            metadata={"wok_coordinate_space": "module"},
+        )
+        return AuthoredRoomSpec(
+            room_resref=name,
+            primitive=primitive,
+            position=(x, 0.0, 0.0),
+            visible_rooms=(visible_room,),
+        )
+
+    # Deliberately use reverse lexical order. Transition destinations refer to
+    # these LYT indices, not sorted resrefs.
+    rooms = (
+        room("pthportb", 0.0, 1, "right", "pthporta"),
+        room("pthporta", 2.0, 0, "left", "pthportb"),
+    )
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root="pthportal",
+            game="K2",
+            display_name="Portal PTH export fixture",
+            tag="pthportal",
+        ),
+        rooms=rooms,
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref="pthportal", position=(0.5, 0.5, 0.0)),
+        ),
+    )
+
+    build = build_authored_module(project)
+
+    assert build.blocking_issues == []
+    pathing = build.metadata["pathing"]
+    assert pathing["reciprocal_transition_pair_count"] == 1
+    assert pathing["generated_portal_link_count"] == 1
+    assert pathing["path_graph_component_count"] == 1
+    pair = pathing["reciprocal_transition_pairs"][0]
+    assert (pair["room_a"], pair["room_a_resref"]) == (0, "pthportb")
+    assert (pair["room_b"], pair["room_b_resref"]) == (1, "pthporta")
+    assert pair["bidirectional_bridge_count"] == 1
+    portal = pathing["portal_links"][0]
+    assert portal["bidirectional_bridge"] is True
+    assert portal["room_a_midpoint"] == portal["room_b_midpoint"] == [2.0, 1.0, 0.0]
+    assert build.resources[("pthportal", "pth")].data.startswith(b"PTH ")
+
+
+def test_export_applies_lyt_position_to_authored_room_local_wok() -> None:
+    _install_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_room_composition import create_rectangular_room_composition
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="lytpos",
+        game="K2",
+    )
+    second_primitive = RectangularRoomPrimitive(room_resref="lytpos_r2", width=8.0, depth=8.0)
+    first = replace(project.rooms[0], visible_rooms=("lytpos_r2",))
+    second = AuthoredRoomSpec(
+        room_resref="lytpos_r2",
+        primitive=second_primitive,
+        composition=create_rectangular_room_composition(second_primitive),
+        position=(20.0, 0.0, 0.0),
+        visible_rooms=(first.normalised_resref(),),
+    )
+
+    build = build_authored_module(replace(project, rooms=(first, second)))
+
+    assert build.blocking_issues == []
+    pathing = build.metadata["pathing"]
+    assert pathing["walkmesh_bounds"] == [-5.0, -5.0, 24.0, 5.0]
+    assert pathing["walkmesh_component_count"] == 2
+    assert pathing["path_graph_component_count"] == 2

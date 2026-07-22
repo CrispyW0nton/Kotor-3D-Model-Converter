@@ -1,4 +1,4 @@
-"""Map Studio Environment presentation for ARE world settings and roadmap state."""
+"""Map Studio Environment presentation for lighting, weather, fog, and lightmaps."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
     worldSettingsRequested = QtCore.Signal(dict)
     lightmapApplyRequested = QtCore.Signal(dict)
     skyboxCreateRequested = QtCore.Signal(dict)
+    skyPanoramaRequested = QtCore.Signal(dict)
     skyTrafficCreateRequested = QtCore.Signal(dict)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -26,8 +27,9 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
+        self._root_layout = root
 
-        self.world_group = QtWidgets.QGroupBox("World (ARE)", self)
+        self.world_group = QtWidgets.QGroupBox("Lighting, Weather and Fog (ARE)", self)
         self.world_group.setObjectName("mapStudioEnvironmentWorldGroup")
         world_layout = QtWidgets.QVBoxLayout(self.world_group)
         world_form = QtWidgets.QFormLayout()
@@ -139,7 +141,7 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.lightmap_status_label.setWordWrap(True)
         lightmap_layout.addWidget(self.lightmap_status_label)
         root.addWidget(self.lightmap_group)
-        self.sky_group = QtWidgets.QGroupBox("Sky", self)
+        self.sky_group = QtWidgets.QGroupBox("KOTOR Sky Dome", self)
         self.sky_group.setObjectName("mapStudioEnvironmentSkyGroup")
         sky_layout = QtWidgets.QVBoxLayout(self.sky_group)
         sky_form = QtWidgets.QFormLayout()
@@ -154,7 +156,7 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
             edit = QtWidgets.QLineEdit(self.sky_group)
             edit.setObjectName(f"mapStudioSky{face.title()}TextureLineEdit")
             edit.setMaxLength(16)
-            edit.setToolTip(f"Imported KOTOR texture resref for the {face} inward-facing panel.")
+            edit.setToolTip(f"Imported KOTOR texture resref for the {face} inward-facing dome sector.")
             self.sky_texture_edits[face] = edit
             sky_form.addRow(f"{face.title()} texture", edit)
         self.sky_half_extent_spin = self._distance_spin("mapStudioSkyHalfExtentSpinBox", self.sky_group)
@@ -167,23 +169,25 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.sky_top_z_spin = self._signed_distance_spin("mapStudioSkyTopZSpinBox", self.sky_group)
         self.sky_top_z_spin.setValue(500.0)
         sky_form.addRow("Top Z", self.sky_top_z_spin)
-        self.sky_create_button = QtWidgets.QPushButton("Create Five-Face Skybox", self.sky_group)
+        self.sky_create_button = QtWidgets.QPushButton("Create KOTOR Sky Dome", self.sky_group)
         self.sky_create_button.setObjectName("mapStudioCreateFiveFaceSkyboxButton")
         self.sky_create_button.setToolTip(
-            "Create four inward-facing side panels plus a top panel as a visual-only LYT room with an exact empty WOK."
+            "Create a curved, inward-facing visual-only sky room from four cardinal textures plus a top texture. "
+            "The room exports with an exact empty WOK."
         )
         sky_layout.addWidget(self.sky_create_button)
-        self.sky_panorama_button = QtWidgets.QPushButton("Panorama / HDR Conversion (Planned)", self.sky_group)
+        self.sky_panorama_button = QtWidgets.QPushButton("Create from Panorama / HDR...", self.sky_group)
         self.sky_panorama_button.setObjectName("mapStudioSkyPanoramaConversionButton")
-        self.sky_panorama_button.setEnabled(False)
         self.sky_panorama_button.setToolTip(
-            "Planned pipeline: linear panorama/HDR decode, exposure and tone mapping, labeled five-face projection, "
-            "KOTOR TGA/TPC sidecars, seam validation, then the same room generator used above."
+            "Project an equirectangular panorama into five KOTOR-oriented dome sectors. HDR/EXR input is tone-mapped "
+            "offline into engine-compatible 8-bit TGA textures."
         )
         sky_layout.addWidget(self.sky_panorama_button)
         self.sky_status_label = QtWidgets.QLabel(
             "Loaded module sky/backdrop surfaces render with their game textures by default and remain non-selectable. "
-            "The five-face authoring path is available now; dome and panorama/HDR conversion remain planned.",
+            "Create a curved sky room from existing textures, or convert a panorama/HDR source into five project "
+            "textures. KOTOR does not consume modern HDR environment maps directly, so HDR light values are "
+            "tone-mapped offline before export.",
             self.sky_group,
         )
         self.sky_status_label.setObjectName("mapStudioEnvironmentSkyStatusLabel")
@@ -274,11 +278,19 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.lightmap_room_combo.currentIndexChanged.connect(self._refresh_lightmap_surfaces)
         self.lightmap_surface_combo.currentIndexChanged.connect(self._refresh_lightmap_default_resref)
         self.sky_create_button.clicked.connect(self._emit_skybox_create)
+        self.sky_panorama_button.clicked.connect(self._emit_sky_panorama)
         self.sky_traffic_create_button.clicked.connect(self._emit_sky_traffic_create)
         self.sky_traffic_timing_combo.currentIndexChanged.connect(self._sync_sky_traffic_timing_controls)
         self._sync_sky_traffic_timing_controls()
         self._update_profile_presentation()
         self.set_world_settings({"available": False})
+
+    def adopt_room_lighting_tools(self, room_lighting_group: QtWidgets.QWidget) -> None:
+        """Place Builder-owned room-light authoring alongside Environment lighting controls."""
+
+        room_lighting_group.setParent(self)
+        self._root_layout.insertWidget(self._root_layout.count() - 1, room_lighting_group)
+        room_lighting_group.show()
 
     @staticmethod
     def _rgb_editor(prefix: str, parent: QtWidgets.QWidget) -> tuple[QtWidgets.QWidget, tuple[QtWidgets.QSpinBox, ...]]:
@@ -512,6 +524,7 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         rooms = tuple(str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip())
         self._sky_visible_rooms = rooms
         self.sky_group.setEnabled(bool(root))
+        self.sky_panorama_button.setEnabled(bool(root and rooms))
         if root and not self.sky_room_resref_edit.text().strip():
             self.sky_room_resref_edit.setText(f"{root[:12]}_sky"[:16])
         if root and not any(edit.text().strip() for edit in self.sky_texture_edits.values()):
@@ -519,8 +532,11 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
             for face, suffix in (("north", "n"), ("east", "e"), ("south", "s"), ("west", "w"), ("top", "t")):
                 self.sky_texture_edits[face].setText(f"{prefix}_{suffix}"[:16])
         self.sky_group.setToolTip(
-            f"Create a {str(game or 'K1').upper()} visual-only sky room visible from {len(rooms)} authored room(s)."
+            f"Create a {str(game or 'K1').upper()} visual-only sky dome visible from {len(rooms)} authored room(s)."
         )
+
+    def set_skybox_status(self, message: str) -> None:
+        self.sky_status_label.setText(str(message or ""))
 
     def set_sky_traffic_context(self, *, room_resrefs: Any = (), traffic_count: int = 0) -> None:
         rooms = tuple(str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip())
@@ -641,6 +657,9 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
 
     def _emit_skybox_create(self) -> None:
         self.skyboxCreateRequested.emit(self.skybox_settings())
+
+    def _emit_sky_panorama(self) -> None:
+        self.skyPanoramaRequested.emit(self.skybox_settings())
 
     def _emit_sky_traffic_create(self) -> None:
         self.skyTrafficCreateRequested.emit(self.sky_traffic_settings())

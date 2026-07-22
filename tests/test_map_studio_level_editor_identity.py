@@ -6087,12 +6087,45 @@ def test_t2600_viewport_terrain_brush_drag_paints_instead_of_marquee_runtime() -
         assert panel.eventFilter(canvas, release) is True
         assert not panel.viewport._selection_rubber_band.isVisible()
 
+        # The shared viewport must fail closed while Sculpt Mode owns the
+        # pointer.  Even if the Map Studio handler misses an Alt+LMB event, the
+        # Maya navigation profile may not start orbiting the camera.
+        viewport = panel.viewport
+        original_handler = viewport._gr_map_studio_viewport_input_handler
+        original_profile = viewport._navigation_profile
+        viewport._gr_map_studio_viewport_input_handler = lambda *_args: False
+        viewport._navigation_profile = "maya"
+        camera_before = (float(viewport.camera.azimuth), float(viewport.camera.elevation))
+        blocked_press = mouse_event(
+            QtCore.QEvent.MouseButtonPress,
+            96,
+            96,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.AltModifier,
+        )
+        blocked_move = mouse_event(
+            QtCore.QEvent.MouseMove,
+            140,
+            120,
+            QtCore.Qt.NoButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.AltModifier,
+        )
+        assert viewport.eventFilter(canvas, blocked_press) is True
+        assert viewport.eventFilter(canvas, blocked_move) is True
+        assert viewport._nav_dragging == ""
+        assert (float(viewport.camera.azimuth), float(viewport.camera.elevation)) == camera_before
+        viewport._navigation_profile = original_profile
+        viewport._gr_map_studio_viewport_input_handler = original_handler
+
         payload = module_window.controller.project.extra_sections["authored_module"]
         metadata = payload["rooms"][0]["primitive"]["metadata"]
         assert metadata["last_operation"] == "terrain_brush_stroke"
         assert metadata["last_brush"] == "raise"
         assert metadata["dirty_region_only"] is True
-        assert module_window.controller.command_history.undo_label == "Sculpt terrain raise on grdev01_room01"
+        room_resref = module_window.builder_tab.current_terrain_brush_context()["room_resref"]
+        assert module_window.controller.command_history.undo_label == f"Sculpt terrain raise on {room_resref}"
     finally:
         module_window = getattr(window, "module_editor_window", None)
         if module_window is not None:
@@ -6114,7 +6147,8 @@ def test_t2600_viewport_terrain_brush_alt_right_drag_changes_size_and_hardness_r
     window = ModuleEditorWindow()
 
     def mouse_event(kind, x: float, y: float, button, buttons, modifiers=QtCore.Qt.NoModifier):
-        return QtGui.QMouseEvent(kind, QtCore.QPointF(x, y), button, buttons, modifiers)
+        position = QtCore.QPointF(x, y)
+        return QtGui.QMouseEvent(kind, position, position, position, button, buttons, modifiers)
 
     try:
         window.show()
@@ -6156,12 +6190,81 @@ def test_t2600_viewport_terrain_brush_alt_right_drag_changes_size_and_hardness_r
         assert panel.eventFilter(canvas, release) is True
 
         assert window.builder_tab.terrainRadiusSpinBox.value() == 4
-        assert round(float(window.builder_tab.terrainSmoothStrengthSpinBox.value()), 2) == 0.70
+        assert round(float(window.builder_tab.terrainHardnessSpinBox.value()), 2) == 0.70
         context = window.builder_tab.current_terrain_brush_context()
         assert context["radius"] == 4
         assert round(float(context["hardness"]), 2) == 0.70
         assert panel._terrain_brush_context["radius"] == 4
         assert round(float(panel._terrain_brush_context["hardness"]), 2) == 0.70
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+
+
+def test_t2600_viewport_terrain_sculpt_alt_middle_drag_pans_without_painting_runtime() -> None:
+    """Alt+MMB deliberately pans the sculpt camera while bare LMB remains paint-only."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtCore, QtGui, QtWidgets
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+
+    def mouse_event(kind, x: float, y: float, button, buttons):
+        position = QtCore.QPointF(x, y)
+        return QtGui.QMouseEvent(
+            kind,
+            position,
+            position,
+            position,
+            button,
+            buttons,
+            QtCore.Qt.AltModifier,
+        )
+
+    try:
+        window.show()
+        app.processEvents()
+        window.create_map_studio_starter_terrain()
+        window._sync_map_studio_terrain_brush_context(force_enabled=True)
+
+        panel = window.viewport_panel
+        canvas = panel.viewport.canvas
+        camera = panel.viewport.camera
+        target_before = tuple(float(value) for value in camera.target)
+        angles_before = (float(camera.azimuth), float(camera.elevation))
+        press = mouse_event(
+            QtCore.QEvent.MouseButtonPress,
+            100,
+            100,
+            QtCore.Qt.MiddleButton,
+            QtCore.Qt.MiddleButton,
+        )
+        move = mouse_event(
+            QtCore.QEvent.MouseMove,
+            136,
+            118,
+            QtCore.Qt.NoButton,
+            QtCore.Qt.MiddleButton,
+        )
+        release = mouse_event(
+            QtCore.QEvent.MouseButtonRelease,
+            136,
+            118,
+            QtCore.Qt.MiddleButton,
+            QtCore.Qt.NoButton,
+        )
+
+        assert panel.eventFilter(canvas, press) is True
+        assert panel.eventFilter(canvas, move) is True
+        assert panel.eventFilter(canvas, release) is True
+        assert tuple(float(value) for value in camera.target) != target_before
+        assert (float(camera.azimuth), float(camera.elevation)) == angles_before
+        assert panel._terrain_brush_drag is None
+        assert panel._terrain_camera_drag is None
     finally:
         window.controller.project.dirty = False
         window.close()

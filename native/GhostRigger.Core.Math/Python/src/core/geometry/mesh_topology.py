@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from heapq import heapify, heappop
 import math
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -213,6 +214,7 @@ class MeshTopology:
     geometric_to_raw_vertices: dict[int, tuple[int, ...]] = field(default_factory=dict)
     geometric_positions: tuple[Vector3, ...] = ()
     invalid_faces: tuple[int, ...] = ()
+    _components_cache: tuple[TopologyComponent, ...] | None = field(default=None, init=False, repr=False)
 
     @classmethod
     def build(
@@ -349,7 +351,12 @@ class MeshTopology:
         self.geometric_face_to_faces = self._build_face_adjacency(self.geometric_edge_to_faces)
         self.border_loops = self._build_raw_border_loops()
         self.geometric_boundary_chains = self._build_geometric_boundary_chains()
-        self.connected_elements = [set(component.faces) for component in self.components()]
+        # Components are a full-mesh invariant of this transient topology.
+        # Building them again during every validation/audit needlessly repeats
+        # a complete graph traversal on large imported rooms.
+        components = self.components()
+        self._components_cache = components
+        self.connected_elements = [set(component.faces) for component in components]
         self.vertex_normals = self._build_vertex_normals()
         self._build_optional_mesh_channels()
 
@@ -403,13 +410,25 @@ class MeshTopology:
 
     def _build_raw_border_loops(self) -> list[list[int]]:
         unused = set(self.border_edges)
+        # ``min(unused)`` on every disconnected raw boundary chain is
+        # quadratic.  Imported render meshes commonly duplicate vertices at
+        # UV/hard-normal seams, so a perfectly ordinary large OBJ can expose
+        # tens of thousands of short raw chains even though its welded
+        # geometric boundary is small.  A lazy heap returns the same
+        # deterministic minimum edge while reducing chain-start selection to
+        # O(E log E); consumed edges remain in the heap and are skipped when
+        # encountered later.
+        starts = list(unused)
+        heapify(starts)
         incident: dict[int, set[Edge]] = defaultdict(set)
         for edge in unused:
             incident[edge[0]].add(edge)
             incident[edge[1]].add(edge)
         chains: list[list[int]] = []
         while unused:
-            start = min(unused)
+            start = heappop(starts)
+            while start not in unused:
+                start = heappop(starts)
             unused.remove(start)
             chain = [start[0], start[1]]
             while True:
@@ -434,9 +453,13 @@ class MeshTopology:
         for half_index in boundary_half_edges:
             outgoing[self.half_edges[half_index].geometric_origin].append(half_index)
         unused = set(boundary_half_edges)
+        starts = list(unused)
+        heapify(starts)
         chains: list[list[int]] = []
         while unused:
-            start_index = min(unused)
+            start_index = heappop(starts)
+            while start_index not in unused:
+                start_index = heappop(starts)
             start = self.half_edges[start_index]
             unused.remove(start_index)
             chain = [start.geometric_origin, start.geometric_destination]
@@ -584,6 +607,8 @@ class MeshTopology:
         return sorted(ring)
 
     def components(self, face_indices: Iterable[int] | None = None) -> tuple[TopologyComponent, ...]:
+        if face_indices is None and self._components_cache is not None:
+            return self._components_cache
         selected = (
             {int(value) for value in face_indices if 0 <= int(value) < len(self.faces)}
             if face_indices is not None

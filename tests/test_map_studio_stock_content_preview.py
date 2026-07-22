@@ -456,6 +456,46 @@ def test_t3001_animated_door_preview_keeps_door_identity() -> None:
     assert getattr(root.children[0].children[0], "_gr_map_studio_placement_id") == placement_id
 
 
+def test_t2908_entry_point_uses_pickable_direct_player_model_at_native_scale() -> None:
+    md = _model_data()
+    from src.core.modules.map_studio_stock_content_preview import append_stock_content_to_preview_root
+
+    source = _source_model(md, name="pmbam", mesh_position=(0.0, 0.0, 0.0))
+    root = md.ModelNode(name="preview_root", flags=int(md.NodeFlags.HEADER))
+    row = SimpleNamespace(
+        placement_id="entry_point",
+        kind="entry_point",
+        tag="Player Start",
+        template_resref="pmbam",
+        model_resref="pmbam",
+        head_model_resref="",
+        position=(1.25, -2.5, 0.125),
+        bearing=math.pi / 2.0,
+        is_spatial=True,
+    )
+
+    result = append_stock_content_to_preview_root(
+        md,
+        root,
+        placements=(row,),
+        model_loader=lambda resref: source if resref == "pmbam" else None,
+        resolver=None,
+        game="K1",
+    )
+
+    assert result.resolved_placement_ids == ("entry_point",)
+    assert result.placement_models == (("entry_point", "pmbam"),)
+    assert len(root.children) == 1
+    player = root.children[0]
+    assert player.position == (1.25, -2.5, 0.125)
+    # ModelNode has no instance-scale field: untouched source vertices are the
+    # engine-native 1:1 character scale.
+    assert not hasattr(player, "scale")
+    assert getattr(player, "_gr_map_studio_placement_id") == "entry_point"
+    assert getattr(player, "_gr_map_studio_placement_kind") == "entry_point"
+    assert all(getattr(mesh, "_gr_map_studio_placement_id") == "entry_point" for mesh in player.children)
+
+
 def test_t3001_controller_hides_markers_only_for_resolved_models() -> None:
     _install_native_payload_paths()
     from src.core.modules.module_editor_controller import ModuleEditorController

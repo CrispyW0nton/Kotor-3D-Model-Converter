@@ -21,6 +21,9 @@ from src.core.modules.map_studio_terrain_sculpt_session import (
     terrain_sculpt_brush_is_deferred,
 )
 from src.gui.qt_lib.viewports.qt_viewport import QtMapStudioViewportWidget
+from src.math.transform_math import ray_from_mouse
+
+from .terrain_sculpt_shelf import TerrainSculptShelf
 
 
 def _pie_hud_value(source: object, name: str, default: object = None) -> object:
@@ -2669,10 +2672,22 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
 class ModuleEditorViewportPanel(QtWidgets.QWidget):
     MAP_PLACEMENT_MIME_TYPE = "application/x-ghostrigger-map-placement+json"
     MAP_PLACEMENT_PAYLOAD_SCHEMA = "ghostrigger.map-placement/v1"
+    MAP_TERRAIN_KIT_MIME_TYPE = "application/x-ghostrigger-map-terrain-kit+json"
+    MAP_TERRAIN_KIT_PAYLOAD_SCHEMA = "ghostrigger.map-terrain-kit/v1"
+    MAP_ENVIRONMENT_KIT_MIME_TYPE = "application/x-ghostrigger-map-environment-kit+json"
+    MAP_ENVIRONMENT_KIT_PAYLOAD_SCHEMA = "ghostrigger.map-environment-kit/v1"
 
     itemSelected = QtCore.Signal(str)
+    itemsSelected = QtCore.Signal(object)
     transformEdited = QtCore.Signal(str, object)
+    placementsTranslated = QtCore.Signal(object)
     placementRequested = QtCore.Signal(object)
+    terrainKitRequested = QtCore.Signal(object)
+    terrainKitSnapPreviewRequested = QtCore.Signal(object)
+    environmentKitRequested = QtCore.Signal(object)
+    environmentKitSnapPreviewRequested = QtCore.Signal(object)
+    buildingRoomRequested = QtCore.Signal(object)
+    buildingOpeningRequested = QtCore.Signal(object)
     placementModeExited = QtCore.Signal()
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
     roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)
@@ -2687,6 +2702,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
     terrainBrushStrokeCommitted = QtCore.Signal(str, str)
     terrainBrushOptionsChanged = QtCore.Signal(int, float)
+    terrainBrushSelected = QtCore.Signal(str)
+    terrainBrushStrengthChanged = QtCore.Signal(float)
+    terrainBrushDeltaChanged = QtCore.Signal(float)
+    terrainSculptModeChanged = QtCore.Signal(bool)
     modeMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
     mapStudioRoomClicked = QtCore.Signal(str, bool)
     mapStudioRoomsRectSelected = QtCore.Signal(object, bool)
@@ -3128,6 +3147,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         setter = getattr(self.viewport, "set_map_studio_room_primitive_selection", None)
         if callable(setter):
             setter(selected)
+
+    def clear_map_studio_room_geometry_selection(self) -> None:
+        """Dismiss room-only handles when selection moves to another scene object."""
+
+        self.clear_map_studio_component_selection()
+        self.set_selected_room_primitives(())
+        self.set_universal_transform_overlay(None)
+        clear_edge = getattr(self.viewport, "clear_map_studio_room_outline_edge_highlight", None)
+        if callable(clear_edge):
+            clear_edge()
 
     def _iter_room_preview_mesh_nodes(self, room_resref: str = ""):
         """Yield live authored preview mesh nodes, optionally for one room."""
@@ -4058,9 +4087,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "Hold V while dragging a room outline point to snap it to another vertex. "
             "Hold J with transform active to align selected vertices or edges to one level."
         )
-        self.terrain_brush_box = QtWidgets.QCheckBox("Terrain Brush")
+        self.terrain_brush_box = QtWidgets.QCheckBox("Sculpt Terrain")
         self.terrain_brush_box.setObjectName("mapStudioViewportTerrainBrushCheckBox")
-        self.terrain_brush_box.setToolTip("Paint the selected terrain heightfield brush directly in the viewport.")
+        self.terrain_brush_box.setToolTip("Enter the dedicated viewport terrain sculpt workspace.")
         self.transform_gizmo_group = QtWidgets.QButtonGroup(self)
         self.transform_gizmo_group.setObjectName("mapStudioTransformGizmoModeButtonGroup")
         self.transform_gizmo_group.setExclusive(True)
@@ -4095,6 +4124,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.viewport_toolbar.addWidget(self.scale_gizmo_button)
         self.viewport_toolbar.addStretch(1)
         toolbar_frame_layout.addLayout(self.viewport_toolbar)
+        self.terrain_sculpt_shelf = TerrainSculptShelf(self.viewport_toolbar_frame)
+        self.terrain_sculpt_shelf.setVisible(False)
+        self.terrain_sculpt_shelf.brushSelected.connect(self.terrainBrushSelected.emit)
+        self.terrain_sculpt_shelf.optionsChanged.connect(self._terrain_shelf_options_changed)
+        self.terrain_sculpt_shelf.walkabilityChanged.connect(self._set_terrain_walkability_visible)
+        self.terrain_sculpt_shelf.topViewRequested.connect(self._set_terrain_camera_top)
+        self.terrain_sculpt_shelf.angledViewRequested.connect(self._set_terrain_camera_angled)
+        self.terrain_sculpt_shelf.frameTerrainRequested.connect(self._frame_terrain)
+        self.terrain_sculpt_shelf.exitRequested.connect(lambda: self.terrain_brush_box.setChecked(False))
+        toolbar_frame_layout.addWidget(self.terrain_sculpt_shelf)
         self.marker_summary_label = QtWidgets.QLabel("Gameplay markers: none")
         self.marker_summary_label.setObjectName("mapStudioPlacementMarkerSummaryLabel")
         self.marker_summary_label.setWordWrap(True)
@@ -4181,6 +4220,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.scene_table.setHorizontalHeaderLabels(["Type", "Name", "X", "Y", "Z", "Marker", "Facing", "Visible"])
         self.scene_table.horizontalHeader().setStretchLastSection(True)
         self.scene_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.scene_table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.scene_table.setMinimumHeight(46)
         self.scene_table.setMaximumHeight(76)
         self.scene_table.itemSelectionChanged.connect(self._table_selection)
@@ -4239,6 +4279,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._placement_context: dict[str, object] = {"enabled": False}
         self._placement_previous_hover: tuple[bool, str] | None = None
         self._map_placement_drag_payload: dict[str, object] | None = None
+        self._terrain_kit_snap_preview: dict[str, object] | None = None
+        self._building_tool = "select"
+        self._building_settings: dict[str, object] = {
+            "floor_z": 0.0,
+            "wall_height": 3.0,
+            "grid_size": 0.25,
+            "snap_to_grid": True,
+            "include_ceiling": True,
+            "style_id": "plcaa_graybox",
+            "opening_width": 1.25,
+            "opening_height": 2.2,
+            "window_sill": 1.0,
+            "level_index": 0,
+            "level_name": "Level 1",
+        }
+        self._building_points: list[tuple[float, float, float]] = []
+        self._building_hover_world: tuple[float, float, float] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
@@ -4248,6 +4305,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._pending_room_primitive_commit_preview: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
         self._terrain_brush_option_drag: dict[str, object] | None = None
+        self._terrain_camera_drag: dict[str, object] | None = None
+        self._terrain_sculpt_was_active = False
+        self._terrain_sculpt_previous_selected_node: object | None = None
         self._terrain_brush_context: dict[str, object] = {
             "enabled": False,
             "room_resref": "",
@@ -4256,6 +4316,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "column_count": 0,
             "radius": 0,
             "hardness": 0.5,
+            "strength": 0.5,
+            "delta": 0.1,
         }
         self._hover_probe_enabled = False
         self._hover_component_mode = ""
@@ -4385,8 +4447,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 if not bool(getattr(placement, "is_spatial", True)):
                     continue
                 label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
-                kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
                 placement_id = str(getattr(placement, "placement_id", ""))
+                kind = "Player Start" if placement_id == "entry_point" else f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
                 marker = self._placement_markers.get(placement_id)
                 marker_label = str(getattr(marker, "shape", "") or "")
                 transition_summary = str(getattr(placement, "transition_summary", "") or "")
@@ -4430,13 +4492,37 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._sync_clean_viewport_presentation()
 
     def select_id(self, item_id: str) -> None:
-        for row, row_id in enumerate(self._row_ids):
-            if row_id == item_id:
-                blocked = self.scene_table.blockSignals(True)
-                self.scene_table.selectRow(row)
-                self.scene_table.blockSignals(blocked)
-                break
-        self._sync_placement_transform_capabilities(str(item_id or ""))
+        self.set_selected_gameplay_placement_ids((item_id,))
+
+    def selected_gameplay_placement_ids(self) -> list[str]:
+        rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []
+        return [
+            self._row_ids[index.row()]
+            for index in rows
+            if 0 <= index.row() < len(self._row_ids) and self._row_ids[index.row()] in self._placement_markers
+        ]
+
+    def set_selected_gameplay_placement_ids(self, item_ids) -> None:
+        wanted = {str(value or "") for value in tuple(item_ids or ()) if str(value or "") in self._placement_markers}
+        selection_model = self.scene_table.selectionModel()
+        if selection_model is None:
+            return
+        blocked = self.scene_table.blockSignals(True)
+        try:
+            selection_model.clearSelection()
+            for row, row_id in enumerate(self._row_ids):
+                if row_id not in wanted:
+                    continue
+                index = self.scene_table.model().index(row, 0)
+                selection_model.select(
+                    index,
+                    QtCore.QItemSelectionModel.SelectionFlag.Select
+                    | QtCore.QItemSelectionModel.SelectionFlag.Rows,
+                )
+        finally:
+            self.scene_table.blockSignals(blocked)
+        active = next((value for value in reversed(self._row_ids) if value in wanted), "")
+        self._sync_placement_transform_capabilities(active)
 
     def selected_gameplay_placement_id(self) -> str:
         """Return the selected authored GIT instance, never a stale combo fallback."""
@@ -4449,38 +4535,73 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         return item_id if item_id in self._placement_markers else ""
 
     def _sync_placement_transform_capabilities(self, item_id: str) -> None:
-        """Keep GIT instances on the transforms the game actually stores."""
+        """Bind an outliner selection to its live viewport transform proxy.
+
+        The historical name is retained for packaged callers, but authored
+        room lights use the same path.  Selecting either kind in the outliner
+        must immediately select the rendered node so the shared Maya-style
+        gizmo is rebuilt at that node's world position.
+        """
 
         is_placement = str(item_id or "") in self._placement_markers
-        preview_node = self._placement_preview_node(str(item_id or "")) if is_placement else None
+        is_entry_point = str(item_id or "") == "entry_point"
+        light_node = self._authored_room_light_preview_node(str(item_id or ""))
+        is_light = light_node is not None
+        preview_node = self._placement_preview_node(str(item_id or "")) if is_placement else light_node
         selected_node = getattr(getattr(self.viewport, "_renderer", None), "selected_node", None)
         set_selected_node = getattr(self.viewport, "set_selected_node", None)
         if preview_node is not None and callable(set_selected_node):
-            marker = self._placement_markers.get(str(item_id or ""))
-            setattr(preview_node, "_gr_map_studio_git_placement", True)
-            # The bearing baked into the flattened meshes never changes while
-            # the node lives, so capture it once.  In-place transform commits
-            # keep the node alive across edits, and re-capturing from the
-            # (already committed) marker bearing here would corrupt the
-            # rotation-delta baseline.
-            if not hasattr(preview_node, "_gr_map_studio_authored_bearing"):
-                setattr(preview_node, "_gr_map_studio_authored_bearing", float(getattr(marker, "bearing", 0.0) or 0.0))
+            if is_placement:
+                marker = self._placement_markers.get(str(item_id or ""))
+                setattr(preview_node, "_gr_map_studio_git_placement", True)
+                # The bearing baked into the flattened meshes never changes while
+                # the node lives, so capture it once.  In-place transform commits
+                # keep the node alive across edits, and re-capturing from the
+                # (already committed) marker bearing here would corrupt the
+                # rotation-delta baseline.
+                if not hasattr(preview_node, "_gr_map_studio_authored_bearing"):
+                    setattr(preview_node, "_gr_map_studio_authored_bearing", float(getattr(marker, "bearing", 0.0) or 0.0))
             setattr(preview_node, "_gr_gizmo_world_position", tuple(getattr(preview_node, "position", (0.0, 0.0, 0.0))))
-            set_selected_node(preview_node)
-        elif selected_node is not None and bool(getattr(selected_node, "_gr_map_studio_git_placement", False)) and callable(set_selected_node):
+            set_selected_node(preview_node, source="outliner")
+        elif (
+            selected_node is not None
+            and (
+                bool(getattr(selected_node, "_gr_map_studio_git_placement", False))
+                or bool(getattr(selected_node, "_gr_map_studio_authored_light", False))
+            )
+            and callable(set_selected_node)
+        ):
             set_selected_node(None)
         scale_button = getattr(self, "scale_gizmo_button", None)
         if scale_button is not None:
-            scale_button.setEnabled(not is_placement)
+            scale_button.setEnabled(not (is_placement or is_light))
             scale_button.setToolTip(
-                "KOTOR GIT instances store position and bearing only. Use Placeable Builder to create a scaled asset variant."
+                "The player start uses the native KOTOR character scale; move it with W or rotate its facing with E."
+                if is_entry_point
+                else "KOTOR GIT instances store position and bearing only. Use Placeable Builder to create a scaled asset variant."
                 if is_placement
+                else "Light size is its Radius property; use the Translate gizmo to position this authored room light."
+                if is_light
                 else "Scale authored room geometry. Shortcut: R."
             )
-        if is_placement and self.transform_gizmo_mode() == "scale":
+        rotate_button = getattr(self, "rotate_gizmo_button", None)
+        if rotate_button is not None:
+            rotate_button.setEnabled(not is_light)
+            rotate_button.setToolTip(
+                "Edit a spot light's Direction values in Properties; viewport rotation is not yet an engine-backed light transform."
+                if is_light
+                else "Rotate selected objects. Shortcut: E."
+            )
+        if (is_placement and self.transform_gizmo_mode() == "scale") or (
+            is_light and self.transform_gizmo_mode() != "translate"
+        ):
             self.set_transform_gizmo_mode("translate", announce=False)
             self.marker_summary_label.setText(
-                "Selected KOTOR placement: W moves and E rotates. Scaling requires a baked Placeable Builder asset variant."
+                "Selected authored room light: W moves it; Radius and spot Direction are edited in Properties."
+                if is_light
+                else "Selected Player Start: W moves it and E rotates the player's facing. Delete removes it; Undo restores it."
+                if is_entry_point
+                else "Selected KOTOR placement: W moves and E rotates. Scaling requires a baked Placeable Builder asset variant."
             )
 
     def _placement_transform_gizmo_at_event(self, event: QtCore.QEvent) -> bool:
@@ -4499,7 +4620,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return False
 
     def _handle_viewport_placement_node_moved(self, node: object) -> None:
-        """Commit the real viewport gizmo's final transform to authored GIT state."""
+        """Commit the real viewport gizmo's final transform to authored state."""
+
+        if bool(getattr(node, "_gr_map_studio_authored_light", False)):
+            light_id = str(getattr(node, "_gr_light_id", "") or "")
+            position = tuple(float(value) for value in tuple(getattr(node, "position", (0.0, 0.0, 0.0)))[:3])
+            if light_id.startswith("authored_light:") and len(position) == 3:
+                self.transformEdited.emit(
+                    light_id,
+                    LevelTransform(position=position, rotation=(0.0, 0.0, 0.0), scale=(1.0, 1.0, 1.0)),
+                )
+            return
 
         placement_id = str(getattr(node, "_gr_map_studio_placement_id", "") or "")
         marker = self._placement_markers.get(placement_id)
@@ -4508,7 +4639,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         gizmo_mode = str(getattr(getattr(self.viewport, "_transform_gizmo", None), "mode", "") or "").lower()
         if "scale" in gizmo_mode:
             self.marker_summary_label.setText(
-                "Scale was not applied: KOTOR GIT instances require a baked Placeable Builder asset variant."
+                "Scale was not applied: the Player Start always uses the native KOTOR character scale."
+                if placement_id == "entry_point"
+                else "Scale was not applied: KOTOR GIT instances require a baked Placeable Builder asset variant."
             )
             node.position = self._marker_position(marker)
             # Restore the delta from the baked mesh bearing, not identity:
@@ -4653,9 +4786,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if event_type in {QtCore.QEvent.Leave, QtCore.QEvent.FocusOut}:
                 if self._texture_paint_drag is not None:
                     self._cancel_texture_paint_drag()
+                if self._terrain_camera_drag is not None:
+                    self._finish_terrain_camera_drag()
                 self._clear_map_studio_hover()
             if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
                 key = getattr(event, "key", lambda: None)()
+                if (
+                    event_type == QtCore.QEvent.KeyPress
+                    and key == QtCore.Qt.Key_Escape
+                    and self._terrain_brush_context_enabled()
+                ):
+                    self.terrain_brush_box.setChecked(False)
+                    return True
                 if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_Escape and self._texture_paint_drag is not None:
                     self._cancel_texture_paint_drag()
                     return True
@@ -4667,17 +4809,40 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 if key == QtCore.Qt.Key_J:
                     self.set_map_studio_modifier_active("transform_snap_level", event_type == QtCore.QEvent.KeyPress)
                     return False
+            if event_type == QtCore.QEvent.Wheel and self._resize_terrain_brush_from_wheel(event):
+                return True
             if event_type == QtCore.QEvent.MouseButtonPress:
-                if getattr(event, "button", lambda: None)() == QtCore.Qt.RightButton:
+                if getattr(event, "button", lambda: None)() == QtCore.Qt.MiddleButton:
                     modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
-                    if (
-                        self._terrain_brush_context_enabled()
-                        and bool(modifiers & QtCore.Qt.AltModifier)
-                    ):
+                    if self._terrain_brush_context_enabled():
                         focus = getattr(watched, "setFocus", None)
                         if callable(focus):
                             focus()
-                        return self._begin_terrain_brush_option_drag(event)
+                        if bool(modifiers & QtCore.Qt.AltModifier):
+                            return self._begin_terrain_camera_drag(
+                                event,
+                                navigation="pan",
+                                button=QtCore.Qt.MiddleButton,
+                            )
+                        # Bare MMB remains inert while painting so an
+                        # accidental press cannot grab the camera.
+                        return True
+                if getattr(event, "button", lambda: None)() == QtCore.Qt.RightButton:
+                    modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+                    if self._terrain_brush_context_enabled():
+                        focus = getattr(watched, "setFocus", None)
+                        if callable(focus):
+                            focus()
+                        if bool(modifiers & QtCore.Qt.AltModifier):
+                            return self._begin_terrain_brush_option_drag(event)
+                        if bool(modifiers & QtCore.Qt.ShiftModifier):
+                            self.toolMarkingMenuRequested.emit(self._event_global_position(event, watched))
+                            return True
+                        return self._begin_terrain_camera_drag(
+                            event,
+                            navigation="orbit",
+                            button=QtCore.Qt.RightButton,
+                        )
                     focus = getattr(watched, "setFocus", None)
                     if callable(focus):
                         focus()
@@ -4690,6 +4855,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     focus = getattr(watched, "setFocus", None)
                     if callable(focus):
                         focus()
+                    if self._handle_building_left_click(event):
+                        return True
                     if self._handle_active_modeling_tool_click(event):
                         return True
                     if self._texture_paint_enabled and self._begin_texture_paint_drag(event):
@@ -4717,14 +4884,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     # must never steal a click from visible foreground geometry.
                     placement_id = self._rendered_placement_at_event(event)
                     if placement_id:
-                        self.select_id(placement_id)
-                        self.itemSelected.emit(placement_id)
                         self._begin_marker_drag(placement_id, event)
                         return True
                     placement_id = self._marker_at_event(event)
                     if placement_id:
-                        self.select_id(placement_id)
-                        self.itemSelected.emit(placement_id)
                         self._begin_marker_drag(placement_id, event)
                         return True
                     if not self._hover_probe_enabled:
@@ -4750,6 +4913,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     position = self._event_position(event)
                     if position is not None:
                         self._map_studio_click_candidate = position
+            if event_type == QtCore.QEvent.MouseMove and self._building_tool == "walls":
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if buttons == QtCore.Qt.NoButton:
+                    self._update_building_hover(event)
+                    return True
             if event_type == QtCore.QEvent.MouseMove and self._texture_paint_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
@@ -4809,6 +4977,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     return self._finish_terrain_brush_option_drag(event)
                 self._update_terrain_brush_option_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._terrain_camera_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                drag_button = self._terrain_camera_drag.get("button", QtCore.Qt.RightButton)
+                if not (buttons & drag_button):
+                    return self._finish_terrain_camera_drag()
+                return self._update_terrain_camera_drag(event)
             if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
@@ -4875,6 +5049,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 return self._finish_room_primitive_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_option_drag is not None:
                 return self._finish_terrain_brush_option_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_camera_drag is not None:
+                return self._finish_terrain_camera_drag()
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_drag is not None:
                 return self._finish_terrain_brush_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_context_enabled():
@@ -4968,6 +5144,42 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return None
         return payload
 
+    @classmethod
+    def _map_terrain_kit_drop_payload(cls, event: QtCore.QEvent) -> dict[str, object] | None:
+        mime_data = getattr(event, "mimeData", lambda: None)()
+        if mime_data is None or not mime_data.hasFormat(cls.MAP_TERRAIN_KIT_MIME_TYPE):
+            return None
+        try:
+            raw = bytes(mime_data.data(cls.MAP_TERRAIN_KIT_MIME_TYPE)).decode("utf-8")
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if str(payload.get("schema") or "") != cls.MAP_TERRAIN_KIT_PAYLOAD_SCHEMA:
+            return None
+        if not str(payload.get("asset_id") or "").strip():
+            return None
+        return payload
+
+    @classmethod
+    def _map_environment_kit_drop_payload(cls, event: QtCore.QEvent) -> dict[str, object] | None:
+        mime_data = getattr(event, "mimeData", lambda: None)()
+        if mime_data is None or not mime_data.hasFormat(cls.MAP_ENVIRONMENT_KIT_MIME_TYPE):
+            return None
+        try:
+            raw = bytes(mime_data.data(cls.MAP_ENVIRONMENT_KIT_MIME_TYPE)).decode("utf-8")
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if str(payload.get("schema") or "") != cls.MAP_ENVIRONMENT_KIT_PAYLOAD_SCHEMA:
+            return None
+        if not str(payload.get("piece_id") or "").strip():
+            return None
+        return payload
+
     def _handle_map_placement_drop_event(
         self,
         event: QtCore.QEvent,
@@ -4980,11 +5192,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if self._map_placement_drag_payload is None:
                 return False
             self._map_placement_drag_payload = None
+            self._terrain_kit_snap_preview = None
             self._clear_map_studio_hover()
             getattr(event, "accept", lambda: None)()
             self.marker_summary_label.setText("Placeable drop cancelled.")
             return True
-        payload = self._map_placement_drop_payload(event)
+        environment_payload = self._map_environment_kit_drop_payload(event)
+        terrain_payload = self._map_terrain_kit_drop_payload(event)
+        is_environment_kit = environment_payload is not None
+        is_terrain_kit = terrain_payload is not None
+        is_kit = is_environment_kit or is_terrain_kit
+        payload = environment_payload or terrain_payload or self._map_placement_drop_payload(event)
         if payload is None:
             return False
         self._map_placement_drag_payload = payload
@@ -5004,20 +5222,51 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         valid_surface = bool(context is not None and getattr(context, "is_hit", False) and len(world_point) >= 3)
         if event_type in {QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove}:
             if valid_surface:
+                if is_kit:
+                    preview_payload = {
+                        **payload,
+                        "position": tuple(float(value) for value in world_point[:3]),
+                    }
+                    if is_environment_kit:
+                        self.environmentKitSnapPreviewRequested.emit(preview_payload)
+                    else:
+                        self.terrainKitSnapPreviewRequested.emit(preview_payload)
+                    # Direct Qt signal delivery lets the owning Map Studio
+                    # controller resolve the snap synchronously. Re-publish
+                    # hover state so the disposable overlay shows it now.
+                    self._update_map_studio_hover(event, force=True, watched=watched)
                 getattr(event, "acceptProposedAction", lambda: None)()
-                template = str(payload.get("template_resref", "") or payload.get("kind", "object"))
-                x, y, z = (float(value) for value in world_point[:3])
-                self.marker_summary_label.setText(
-                    f"Release to place {template} at {x:.2f}, {y:.2f}, {z:.2f}."
+                template = str(
+                    payload.get("label", "")
+                    or payload.get("template_resref", "")
+                    or payload.get("kind", "object")
                 )
+                x, y, z = (float(value) for value in world_point[:3])
+                snap = self._terrain_kit_snap_preview if is_kit else None
+                if isinstance(snap, dict) and bool(snap.get("magnet_snapped", False)):
+                    target = str(snap.get("target_room_resref") or snap.get("target_piece_id") or "kit edge")
+                    self.marker_summary_label.setText(f"Release to magnet-snap {template} to {target}.")
+                else:
+                    self.marker_summary_label.setText(
+                        f"Release to place {template} at {x:.2f}, {y:.2f}, {z:.2f}."
+                    )
             else:
-                getattr(event, "ignore", lambda: None)()
-                self.marker_summary_label.setText("Drag the asset over a visible room, terrain, or walkmesh surface.")
+                self._terrain_kit_snap_preview = None
+                # Keep a recognized drag accepted while it crosses empty
+                # viewport pixels.  Qt stops delivering DragMove/Drop to a
+                # widget after an ignored DragEnter, which made the ordinary
+                # browser-to-viewport gesture fail unless the pointer entered
+                # directly over geometry.
+                getattr(event, "acceptProposedAction", lambda: None)()
+                self.marker_summary_label.setText(
+                    "Move over a visible room, terrain, or walkmesh surface; release when the surface highlights."
+                )
             return True
         if event_type != QtCore.QEvent.Drop:
             return False
         if not valid_surface:
             self._map_placement_drag_payload = None
+            self._terrain_kit_snap_preview = None
             self._clear_map_studio_hover()
             getattr(event, "ignore", lambda: None)()
             self.marker_summary_label.setText("Placeable drop cancelled: no visible level surface was under the cursor.")
@@ -5031,8 +5280,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "walkable_hit": getattr(context, "walkable", None),
             "keep_placing": False,
         }
-        self.placementRequested.emit(request)
+        if is_kit:
+            snap = self._terrain_kit_snap_preview
+            if isinstance(snap, dict):
+                request.update(
+                    {
+                        "position": tuple(snap.get("position", request["position"]) or request["position"]),
+                        "rotation_degrees_z": float(snap.get("rotation_degrees_z", 0.0) or 0.0),
+                        "scale": float(snap.get("scale", payload.get("scale", 1.0)) or 1.0),
+                    }
+                )
+            if is_environment_kit:
+                self.environmentKitRequested.emit(request)
+            else:
+                self.terrainKitRequested.emit(request)
+        else:
+            self.placementRequested.emit(request)
         self._map_placement_drag_payload = None
+        self._terrain_kit_snap_preview = None
         self._clear_map_studio_hover()
         getattr(event, "acceptProposedAction", lambda: None)()
         return True
@@ -6051,6 +6316,169 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return ""
         return str(marker_at_screen(float(pos.x()), float(pos.y())) or "")
 
+    def set_pascal_building_tool(self, tool: str, settings: object | None = None) -> None:
+        """Activate direct room/wall authoring without coupling the viewport to KMAP IO."""
+
+        key = str(tool or "select").strip().lower()
+        if key not in {"select", "walls", "door", "window"}:
+            key = "select"
+        self._building_tool = key
+        if isinstance(settings, Mapping):
+            self._building_settings.update(dict(settings))
+        if key != "walls":
+            self._building_points.clear()
+            self._building_hover_world = None
+        self._sync_building_preview()
+        if key == "walls":
+            self.marker_summary_label.setText(
+                "Draw Walls: click floor corners, then click the first corner to close the room. Esc cancels; Backspace removes the last corner."
+            )
+        elif key in {"door", "window"}:
+            self.marker_summary_label.setText(f"{key.title()}: click a cyan room edge where the opening belongs.")
+
+    def update_pascal_building_settings(self, settings: object) -> None:
+        if isinstance(settings, Mapping):
+            self._building_settings.update(dict(settings))
+        if self._building_points:
+            floor_z = float(self._building_settings.get("floor_z", 0.0) or 0.0)
+            self._building_points = [(point[0], point[1], floor_z) for point in self._building_points]
+        self._sync_building_preview()
+
+    def _sync_building_preview(self) -> None:
+        setter = getattr(self.viewport, "set_map_studio_building_preview", None)
+        if not callable(setter):
+            return
+        active = self._building_tool == "walls"
+        setter(
+            {
+                "active": active,
+                "tool": self._building_tool,
+                "points": tuple(self._building_points),
+                "hover_world": self._building_hover_world,
+                "floor_z": float(self._building_settings.get("floor_z", 0.0) or 0.0),
+                "wall_height": float(self._building_settings.get("wall_height", 3.0) or 3.0),
+                "close_ready": bool(len(self._building_points) >= 3 and self._building_hover_world is not None and self._building_close_ready()),
+                "label": "Draw Walls",
+            }
+            if active
+            else None
+        )
+
+    def _building_close_ready(self) -> bool:
+        if len(self._building_points) < 3 or self._building_hover_world is None:
+            return False
+        first = self._building_points[0]
+        hover = self._building_hover_world
+        tolerance = max(0.2, float(self._building_settings.get("grid_size", 0.25) or 0.25) * 0.75)
+        return math.hypot(float(hover[0]) - first[0], float(hover[1]) - first[1]) <= tolerance
+
+    def _building_world_at_event(
+        self,
+        event: QtCore.QEvent,
+        *,
+        plane_z: float | None = None,
+    ) -> tuple[float, float, float] | None:
+        screen = self._event_position(event)
+        if screen is None:
+            return None
+        z = float(self._building_settings.get("floor_z", 0.0) if plane_z is None else plane_z)
+        try:
+            self._update_map_studio_hover(event, force=True)
+            context = self._hover_context
+            if context is not None and bool(getattr(context, "is_hit", False)):
+                hit = tuple(float(value) for value in tuple(getattr(context, "world_point", ()))[:3])
+                if len(hit) == 3:
+                    point = (hit[0], hit[1], z)
+                    return self._snap_building_world(point)
+        except Exception:
+            pass
+        camera = getattr(self.viewport, "camera", None) or getattr(getattr(self.viewport, "_renderer", None), "cam", None)
+        if camera is None:
+            return None
+        width, height = self._viewport_canvas_size()
+        try:
+            origin, direction = ray_from_mouse((int(round(screen[0])), int(round(screen[1]))), camera, width, height)
+            denominator = float(direction[2])
+            if abs(denominator) <= 1.0e-8:
+                return None
+            distance = (z - float(origin[2])) / denominator
+            if distance < 0.0:
+                return None
+            point = (
+                float(origin[0]) + float(direction[0]) * distance,
+                float(origin[1]) + float(direction[1]) * distance,
+                z,
+            )
+            return self._snap_building_world(point)
+        except Exception:
+            return None
+
+    def _snap_building_world(self, point: tuple[float, float, float]) -> tuple[float, float, float]:
+        if not bool(self._building_settings.get("snap_to_grid", True)):
+            return point
+        grid = max(0.001, float(self._building_settings.get("grid_size", 0.25) or 0.25))
+        return (round(point[0] / grid) * grid, round(point[1] / grid) * grid, point[2])
+
+    def _update_building_hover(self, event: QtCore.QEvent) -> bool:
+        if self._building_tool != "walls":
+            return False
+        self._building_hover_world = self._building_world_at_event(event)
+        self._sync_building_preview()
+        return self._building_hover_world is not None
+
+    def _handle_building_left_click(self, event: QtCore.QEvent) -> bool:
+        if self._building_tool == "walls":
+            point = self._building_world_at_event(event)
+            if point is None:
+                self.marker_summary_label.setText("Draw Walls needs a visible floor or the active level plane under the pointer.")
+                return True
+            self._building_hover_world = point
+            if self._building_close_ready():
+                settings = dict(self._building_settings)
+                payload = {
+                    **settings,
+                    "points": tuple((value[0], value[1]) for value in self._building_points),
+                }
+                self._building_points.clear()
+                self._building_hover_world = None
+                self._sync_building_preview()
+                self.buildingRoomRequested.emit(payload)
+                self.marker_summary_label.setText("Room closed and built. Click to start the next room.")
+                return True
+            if not self._building_points or math.hypot(point[0] - self._building_points[-1][0], point[1] - self._building_points[-1][1]) > 1.0e-6:
+                self._building_points.append(point)
+            self._sync_building_preview()
+            self.marker_summary_label.setText(
+                f"Draw Walls: {len(self._building_points)} corner(s). "
+                + ("Click the first corner to close." if len(self._building_points) >= 3 else "Place the next corner.")
+            )
+            return True
+        if self._building_tool not in {"door", "window"}:
+            return False
+        edge = self._room_outline_edge_at_event(event)
+        if edge is None:
+            self.marker_summary_label.setText(f"{self._building_tool.title()}: click directly on a room edge.")
+            return True
+        room_resref, edge_index, start, end = edge
+        hit = self._building_world_at_event(event, plane_z=float(start[2]))
+        if hit is None:
+            hit = ((start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5, start[2])
+        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+        length_sq = dx * dx + dy * dy
+        fraction = 0.5 if length_sq <= 1.0e-9 else max(0.0, min(1.0, ((hit[0] - start[0]) * dx + (hit[1] - start[1]) * dy) / length_sq))
+        kind = self._building_tool
+        self.buildingOpeningRequested.emit(
+            {
+                **dict(self._building_settings),
+                "room_resref": room_resref,
+                "edge_index": int(edge_index),
+                "opening_kind": kind,
+                "center_fraction": fraction,
+                "bottom": float(self._building_settings.get("window_sill", 1.0) or 1.0) if kind == "window" else 0.0,
+            }
+        )
+        return True
+
     def _room_outline_point_at_event(self, event: QtCore.QEvent) -> tuple[str, int, tuple[float, float, float]] | None:
         point_at_screen = getattr(self.viewport, "map_studio_room_outline_point_at_screen", None)
         if not callable(point_at_screen):
@@ -6119,6 +6547,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         column_count: int = 0,
         radius: int = 0,
         hardness: float | None = None,
+        strength: float | None = None,
+        delta: float | None = None,
     ) -> None:
         """Update the viewport terrain brush context from the Builder controls."""
 
@@ -6135,14 +6565,29 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "hardness": self._clamp_terrain_brush_hardness(
                 self._terrain_brush_context.get("hardness", 0.5) if hardness is None else hardness
             ),
+            "strength": self._clamp_terrain_brush_hardness(
+                self._terrain_brush_context.get("strength", 0.5) if strength is None else strength
+            ),
+            "delta": max(
+                0.01,
+                float(self._terrain_brush_context.get("delta", 0.1) if delta is None else delta),
+            ),
         }
         blocked = self.terrain_brush_box.blockSignals(True)
         self.terrain_brush_box.setChecked(bool(enabled))
         self.terrain_brush_box.blockSignals(blocked)
+        self.terrain_sculpt_shelf.set_brush(str(brush or "raise"))
+        self.terrain_sculpt_shelf.set_options(
+            radius=max(0, int(radius)),
+            hardness=float(self._terrain_brush_context["hardness"]),
+            strength=float(self._terrain_brush_context["strength"]),
+            delta=float(self._terrain_brush_context["delta"]),
+        )
         if bool(enabled):
             self._install_marker_pick_filters()
         if not self._terrain_brush_context_enabled():
             self._clear_terrain_brush_cursor()
+        self._set_terrain_sculpt_ui(bool(enabled) and self._terrain_brush_context_enabled())
         self._sync_clean_viewport_presentation()
 
     def set_terrain_walkability_overlay(self, authored_terrain_walkability_overlay=None) -> None:
@@ -6248,7 +6693,154 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._finish_terrain_brush_drag(None)
         if not enabled:
             self._clear_terrain_brush_cursor()
+            self._terrain_camera_drag = None
+        self._set_terrain_sculpt_ui(bool(enabled) and self._terrain_brush_context_enabled())
         self._sync_clean_viewport_presentation()
+        self.terrainSculptModeChanged.emit(bool(enabled))
+
+    def _set_terrain_sculpt_ui(self, active: bool) -> None:
+        """Swap generic object controls for the focused terrain workspace."""
+
+        enabled = bool(active)
+        set_input_lock = getattr(self.viewport, "set_map_studio_terrain_sculpt_input_lock", None)
+        if callable(set_input_lock):
+            set_input_lock(enabled)
+        else:
+            setattr(self.viewport, "_gr_map_studio_terrain_sculpt_input_lock", enabled)
+        set_selected = getattr(self.viewport, "set_selected_node", None)
+        renderer = getattr(self.viewport, "_renderer", None)
+        selected_node = getattr(renderer, "selected_node", None)
+        if enabled:
+            if selected_node is not None:
+                self._terrain_sculpt_previous_selected_node = selected_node
+                if callable(set_selected):
+                    set_selected(None, source="terrain sculpt")
+            clear_universal = getattr(self.viewport, "clear_map_studio_universal_transform_overlay", None)
+            if callable(clear_universal):
+                clear_universal()
+        elif self._terrain_sculpt_was_active:
+            previous = self._terrain_sculpt_previous_selected_node
+            self._terrain_sculpt_previous_selected_node = None
+            if previous is not None and callable(set_selected):
+                set_selected(previous, source="terrain sculpt exit")
+            self._sync_universal_transform_overlay(self._universal_transform_overlay)
+        self._terrain_sculpt_was_active = enabled
+        self.terrain_sculpt_shelf.setVisible(enabled)
+        self.marker_summary_label.setVisible(not enabled)
+        for widget in (self.translate_gizmo_button, self.rotate_gizmo_button, self.scale_gizmo_button):
+            widget.setVisible(not enabled)
+        self.snap_box.setVisible(not enabled)
+
+    def _terrain_shelf_options_changed(
+        self,
+        radius: int,
+        hardness: float,
+        strength: float,
+        delta: float,
+    ) -> None:
+        self._terrain_brush_context["radius"] = max(0, min(64, int(radius)))
+        self._terrain_brush_context["hardness"] = self._clamp_terrain_brush_hardness(hardness)
+        self._terrain_brush_context["strength"] = self._clamp_terrain_brush_hardness(strength)
+        self._terrain_brush_context["delta"] = max(0.01, float(delta))
+        self.terrainBrushOptionsChanged.emit(int(radius), float(hardness))
+        self.terrainBrushStrengthChanged.emit(float(strength))
+        self.terrainBrushDeltaChanged.emit(float(delta))
+
+    def _set_terrain_walkability_visible(self, visible: bool) -> None:
+        self._sync_clean_viewport_presentation()
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True, reason="terrain slope overlay toggled", overlay=True, hud=True)
+
+    def _set_terrain_camera_top(self) -> None:
+        setter = getattr(self.viewport, "_set_camera_view", None)
+        if callable(setter):
+            setter("top")
+
+    def _set_terrain_camera_angled(self) -> None:
+        camera = getattr(self.viewport, "camera", None)
+        if camera is not None:
+            camera.azimuth = -45.0
+            camera.elevation = 42.0
+        self._frame_terrain()
+
+    def _frame_terrain(self) -> None:
+        frame = getattr(self.viewport, "frame_all", None)
+        if callable(frame):
+            frame()
+
+    def _resize_terrain_brush_from_wheel(self, event: QtCore.QEvent) -> bool:
+        if not self._terrain_brush_context_enabled():
+            return False
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        if not bool(modifiers & QtCore.Qt.ShiftModifier):
+            return False
+        angle_delta = getattr(event, "angleDelta", lambda: QtCore.QPoint())()
+        steps = int(round(float(angle_delta.y()) / 120.0))
+        if steps == 0:
+            return True
+        radius = max(0, min(64, int(self._terrain_brush_context.get("radius", 0) or 0) + steps))
+        hardness = self._clamp_terrain_brush_hardness(self._terrain_brush_context.get("hardness", 0.5))
+        self._terrain_brush_context["radius"] = radius
+        self.terrain_sculpt_shelf.set_options(
+            radius=radius,
+            hardness=hardness,
+            strength=float(self._terrain_brush_context.get("strength", 0.5) or 0.5),
+            delta=float(self._terrain_brush_context.get("delta", 0.1) or 0.1),
+        )
+        self.terrainBrushOptionsChanged.emit(radius, hardness)
+        self._terrain_sample_at_event(event)
+        return True
+
+    def _begin_terrain_camera_drag(
+        self,
+        event: QtCore.QEvent,
+        *,
+        navigation: str = "orbit",
+        button=QtCore.Qt.RightButton,
+    ) -> bool:
+        position = self._event_position(event)
+        if position is None:
+            return False
+        self._terrain_camera_drag = {
+            "last": position,
+            "navigation": "pan" if str(navigation).lower() == "pan" else "orbit",
+            "button": button,
+        }
+        return True
+
+    def _update_terrain_camera_drag(self, event: QtCore.QEvent) -> bool:
+        if self._terrain_camera_drag is None:
+            return False
+        position = self._event_position(event)
+        if position is None:
+            return True
+        previous = tuple(self._terrain_camera_drag.get("last", position))
+        dx = float(position[0]) - float(previous[0])
+        dy = float(position[1]) - float(previous[1])
+        self._terrain_camera_drag["last"] = position
+        camera = getattr(self.viewport, "camera", None)
+        if camera is not None and (abs(dx) > 0.0 or abs(dy) > 0.0):
+            navigation = str(self._terrain_camera_drag.get("navigation", "orbit") or "orbit")
+            if navigation == "pan":
+                canvas = getattr(self.viewport, "canvas", None)
+                viewport_height = max(1, int(getattr(canvas, "height", lambda: 1)()))
+                camera.pan(dx, dy, viewport_height)
+            else:
+                camera.orbit(dx * 0.4, -dy * 0.4)
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason=f"terrain sculpt camera {navigation}", camera=True, overlay=True)
+        return True
+
+    def _finish_terrain_camera_drag(self) -> bool:
+        if self._terrain_camera_drag is None:
+            return False
+        self._terrain_camera_drag = None
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(reason="terrain sculpt camera orbit ended", camera=True, overlay=True)
+        return True
 
     def _terrain_brush_context_enabled(self) -> bool:
         context = self._terrain_brush_context
@@ -7256,12 +7848,26 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "summary": map_studio_hover_context_summary(context),
                 "placement_drop": self._map_placement_drag_payload is not None,
                 "placement_label": str(
-                    (self._map_placement_drag_payload or {}).get("template_resref")
+                    (self._map_placement_drag_payload or {}).get("label")
+                    or (self._map_placement_drag_payload or {}).get("template_resref")
+                    or (self._map_placement_drag_payload or {}).get("asset_id")
                     or (self._map_placement_drag_payload or {}).get("kind")
                     or "object"
                 ),
+                "magnet_snapped": bool((self._terrain_kit_snap_preview or {}).get("magnet_snapped", False)),
+                "snapped_world_point": tuple((self._terrain_kit_snap_preview or {}).get("position", ()) or ()),
+                "magnet_target_label": str(
+                    (self._terrain_kit_snap_preview or {}).get("target_room_resref")
+                    or (self._terrain_kit_snap_preview or {}).get("target_piece_id")
+                    or "kit edge"
+                ),
             }
         )
+
+    def set_terrain_kit_snap_preview(self, payload: object | None) -> None:
+        """Receive controller-resolved drag preview state without mutating KMAP."""
+
+        self._terrain_kit_snap_preview = dict(payload) if isinstance(payload, dict) else None
 
     def _rendered_placement_at_event(self, event: QtCore.QEvent) -> str:
         """Return the nearest actual-model placement under the pointer."""
@@ -7394,6 +8000,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         radius = self._terrain_world_brush_radius()
         room_resref = str(self._terrain_brush_context.get("room_resref", "") or "")
         brush = str(self._terrain_brush_context.get("brush", "") or "")
+        color_role = {
+            "raise": "accent",
+            "lower": "info",
+            "smooth": "secondary",
+            "flatten": "warning",
+            "erase": "error",
+        }.get(brush, "accent")
         setter(
             {
                 "room_resref": room_resref,
@@ -7403,7 +8016,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "world_radius_position": (float(world[0]) + radius, float(world[1]), float(world[2]) + 0.035),
                 "radius_samples": max(0, int(self._terrain_brush_context.get("radius", 0) or 0)),
                 "hardness": self._clamp_terrain_brush_hardness(self._terrain_brush_context.get("hardness", 0.5)),
-                "color": "#00ff7a" if brush not in {"lower"} else "#55a7ff",
+                "color_role": color_role,
+                "color": "#00e5ff" if brush != "lower" else "#55a7ff",
             }
         )
 
@@ -7435,6 +8049,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def _begin_terrain_brush_drag(self, sample: tuple[int, int, float], event: QtCore.QEvent) -> bool:
         room_resref = str(self._terrain_brush_context.get("room_resref", "") or "").strip()
         brush = str(self._terrain_brush_context.get("brush", "") or "").strip()
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        if brush == "raise" and bool(modifiers & QtCore.Qt.ShiftModifier):
+            brush = "lower"
         if not room_resref or not brush:
             return False
         self._terrain_brush_drag = {
@@ -7453,10 +8070,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         start = self._event_position(event)
         if start is None:
             return False
+        world = self._terrain_world_at_screen(float(start[0]), float(start[1]))
+        sample = self._terrain_world_to_sample(world) if world is not None else None
         self._terrain_brush_option_drag = {
             "start_screen": start,
             "start_radius": max(0, int(self._terrain_brush_context.get("radius", 0) or 0)),
             "start_hardness": self._clamp_terrain_brush_hardness(self._terrain_brush_context.get("hardness", 0.5)),
+            "world_position": world,
+            "sample": sample,
         }
         self._update_terrain_brush_option_drag(event)
         return True
@@ -7478,6 +8099,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._terrain_brush_context["hardness"] = hardness
         self.marker_summary_label.setText(f"Terrain brush: size {radius}, hardness {hardness:.2f}")
         self.terrainBrushOptionsChanged.emit(radius, hardness)
+        world = self._terrain_brush_option_drag.get("world_position")
+        sample = self._terrain_brush_option_drag.get("sample")
+        if isinstance(world, (tuple, list)) and len(world) >= 3 and isinstance(sample, (tuple, list)) and len(sample) >= 2:
+            self._set_terrain_brush_cursor(tuple(world[:3]), tuple(sample[:3]))
         return True
 
     def _finish_terrain_brush_option_drag(self, event: QtCore.QEvent | None = None) -> bool:
@@ -7525,7 +8150,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             # Emit only the new segment.  Re-sending the accumulated trail on
             # every mouse move repeatedly sculpted old cells and made strokes
             # grow lumpy/over-strength.
-            self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(segment))
+            # Keep every interpolated heightfield sample.  Large pointer jumps
+            # are divided into small live patches instead of coalescing away
+            # cells and leaving dotted gaps in quick ZBrush-style strokes.
+            for start_index in range(0, len(segment), 8):
+                self.terrainBrushFrameRequested.emit(
+                    brush,
+                    room_resref,
+                    tuple(segment[start_index : start_index + 8]),
+                )
         return True
 
     def _finish_terrain_brush_drag(self, event: QtCore.QEvent | None = None) -> bool:
@@ -7610,7 +8243,32 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if marker is None or start_screen is None:
             self._marker_drag = None
             return False
+        modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        selected = self.selected_gameplay_placement_ids()
+        if bool(modifiers & QtCore.Qt.AltModifier):
+            selected = [value for value in selected if value != str(placement_id)]
+            self.set_selected_gameplay_placement_ids(selected)
+            self.itemsSelected.emit(tuple(selected))
+            self._marker_drag = None
+            return True
+        if bool(modifiers & QtCore.Qt.ShiftModifier):
+            if str(placement_id) not in selected:
+                selected.append(str(placement_id))
+            self.set_selected_gameplay_placement_ids(selected)
+            self.itemsSelected.emit(tuple(selected))
+            self._marker_drag = None
+            return True
+        if str(placement_id) not in selected:
+            selected = [str(placement_id)]
+        self.set_selected_gameplay_placement_ids(selected)
+        if len(selected) > 1:
+            self.itemsSelected.emit(tuple(selected))
+        else:
+            self.itemSelected.emit(str(placement_id))
         mode = self.transform_gizmo_mode()
+        if len(selected) > 1 and mode != "translate":
+            mode = "translate"
+            self.set_transform_gizmo_mode("translate", announce=False)
         if mode == "scale":
             self.marker_summary_label.setText(
                 "KOTOR GIT placements do not support arbitrary scale. Change the source blueprint/model instead."
@@ -7622,6 +8280,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         preview_rotation = tuple(getattr(preview_node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
         self._marker_drag = {
             "placement_id": str(placement_id),
+            "selection": tuple(selected),
             "start_screen": start_screen,
             "start_position": start_position,
             "bearing": float(getattr(marker, "bearing", 0.0) or 0.0),
@@ -7633,6 +8292,22 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "preview_node": preview_node,
             "preview_start_position": tuple(getattr(preview_node, "position", start_position) or start_position),
             "preview_start_rotation": preview_rotation,
+            "preview_baselines": tuple(
+                {
+                    "placement_id": selected_id,
+                    "node": self._placement_preview_node(selected_id),
+                    "node_position": tuple(
+                        getattr(
+                            self._placement_preview_node(selected_id),
+                            "position",
+                            self._marker_position(self._placement_markers[selected_id]),
+                        )
+                        or self._marker_position(self._placement_markers[selected_id])
+                    ),
+                }
+                for selected_id in selected
+                if selected_id in self._placement_markers
+            ),
         }
         self._sync_clean_viewport_presentation()
         return True
@@ -7666,6 +8341,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if pending is not None:
             self._marker_drag["active"] = True
             self._marker_drag["pending_position"] = pending
+            start_position = tuple(self._marker_drag.get("start_position", (0.0, 0.0, 0.0)))
+            self._marker_drag["pending_delta"] = tuple(
+                float(pending[index]) - float(start_position[index]) for index in range(3)
+            )
             self._preview_marker_drag_transform()
         return True
 
@@ -7683,10 +8362,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if len(position) < 3:
             return True
         bearing = float(drag.get("pending_bearing", drag.get("bearing", 0.0)) or 0.0)
-        self.transformEdited.emit(
-            str(drag.get("placement_id", "") or ""),
-            LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
-        )
+        selection = tuple(drag.get("selection", ()) or ())
+        if len(selection) > 1 and str(drag.get("mode") or "translate") == "translate":
+            self.placementsTranslated.emit(
+                {"placement_ids": selection, "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))}
+            )
+        else:
+            self.transformEdited.emit(
+                str(drag.get("placement_id", "") or ""),
+                LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
+            )
         return True
 
     def _begin_room_outline_point_drag(self, hit: tuple[str, int, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
@@ -7922,6 +8607,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if ctrl or alt or shift:
             return False
         active_tool = getattr(self, "_active_map_studio_modeling_tool", None)
+        if self._building_tool == "walls" and key in {QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Delete}:
+            if self._building_points:
+                self._building_points.pop()
+                self._sync_building_preview()
+                self.marker_summary_label.setText(
+                    f"Draw Walls: removed the last corner; {len(self._building_points)} remain."
+                )
+            return True
+        if self._building_tool == "walls" and key == QtCore.Qt.Key_Escape:
+            self._building_points.clear()
+            self._building_hover_world = None
+            self._sync_building_preview()
+            self.marker_summary_label.setText("Draw Walls path cancelled; the tool remains active.")
+            return True
         active_multi_cut = (
             active_tool
             if isinstance(active_tool, dict) and str(active_tool.get("key") or "") == "multi_cut"
@@ -8380,16 +9079,21 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         room_resref, primitive_name, world_center = hit
         key = (str(room_resref or ""), str(primitive_name or ""))
         modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        if modifiers & QtCore.Qt.AltModifier:
+            selected = [value for value in self.selected_room_primitives() if value != key]
+            self.set_selected_room_primitives(selected)
+            self.roomPrimitivesSelected.emit(selected)
+            self._room_primitive_drag = None
+            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Alt-click removed {primitive_name}.")
+            return True
         if modifiers & QtCore.Qt.ShiftModifier:
             selected = self.selected_room_primitives()
-            if key in selected:
-                selected.remove(key)
-            else:
+            if key not in selected:
                 selected.append(key)
             self.set_selected_room_primitives(selected)
             self.roomPrimitivesSelected.emit(selected)
             self._room_primitive_drag = None
-            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Combine, move, or separate from the tool belt.")
+            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Drag any selected object to move the group.")
             return True
         selected = self.selected_room_primitives()
         # Clicking an already-selected object keeps the complete selection,
@@ -8485,6 +9189,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 return node
         return None
 
+    def _authored_room_light_preview_node(self, light_id: str):
+        """Find the live preview light matching an authored outliner id."""
+
+        identity = str(light_id or "").strip()
+        if not identity.startswith("authored_light:"):
+            return None
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        stack = list(tuple(getattr(root, "children", ()) or ()))
+        while stack:
+            node = stack.pop()
+            if str(getattr(node, "_gr_light_id", "") or "") == identity and bool(
+                getattr(node, "_gr_map_studio_authored_light", False)
+            ):
+                return node
+            stack.extend(tuple(getattr(node, "children", ()) or ()))
+        return None
+
     @staticmethod
     def _quat_multiply_xyzw(left, right) -> tuple[float, float, float, float]:
         lx, ly, lz, lw = (float(value) for value in tuple(left)[:4])
@@ -8514,18 +9235,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if drag is None:
             return
         node = drag.get("preview_node")
-        if node is None:
-            return
         self._mark_room_preview_model_promoted()
         mode = str(drag.get("mode", "translate") or "translate")
         if mode == "rotate":
+            if node is None:
+                return
             delta = float(drag.get("pending_bearing", 0.0) or 0.0) - float(drag.get("bearing", 0.0) or 0.0)
             half = delta * 0.5
             z_rotation = (0.0, 0.0, math.sin(half), math.cos(half))
             start_rotation = tuple(drag.get("preview_start_rotation", (0.0, 0.0, 0.0, 1.0)))
             node.rotation = self._quat_multiply_xyzw(z_rotation, start_rotation)
         else:
-            node.position = tuple(drag.get("pending_position", drag.get("preview_start_position", (0.0, 0.0, 0.0))))
+            delta = tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))
+            for baseline in tuple(drag.get("preview_baselines", ()) or ()):
+                preview_node = baseline.get("node")
+                if preview_node is None:
+                    continue
+                start = tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))
+                preview_node.position = tuple(float(start[index]) + float(delta[index]) for index in range(3))
         # The hover buckets include model-space positions, so invalidate them
         # while the lightweight proxy moves.  This is far cheaper than the old
         # broad _refresh_all on every mouse frame.
@@ -8797,7 +9524,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "show_primitive_labels": False,
             "show_transform_dimensions": primitive_drag_active or self.transform_gizmo_mode() == "scale",
             "show_gimbal_labels": False,
-            "show_terrain_walkability": terrain_active or walkmesh_active,
+            # Sculpt Mode owns this diagnostic explicitly.  The historical
+            # Terrain component mode also sets ``walkmesh_active``; allowing
+            # that state to win here made the green WOK triangles stay on even
+            # when the shelf checkbox was visibly unchecked.
+            "show_terrain_walkability": (
+                bool(self.terrain_sculpt_shelf.walkability_box.isChecked())
+                if terrain_active
+                else walkmesh_active
+            ),
             "show_terrain_brush": terrain_active,
             "show_placement_guides": self._marker_drag is not None,
         }
@@ -9131,6 +9866,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []
         if not rows:
+            return
+        selected_ids = [self._row_ids[index.row()] for index in rows if 0 <= index.row() < len(self._row_ids)]
+        if len(selected_ids) > 1:
+            self.itemsSelected.emit(tuple(selected_ids))
             return
         row = rows[0].row()
         if 0 <= row < len(self._row_ids):

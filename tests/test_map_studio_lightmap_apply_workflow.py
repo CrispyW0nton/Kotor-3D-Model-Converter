@@ -7,6 +7,7 @@ import struct
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -98,6 +99,54 @@ def _project(*, with_uv2: bool = False):
         extra={"unknown_project_data": {"preserve": True}},
     )
     return project, wok
+
+
+def _shadow_project(*, with_blocker: bool):
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
+    from src.core.modules.authored_module_lighting import AuthoredRoomLight
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+
+    surfaces = [_surface(with_uv2=True)]
+    if with_blocker:
+        surfaces.append(
+            ImportedMeshSurface(
+                name="ceiling_blocker",
+                texture="blocker",
+                vertices=(
+                    (0.55, 0.55, 1.0),
+                    (1.45, 0.55, 1.0),
+                    (1.45, 1.45, 1.0),
+                    (0.55, 1.45, 1.0),
+                ),
+                faces=((0, 1, 2), (0, 2, 3)),
+                face_mats=(0, 0),
+                uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+                normals=((0.0, 0.0, -1.0),) * 4,
+            )
+        )
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="shadow_room",
+        surfaces=tuple(surfaces),
+        source_model="shadow_room",
+        game="K2",
+    )
+    return AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="lmshadow", game="K2"),
+        rooms=(AuthoredRoomSpec(room_resref="shadow_room", primitive=primitive),),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="lmshadow")),
+        lights=(
+            AuthoredRoomLight(
+                name="shadow_key",
+                room_resref="shadow_room",
+                position=(1.0, 1.0, 3.0),
+                color=(1.0, 1.0, 1.0),
+                radius=10.0,
+                intensity=4.0,
+                casts_shadows=True,
+            ),
+        ),
+    )
 
 
 def test_map_studio_lightmap_apply_generates_uv2_remaps_and_returns_tga_sidecar() -> None:
@@ -214,6 +263,56 @@ def test_map_studio_lightmap_apply_generates_uv2_remaps_and_returns_tga_sidecar(
     # The workflow owns a normalized copy, not the caller's mutable settings.
     assert settings.output_format == "png"
     assert settings.generate_manifest is True
+
+
+def test_map_studio_selected_surface_bake_uses_every_room_surface_as_shadow_occluder() -> None:
+    from src.core.lighting.lightmap_bake_settings import LightmapBakeSettings
+    from src.core.workflow.map_studio_lightmap_apply import apply_imported_surface_lightmap
+
+    settings = LightmapBakeSettings(
+        resolution=64,
+        bake_resolution=64,
+        padding_pixels=0,
+        dilation_passes=0,
+        use_shadows=True,
+        include_ambient=False,
+        include_diffuse=False,
+        exposure=1.0,
+        gamma=1.0,
+    )
+    blocked_project = _shadow_project(with_blocker=True)
+    clear_project = _shadow_project(with_blocker=False)
+
+    blocked = apply_imported_surface_lightmap(
+        blocked_project,
+        room_resref="shadow_room",
+        surface_role_or_index=0,
+        lightmap_resref="blocked_lm",
+        settings=settings,
+        room_lights=blocked_project.lights,
+    )
+    clear = apply_imported_surface_lightmap(
+        clear_project,
+        room_resref="shadow_room",
+        surface_role_or_index=0,
+        lightmap_resref="clear_lm",
+        settings=settings,
+        room_lights=clear_project.lights,
+    )
+
+    assert blocked.ok, blocked.errors
+    assert clear.ok, clear.errors
+    blocked_pixels = np.frombuffer(blocked.sidecar.rgba_bytes, dtype=np.uint8).reshape((64, 64, 4))
+    clear_pixels = np.frombuffer(clear.sidecar.rgba_bytes, dtype=np.uint8).reshape((64, 64, 4))
+    blocked_center = float(blocked_pixels[32, 32, :3].mean())
+    clear_center = float(clear_pixels[32, 32, :3].mean())
+
+    assert clear_center > 64.0
+    assert blocked_center < clear_center * 0.1
+    assert blocked.sidecar.proof["shadows"] == {
+        "room_occluder_surface_count": 2,
+        "source_rejection": "exact_mesh_triangle",
+    }
 
 
 def test_pykotor_rgba_lightmap_encoder_has_vanilla_structural_shape() -> None:
