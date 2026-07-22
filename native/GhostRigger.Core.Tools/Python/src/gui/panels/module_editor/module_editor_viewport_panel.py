@@ -6341,6 +6341,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.marker_summary_label.setText(
                 f"{key.title()}: move over a cyan wall edge, then click when the hosted preview is green."
             )
+        else:
+            self.marker_summary_label.setText(
+                "Select: click an object; Shift-click adds, Alt-click removes, and Delete removes the complete selection."
+            )
 
     def update_pascal_building_settings(self, settings: object) -> None:
         if isinstance(settings, Mapping):

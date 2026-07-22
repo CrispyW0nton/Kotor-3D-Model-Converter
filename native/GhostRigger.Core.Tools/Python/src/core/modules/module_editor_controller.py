@@ -3137,6 +3137,10 @@ class ModuleEditorController:
         style_id: str = "plcaa_graybox",
         include_ceiling: bool = True,
         floor_surface_id: int | str = 4,
+        building_kind: str = "interior",
+        roof_type: str = "none",
+        roof_pitch_degrees: float = 30.0,
+        roof_overhang: float = 0.25,
     ) -> str:
         """Create one exportable room from a closed direct-wall loop."""
 
@@ -3174,9 +3178,18 @@ class ModuleEditorController:
             style_id=style.style_id,
             style_source_module=style.source_module,
             style_source_room=style.source_room,
+            building_kind=str(building_kind or "interior"),
+            roof_type=str(roof_type or "none"),
+            roof_pitch_degrees=float(roof_pitch_degrees),
+            roof_overhang=float(roof_overhang),
         )
         self._store_authored_project(updated)
-        self.model.log(f"Built room {room_resref} from a closed wall loop on {level_name or f'Level {int(level_index) + 1}' }.")
+        roof_label = str(roof_type or "none").strip().lower()
+        self.model.log(
+            f"Built {str(building_kind or 'interior')} room {room_resref} from a closed wall loop on "
+            f"{level_name or f'Level {int(level_index) + 1}'}"
+            + (f" with a {roof_label} roof." if roof_label != "none" else ".")
+        )
         self._record_map_studio_command(
             action_key="map_studio.building.room.create",
             label=f"Build room {room_resref}",
@@ -3189,6 +3202,10 @@ class ModuleEditorController:
                 "wall_height": float(wall_height),
                 "style_id": style.style_id,
                 "include_ceiling": bool(include_ceiling),
+                "building_kind": str(building_kind or "interior"),
+                "roof_type": roof_label,
+                "roof_pitch_degrees": float(roof_pitch_degrees),
+                "roof_overhang": float(roof_overhang),
             },
         )
         return room_resref

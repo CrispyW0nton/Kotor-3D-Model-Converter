@@ -3092,6 +3092,61 @@ def test_t2907_pascal_opening_preview_matches_commit_and_allows_multiple_windows
     ]
 
 
+def test_t2907_exterior_building_compiles_gable_roof_and_roundtrips() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grexterior", game="K1")
+    room_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (8.0, 0.0), (8.0, 5.0), (0.0, 5.0)),
+        wall_height=3.0,
+        building_kind="exterior",
+        roof_type="gable",
+        roof_pitch_degrees=35.0,
+        roof_overhang=0.35,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    restored = authored_project_from_kmap_payload(authored_project_to_kmap_payload(authored))
+    primitive = restored.rooms[0].primitive
+    geometry = compile_floor_plan_room_geometry(primitive)
+    roofs = tuple(mesh for mesh in geometry.helper_meshes if "_roof_" in mesh.name)
+
+    assert room_resref == "grexteriorr001"
+    assert primitive.metadata["building_kind"] == "exterior"
+    assert primitive.metadata["building_roof_type"] == "gable"
+    assert primitive.metadata["building_roof_pitch_degrees"] == 35.0
+    assert primitive.metadata["building_roof_overhang"] == 0.35
+    assert geometry.metadata["has_roof"] is True
+    assert geometry.metadata["roof_type"] == "gable"
+    assert len(roofs) == 4
+    assert sum(len(mesh.faces) for mesh in roofs) == 6
+    assert all(any(abs(component) > 1.0e-6 for component in mesh.normals[0]) for mesh in roofs)
+    assert all(mesh.texture for mesh in roofs)
+    assert controller.command_history.undo_stack[-1].metadata["roof_type"] == "gable"
+
+    controller.add_map_studio_building_room(
+        points=((10.0, 0.0), (16.0, 0.0), (17.0, 3.0), (14.0, 6.0), (10.0, 4.0)),
+        wall_height=3.0,
+        building_kind="exterior",
+        roof_type="hip",
+        roof_pitch_degrees=25.0,
+        roof_overhang=0.2,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    hip_geometry = compile_floor_plan_room_geometry(authored.rooms[1].primitive)
+    hip_roofs = tuple(mesh for mesh in hip_geometry.helper_meshes if "_roof_hip_" in mesh.name)
+    assert len(hip_roofs) == 5
+    assert hip_geometry.metadata["roof_type"] == "hip"
+    assert controller.command_history.undo_stack[-1].metadata["roof_type"] == "hip"
+
+
 def test_t2907_vanilla_building_style_catalog_learns_surface_roles_and_roundtrips(
     monkeypatch,
     tmp_path: Path,

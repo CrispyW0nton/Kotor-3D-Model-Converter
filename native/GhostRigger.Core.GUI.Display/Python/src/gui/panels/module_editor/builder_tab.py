@@ -220,6 +220,21 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingCeilingCheckBox = QtWidgets.QCheckBox("Create ceiling", building_box)
         self.buildingCeilingCheckBox.setObjectName("mapStudioBuildingCeilingCheckBox")
         self.buildingCeilingCheckBox.setChecked(True)
+        self.buildingRoofTypeComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingRoofTypeComboBox.setObjectName("mapStudioBuildingRoofTypeComboBox")
+        self.buildingRoofTypeComboBox.addItem("No exterior roof", "none")
+        self.buildingRoofTypeComboBox.addItem("Flat roof", "flat")
+        self.buildingRoofTypeComboBox.addItem("Pitched / hip roof", "hip")
+        self.buildingRoofTypeComboBox.addItem("Gable roof", "gable")
+        self.buildingRoofTypeComboBox.setToolTip(
+            "Exterior mode defaults to an engine-safe pitched roof for any closed footprint. Gable is available for rectangular rooms."
+        )
+        self.buildingRoofPitchSpinBox = self._make_transform_spin(
+            "mapStudioBuildingRoofPitchSpinBox", 5.0, 70.0, "°", value=30.0, step=1.0
+        )
+        self.buildingRoofOverhangSpinBox = self._make_transform_spin(
+            "mapStudioBuildingRoofOverhangSpinBox", 0.0, 5.0, " m", value=0.25, step=0.05
+        )
         self.buildingOpeningWidthSpinBox = self._make_transform_spin(
             "mapStudioBuildingOpeningWidthSpinBox", 0.25, 20.0, " m", value=1.25, step=0.05
         )
@@ -253,6 +268,9 @@ class BuilderTab(QtWidgets.QWidget):
         building_settings_form.addRow("Grid:", self.buildingGridSizeSpinBox)
         building_settings_form.addRow(self.buildingSnapCheckBox)
         building_settings_form.addRow(self.buildingCeilingCheckBox)
+        building_settings_form.addRow("Exterior roof:", self.buildingRoofTypeComboBox)
+        building_settings_form.addRow("Roof pitch:", self.buildingRoofPitchSpinBox)
+        building_settings_form.addRow("Roof overhang:", self.buildingRoofOverhangSpinBox)
         building_settings_form.addRow("Opening width:", self.buildingOpeningWidthSpinBox)
         building_settings_form.addRow("Door height:", self.buildingOpeningHeightSpinBox)
         building_settings_form.addRow("Window height:", self.buildingWindowHeightSpinBox)
@@ -1243,8 +1261,9 @@ class BuilderTab(QtWidgets.QWidget):
             button.clicked.connect(lambda _checked=False, tool=key: self._emit_building_tool(tool))
         self.addBuildingLevelButton.clicked.connect(self._add_building_level)
         self.buildingLevelComboBox.currentIndexChanged.connect(self._on_building_level_changed)
-        self.buildingKindComboBox.currentIndexChanged.connect(self._rebuild_building_style_choices)
+        self.buildingKindComboBox.currentIndexChanged.connect(self._on_building_kind_changed)
         self.buildingStyleComboBox.currentIndexChanged.connect(self._on_building_style_changed)
+        self.buildingRoofTypeComboBox.currentIndexChanged.connect(self._update_building_roof_controls)
         for control in (
             self.buildingStyleComboBox,
             self.buildingWallHeightSpinBox,
@@ -1252,6 +1271,9 @@ class BuilderTab(QtWidgets.QWidget):
             self.buildingGridSizeSpinBox,
             self.buildingSnapCheckBox,
             self.buildingCeilingCheckBox,
+            self.buildingRoofTypeComboBox,
+            self.buildingRoofPitchSpinBox,
+            self.buildingRoofOverhangSpinBox,
             self.buildingOpeningWidthSpinBox,
             self.buildingOpeningHeightSpinBox,
             self.buildingWindowHeightSpinBox,
@@ -1343,6 +1365,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.clearScriptHookButton.clicked.connect(self._emit_clear_script_hook)
         self.editScriptHookButton.clicked.connect(self._emit_edit_script_hook)
         self._update_operation_controls()
+        self._update_building_roof_controls()
         self._update_modeling_tool_hint()
         self.set_terrain_room_choices(())
         self.set_terrain_shape_presets(())
@@ -1405,6 +1428,10 @@ class BuilderTab(QtWidgets.QWidget):
             "grid_size": float(self.buildingGridSizeSpinBox.value()),
             "snap_to_grid": bool(self.buildingSnapCheckBox.isChecked()),
             "include_ceiling": bool(self.buildingCeilingCheckBox.isChecked()),
+            "building_kind": str(self.buildingKindComboBox.currentData() or "interior"),
+            "roof_type": str(self.buildingRoofTypeComboBox.currentData() or "none"),
+            "roof_pitch_degrees": float(self.buildingRoofPitchSpinBox.value()),
+            "roof_overhang": float(self.buildingRoofOverhangSpinBox.value()),
             "style_id": str(style.get("style_id") or "plcaa_graybox"),
             "opening_width": float(self.buildingOpeningWidthSpinBox.value()),
             "opening_height": float(self.buildingOpeningHeightSpinBox.value()),
@@ -1433,6 +1460,25 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingFloorZSpinBox.setValue(float(level.get("floor_z", 0.0) or 0.0))
         self.buildingFloorZSpinBox.blockSignals(False)
         self._emit_building_settings()
+
+    def _apply_default_roof_for_kind(self, kind: str) -> None:
+        roof_type = "hip" if str(kind or "").strip().lower() == "exterior" else "none"
+        roof_index = self.buildingRoofTypeComboBox.findData(roof_type)
+        if roof_index >= 0:
+            self.buildingRoofTypeComboBox.blockSignals(True)
+            self.buildingRoofTypeComboBox.setCurrentIndex(roof_index)
+            self.buildingRoofTypeComboBox.blockSignals(False)
+        self._update_building_roof_controls()
+
+    def _update_building_roof_controls(self, _index: int = -1) -> None:
+        pitched = str(self.buildingRoofTypeComboBox.currentData() or "none") in {"hip", "gable"}
+        self.buildingRoofPitchSpinBox.setEnabled(pitched)
+        self.buildingRoofOverhangSpinBox.setEnabled(pitched)
+
+    def _on_building_kind_changed(self, index: int = -1) -> None:
+        kind = str(self.buildingKindComboBox.itemData(index) if index >= 0 else self.buildingKindComboBox.currentData() or "")
+        self._apply_default_roof_for_kind(kind)
+        self._rebuild_building_style_choices(index)
 
     def _add_building_level(self) -> None:
         next_index = max(
@@ -1504,6 +1550,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.buildingKindComboBox.blockSignals(True)
             self.buildingKindComboBox.setCurrentIndex(kind_index)
             self.buildingKindComboBox.blockSignals(False)
+            self._apply_default_roof_for_kind(kind)
         self._rebuild_building_style_choices(preferred_style_id=wanted)
         return True
 
@@ -1513,7 +1560,12 @@ class BuilderTab(QtWidgets.QWidget):
         kind = str(row.get("environment_kind") or self.buildingKindComboBox.currentData() or "both")
         source = str(row.get("source_module") or "PLCaa")
         self.buildingStatusLabel.setText(
-            f"{self.buildingStyleComboBox.currentText()} selected from {source}. Draw Walls uses this palette; the kit browser shows matching pieces."
+            f"{self.buildingStyleComboBox.currentText()} selected from {source}. Draw Walls uses this palette; "
+            + (
+                f"the closed footprint will include a {str(self.buildingRoofTypeComboBox.currentText()).lower()}."
+                if str(self.buildingRoofTypeComboBox.currentData() or "none") != "none"
+                else "the kit browser shows matching pieces."
+            )
         )
         self.buildingStyleChanged.emit(style_id, kind)
         self._emit_building_settings()

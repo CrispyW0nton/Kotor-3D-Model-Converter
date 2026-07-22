@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "b89be51de856d2fa8a62ea5f6bec637fe162da95130498fae89441c682de5bea"
+            "sha256": "3be20897f7f2fb883a8bc6afe18a56fa1d20344719cee5ebdacb636614d90b77"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "1d904c4a3020258c6e3fc7048260c625a86b71d39e9c22084db4734f1b34ac41"
+            "sha256": "fd032a02cae809b11ff3aad5ec61c2b2909a9a746f07aba132189a55719234ec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
@@ -615,7 +615,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "9ee0f62105e20cff36218d9ae13e856a95da84d92094f758e74ee22c04bf8935"
+            "sha256": "f444c2d49bf68dc134ed627c1dd5c107da72e490c0134e66b1c0da90281b308f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

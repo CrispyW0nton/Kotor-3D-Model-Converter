@@ -4194,7 +4194,16 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
         assert settings[-1]["wall_height"] == 3.5
         assert settings[-1]["opening_height"] == 2.2
         assert settings[-1]["window_height"] == 1.2
+        assert settings[-1]["building_kind"] == "interior"
+        assert settings[-1]["roof_type"] == "none"
         assert settings[-1]["style_id"] == "plcaa_graybox"
+
+        exterior_index = builder.buildingKindComboBox.findData("exterior")
+        builder.buildingKindComboBox.setCurrentIndex(exterior_index)
+        assert builder._building_settings()["building_kind"] == "exterior"
+        assert builder._building_settings()["roof_type"] == "hip"
+        assert builder._building_settings()["roof_pitch_degrees"] == 30.0
+        assert builder._building_settings()["roof_overhang"] == 0.25
     finally:
         builder.close()
         app.processEvents()
@@ -4226,6 +4235,7 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
             "ray_from_mouse",
             "snap_to_grid",
             "Click the first corner to close",
+            "Shift-click adds, Alt-click removes",
             "Key_Backspace",
             "Key_Escape",
         ):
@@ -4245,3 +4255,8 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     assert "multi_opening_fill" in _read(
         "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py"
     )
+    floorplan_source = _read(
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py"
+    )
+    assert "def build_floor_plan_roof_meshes" in floorplan_source
+    assert '"Gable roofs currently require a rectangular room footprint."' in floorplan_source

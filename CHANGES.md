@@ -11,6 +11,49 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-22
 
+### [2026-07-22] T2907 Exterior building roof presets and staged workflow proof
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal-style exterior authoring, floor-plan geometry
+compiler, Build workflow controls, selection feedback, controller history, and
+embedded Scene/Tools/GUI Display payloads.
+
+Exterior buildings are now meaningfully different from interior rooms. Choosing
+**Exterior buildings** automatically selects an engine-safe **Pitched / hip
+roof** that accepts any valid closed footprint; Flat and rectangular Gable
+presets remain available under Building settings with editable pitch and
+overhang. Roof faces use the selected vanilla style's learned roof/ceiling
+material, geometry-derived normals, planar UVs, bounded triangle counts, and
+compile as helper meshes in the same Odyssey room MDL rather than as a loose
+prop. The room, walls, ceiling, roof, and WOK therefore select, move, delete,
+undo, save, and export as one authored building. KMAP stores exterior/roof
+intent and all roof dimensions; controller history records the same values.
+
+The first staged gesture exposed that a screen rectangle in Top view can become
+a non-axis-aligned world footprint. Gable correctly remains rectangle-only,
+but is no longer the fragile default: the hip preset radially offsets every
+eave and builds one pitched triangle per footprint edge around a computed apex.
+Switching back to Select also replaces stale wall-drawing text with the Maya
+selection reminder: click, Shift-click to add, Alt-click to remove, and Delete
+for the complete selection.
+
+Intersects: the same T2907 Pascal environment-kit, hosted-opening,
+multi-selection, Player Start, and transient-overlay work on `ghost-studio`;
+all prior payload mirrors and behavior were preserved.
+
+Verification: focused exterior-roof compilation/KMAP round-trip, rectangular
+gable, arbitrary five-sided hip roof, Build-widget defaults, hosted openings,
+and viewport source contracts pass; native payload contracts pass. Changed
+Python files compile. Scene, Tools, and GUI Display Debug x64 DLLs were rebuilt
+and all 18 payload DLLs staged. In the actual staged GhostStudio app, choosing
+Build > Exterior buildings automatically selected Pitched / hip roof; drawing
+and closing one Top-view footprint created `new_levelr001` without a dialog.
+Top and Front views showed the textured pitched roof over the wall shell, and
+saving/re-reading `exterior_hip_proof.kmap` confirmed `building_kind=exterior`,
+`building_roof_type=hip`, 30-degree pitch, 0.25 m overhang, and the PLCaa style
+provenance.
+
 ### [2026-07-22] T2907 Hosted door/window preview and multi-opening walls
 
 Owner: LordVaderCW

@@ -364,6 +364,10 @@ def add_pascal_building_room(
     style_id: str = "plcaa_graybox",
     style_source_module: str = "plcaa",
     style_source_room: str = "",
+    building_kind: str = "interior",
+    roof_type: str = "none",
+    roof_pitch_degrees: float = 30.0,
+    roof_overhang: float = 0.25,
 ) -> tuple[AuthoredModuleProject, str]:
     """Append one closed wall loop as an exportable KOTOR room."""
 
@@ -373,6 +377,18 @@ def add_pascal_building_room(
         raise ValueError("Building floor elevation must be finite.")
     if not math.isfinite(height) or height <= 0.05:
         raise ValueError("Building wall height must be greater than 0.05 m.")
+    kind = str(building_kind or "interior").strip().lower()
+    if kind not in {"interior", "exterior"}:
+        kind = "interior"
+    roof = str(roof_type or "none").strip().lower()
+    if roof not in {"none", "flat", "hip", "gable"}:
+        raise ValueError("Roof preset must be None, Flat, Pitched/Hip, or Gable.")
+    pitch = float(roof_pitch_degrees)
+    overhang = float(roof_overhang)
+    if not math.isfinite(pitch) or pitch < 5.0 or pitch > 70.0:
+        raise ValueError("Roof pitch must be between 5 and 70 degrees.")
+    if not math.isfinite(overhang) or overhang < 0.0 or overhang > 5.0:
+        raise ValueError("Roof overhang must be between 0 and 5 metres.")
     room_resref = _next_room_resref(project)
     source = {
         "source": "map_studio:pascal_building",
@@ -397,6 +413,10 @@ def add_pascal_building_room(
             **source,
             "building_level_index": int(level_index),
             "building_level_name": str(level_name or f"Level {int(level_index) + 1}"),
+            "building_kind": kind,
+            "building_roof_type": roof,
+            "building_roof_pitch_degrees": pitch,
+            "building_roof_overhang": overhang,
             "closed_wall_loop": True,
             "pascal_graph_node": "room",
         },
@@ -414,6 +434,8 @@ def add_pascal_building_room(
             "source": "map_studio:pascal_building",
             "building_level_index": int(level_index),
             "building_level_name": str(level_name or f"Level {int(level_index) + 1}"),
+            "building_kind": kind,
+            "building_roof_type": roof,
             "style_id": str(style_id or "custom"),
         },
     )

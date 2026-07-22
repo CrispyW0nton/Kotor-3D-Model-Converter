@@ -10693,6 +10693,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 level_name=str(values.get("level_name") or ""),
                 style_id=str(values.get("style_id") or "plcaa_graybox"),
                 include_ceiling=bool(values.get("include_ceiling", True)),
+                building_kind=str(values.get("building_kind") or "interior"),
+                roof_type=str(values.get("roof_type") or "none"),
+                roof_pitch_degrees=float(values.get("roof_pitch_degrees", 30.0) or 30.0),
+                roof_overhang=float(values.get("roof_overhang", 0.25) or 0.0),
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Build Room", str(exc))

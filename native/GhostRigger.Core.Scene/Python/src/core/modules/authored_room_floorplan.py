@@ -339,6 +339,67 @@ def _quad_mesh(
     )
 
 
+def _planar_uvs(vertices: tuple[Vec3, ...]) -> tuple[Vec2, ...]:
+    """Project one planar helper mesh onto its two widest local axes."""
+
+    spans = []
+    for axis in range(3):
+        values = [float(vertex[axis]) for vertex in vertices]
+        spans.append((max(values) - min(values), axis))
+    axes = [axis for _span, axis in sorted(spans, reverse=True)[:2]]
+    first = [float(vertex[axes[0]]) for vertex in vertices]
+    second = [float(vertex[axes[1]]) for vertex in vertices]
+    min_first, min_second = min(first), min(second)
+    first_span = max(max(first) - min_first, 1.0e-7)
+    second_span = max(max(second) - min_second, 1.0e-7)
+    return tuple(
+        ((value_first - min_first) / first_span, (value_second - min_second) / second_span)
+        for value_first, value_second in zip(first, second)
+    )
+
+
+def _planar_surface_mesh(
+    *,
+    name: str,
+    vertices: tuple[Vec3, ...],
+    faces: tuple[Face, ...],
+    material: PrimitiveMaterial,
+    metadata: dict[str, Any],
+) -> PrimitiveMesh:
+    """Build one flat-shaded roof panel with a geometry-derived normal."""
+
+    if not faces or len(vertices) < 3:
+        raise ValueError("A roof surface requires at least one triangle.")
+    first_face = faces[0]
+    a, b, c = (vertices[index] for index in first_face)
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ac = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    normal = (
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    )
+    length = math.sqrt(sum(component * component for component in normal))
+    if length <= 1.0e-9:
+        raise ValueError("A roof surface cannot contain a degenerate triangle.")
+    unit = tuple(component / length for component in normal)
+    return PrimitiveMesh(
+        name=name,
+        vertices=vertices,
+        faces=faces,
+        normals=(unit,) * len(vertices),
+        uvs=_planar_uvs(vertices),
+        texture=material.texture,
+        diffuse=material.diffuse,
+        ambient=material.ambient,
+        metadata=metadata,
+    )
+
+
+def _roof_type(primitive: FloorPlanRoomPrimitive) -> str:
+    return str(primitive.metadata.get("building_roof_type", "none") or "none").strip().lower()
+
+
 def _opening_span(opening: FloorPlanWallOpening, edge_length: float) -> tuple[float, float]:
     half_fraction = (float(opening.width) * 0.5) / max(edge_length, 1.0e-7)
     center = float(opening.center_fraction)
@@ -369,6 +430,22 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
             blocking.append(str(exc))
     if float(primitive.wall_height) <= 0.0:
         blocking.append("Floor-plan room wall height must be positive.")
+    roof_type = _roof_type(primitive)
+    if roof_type not in {"none", "flat", "hip", "gable"}:
+        blocking.append(f"Unsupported building roof preset: {roof_type}.")
+    if roof_type == "gable" and _rect_bounds(points) is None:
+        blocking.append("Gable roofs currently require a rectangular room footprint.")
+    if roof_type != "none":
+        try:
+            roof_pitch = float(primitive.metadata.get("building_roof_pitch_degrees", 30.0) or 30.0)
+            roof_overhang = float(primitive.metadata.get("building_roof_overhang", 0.25) or 0.0)
+        except (TypeError, ValueError):
+            blocking.append("Roof pitch and overhang must be numeric.")
+        else:
+            if not math.isfinite(roof_pitch) or roof_pitch < 5.0 or roof_pitch > 70.0:
+                blocking.append("Roof pitch must be between 5 and 70 degrees.")
+            if not math.isfinite(roof_overhang) or roof_overhang < 0.0 or roof_overhang > 5.0:
+                blocking.append("Roof overhang must be between 0 and 5 metres.")
     openings_by_edge: dict[int, list[FloorPlanWallOpening]] = {}
     for opening in primitive.openings:
         opening_name = str(opening.name or "").strip() or f"edge {opening.edge_index}"
@@ -1122,6 +1199,126 @@ def build_floor_plan_ceiling_mesh(primitive: FloorPlanRoomPrimitive) -> Primitiv
     )
 
 
+def build_floor_plan_roof_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[PrimitiveMesh, ...]:
+    """Compile a lightweight exterior roof that remains part of the room.
+
+    Flat roofs support every valid footprint. Gable roofs deliberately require
+    an axis-aligned rectangle so the authoring result stays predictable and
+    engine-budget safe rather than guessing at arbitrary residential CSG.
+    """
+
+    roof_type = _roof_type(primitive)
+    if roof_type == "none":
+        return ()
+    validation = validate_floor_plan_room_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    points = _ccw_points(_normalise_points(primitive.points))
+    top_z = float(primitive.z) + float(primitive.wall_height)
+    roof_material = primitive.ceiling_material or primitive.wall_material or primitive.material
+    metadata = {
+        **dict(roof_material.metadata),
+        "primitive": "floor_plan_roof",
+        "roof_type": roof_type,
+        "source": "map_studio:pascal_building",
+        "surface_role": "roof",
+    }
+    room_resref = _normalise_resref(primitive.room_resref)
+    meshes: list[PrimitiveMesh] = []
+    if roof_type == "flat":
+        vertices: tuple[Vec3, ...] = tuple((x, y, top_z) for x, y in points)
+        return (
+            _planar_surface_mesh(
+                name=f"{room_resref}_roof_flat",
+                vertices=vertices,
+                faces=triangulate_floor_plan_points(points),
+                material=roof_material,
+                metadata=metadata,
+            ),
+        )
+
+    if roof_type == "hip":
+        center_x = sum(point[0] for point in points) / len(points)
+        center_y = sum(point[1] for point in points) / len(points)
+        overhang = float(primitive.metadata.get("building_roof_overhang", 0.25) or 0.0)
+        expanded: list[Vec2] = []
+        distances: list[float] = []
+        for x, y in points:
+            dx, dy = x - center_x, y - center_y
+            distance = math.hypot(dx, dy)
+            distances.append(distance)
+            scale = (distance + overhang) / max(distance, 1.0e-7)
+            expanded.append((center_x + dx * scale, center_y + dy * scale))
+        pitch = math.radians(float(primitive.metadata.get("building_roof_pitch_degrees", 30.0) or 30.0))
+        rise = max(0.05, (sum(distances) / max(len(distances), 1)) * 0.5 * math.tan(pitch))
+        apex = (center_x, center_y, top_z + rise)
+        for index, start in enumerate(expanded):
+            end = expanded[(index + 1) % len(expanded)]
+            meshes.append(
+                _planar_surface_mesh(
+                    name=f"{room_resref}_roof_hip_{index + 1:02d}",
+                    vertices=((start[0], start[1], top_z), (end[0], end[1], top_z), apex),
+                    faces=((0, 1, 2),),
+                    material=roof_material,
+                    metadata={**metadata, "roof_panel": f"hip_{index + 1:02d}"},
+                )
+            )
+        return tuple(meshes)
+
+    bounds = _rect_bounds(points)
+    if bounds is None:  # Kept defensive for callers that skip validation.
+        raise ValueError("Gable roofs currently require a rectangular room footprint.")
+    min_x, min_y, max_x, max_y = bounds
+    overhang = float(primitive.metadata.get("building_roof_overhang", 0.25) or 0.0)
+    pitch = math.radians(float(primitive.metadata.get("building_roof_pitch_degrees", 30.0) or 30.0))
+    width, depth = max_x - min_x, max_y - min_y
+    if width >= depth:
+        ridge_y = (min_y + max_y) * 0.5
+        ridge_z = top_z + max(0.05, depth * 0.5 * math.tan(pitch))
+        panels = (
+            (
+                "south",
+                ((min_x - overhang, min_y - overhang, top_z), (max_x + overhang, min_y - overhang, top_z), (max_x + overhang, ridge_y, ridge_z), (min_x - overhang, ridge_y, ridge_z)),
+                ((0, 1, 2), (0, 2, 3)),
+            ),
+            (
+                "north",
+                ((min_x - overhang, ridge_y, ridge_z), (max_x + overhang, ridge_y, ridge_z), (max_x + overhang, max_y + overhang, top_z), (min_x - overhang, max_y + overhang, top_z)),
+                ((0, 1, 2), (0, 2, 3)),
+            ),
+            ("west_gable", ((min_x, min_y, top_z), (min_x, ridge_y, ridge_z), (min_x, max_y, top_z)), ((0, 1, 2),)),
+            ("east_gable", ((max_x, min_y, top_z), (max_x, max_y, top_z), (max_x, ridge_y, ridge_z)), ((0, 1, 2),)),
+        )
+    else:
+        ridge_x = (min_x + max_x) * 0.5
+        ridge_z = top_z + max(0.05, width * 0.5 * math.tan(pitch))
+        panels = (
+            (
+                "west",
+                ((min_x - overhang, min_y - overhang, top_z), (ridge_x, min_y - overhang, ridge_z), (ridge_x, max_y + overhang, ridge_z), (min_x - overhang, max_y + overhang, top_z)),
+                ((0, 1, 2), (0, 2, 3)),
+            ),
+            (
+                "east",
+                ((ridge_x, min_y - overhang, ridge_z), (max_x + overhang, min_y - overhang, top_z), (max_x + overhang, max_y + overhang, top_z), (ridge_x, max_y + overhang, ridge_z)),
+                ((0, 1, 2), (0, 2, 3)),
+            ),
+            ("south_gable", ((min_x, min_y, top_z), (max_x, min_y, top_z), (ridge_x, min_y, ridge_z)), ((0, 1, 2),)),
+            ("north_gable", ((min_x, max_y, top_z), (ridge_x, max_y, ridge_z), (max_x, max_y, top_z)), ((0, 1, 2),)),
+        )
+    for label, vertices, faces in panels:
+        meshes.append(
+            _planar_surface_mesh(
+                name=f"{room_resref}_roof_{label}",
+                vertices=vertices,
+                faces=faces,
+                material=roof_material if "gable" not in label else (primitive.wall_material or roof_material),
+                metadata={**metadata, "roof_panel": label},
+            )
+        )
+    return tuple(meshes)
+
+
 def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> AuthoredRoomGeometry:
     """Compile a floor-plan room into render/export meshes plus WOK."""
 
@@ -1134,6 +1331,8 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
     ceiling = build_floor_plan_ceiling_mesh(primitive)
     if ceiling is not None:
         helper_meshes = helper_meshes + (ceiling,)
+    roof_meshes = build_floor_plan_roof_meshes(primitive)
+    helper_meshes = helper_meshes + roof_meshes
     surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     room_resref = _normalise_resref(primitive.room_resref)
     return AuthoredRoomGeometry(
@@ -1149,6 +1348,8 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
             "wall_count": len(wall_meshes),
             "opening_count": len(primitive.openings),
             "has_ceiling": bool(ceiling is not None),
+            "has_roof": bool(roof_meshes),
+            "roof_type": _roof_type(primitive),
             "wall_height": float(primitive.wall_height),
             "polygon_area": validation.area,
             "floor_surface_id": surface_id,
@@ -1177,6 +1378,7 @@ __all__ = [
     "bevel_floor_plan_points",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_ceiling_mesh",
+    "build_floor_plan_roof_meshes",
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",
     "compile_floor_plan_room_geometry",
