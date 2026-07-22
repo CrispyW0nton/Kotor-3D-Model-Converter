@@ -702,7 +702,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 133,
+        "python_file_count": 134,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -774,6 +774,7 @@
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pascal_building.py",
+            "src\\core\\modules\\map_studio_pascal_graph.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_combat.py",
@@ -841,7 +842,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 399,
+        "python_file_count": 400,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -977,6 +978,7 @@
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pascal_building.py",
+            "src\\core\\modules\\map_studio_pascal_graph.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_combat.py",

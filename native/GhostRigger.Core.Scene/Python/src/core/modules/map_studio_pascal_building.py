@@ -27,6 +27,7 @@ from .authored_room_floorplan import (
 from .authored_room_operations import set_authored_floor_plan_wall_opening
 from .authored_room_primitives import PrimitiveMaterial
 from .authored_room_materials import normalize_authored_room_texture
+from .map_studio_pascal_graph import planarize_pascal_building_rooms, refresh_pascal_wall_graph
 
 
 @dataclass(frozen=True)
@@ -454,7 +455,8 @@ def add_pascal_building_room(
                 position=(center_x, center_y, z + 0.05),
             ),
         )
-    return replace(project, rooms=rooms, placements=placements), room_resref
+    updated_project = replace(project, rooms=rooms, placements=placements)
+    return planarize_pascal_building_rooms(updated_project), room_resref
 
 
 def set_pascal_building_opening(
@@ -530,7 +532,7 @@ def set_pascal_building_opening(
                 )
             opening_rows.append(opening)
         rooms.append(replace(room, primitive=replace(primitive, openings=tuple(opening_rows))))
-    return replace(updated, rooms=tuple(rooms))
+    return refresh_pascal_wall_graph(replace(updated, rooms=tuple(rooms)))
 
 
 def preview_pascal_building_opening(

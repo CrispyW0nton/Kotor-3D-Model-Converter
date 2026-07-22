@@ -694,7 +694,8 @@ class ViewportOverlayLayersMixin:
                 if result is not None:
                     hx, hy = float(result[0]), float(result[1])
                     draw.ellipse((hx - 6, hy - 6, hx + 6, hy + 6), outline=color, width=2)
-                    label = "Click to close room" if close_ready else f"Corner {len(world_points) + 1}"
+                    snap_label = str(preview.get("snap_label") or "")
+                    label = "Click to close room" if close_ready else snap_label or f"Corner {len(world_points) + 1}"
                     draw.text((hx + 10, hy - 9), label, fill=color)
         except Exception as exc:
             log.debug("Map Studio building preview overlay failed: %s", exc)

@@ -134,6 +134,7 @@ PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_SHELF RCDATA "Python/src/core/mo
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_TOOLS RCDATA "Python/src/core/modules/map_studio_modeling_tools.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MULTI_CUT RCDATA "Python/src/core/modules/map_studio_multi_cut.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING RCDATA "Python/src/core/modules/map_studio_pascal_building.py"
+PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH RCDATA "Python/src/core/modules/map_studio_pascal_graph.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE RCDATA "Python/src/core/modules/map_studio_pie.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_AUDIO RCDATA "Python/src/core/modules/map_studio_pie_audio.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_COMBAT RCDATA "Python/src/core/modules/map_studio_pie_combat.py"

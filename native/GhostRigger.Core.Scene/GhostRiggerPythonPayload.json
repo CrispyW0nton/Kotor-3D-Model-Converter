@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 133,
+    "file_count": 134,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -423,7 +423,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "fd032a02cae809b11ff3aad5ec61c2b2909a9a746f07aba132189a55719234ec"
+            "sha256": "24feea88c92aea7ef3daec7f8a196d004d157bc6d24385c2932874c178cfe576"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
+            "source_path": "src/core/modules/map_studio_pascal_graph.py",
+            "packaged_path": "Python/src/core/modules/map_studio_pascal_graph.py",
+            "sha256": "419344b1963f3170e3c310dbed3ac8848640e1bf9ded02fbad9f7ac447c264a9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",

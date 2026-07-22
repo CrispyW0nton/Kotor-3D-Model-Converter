@@ -11,6 +11,46 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-22
 
+### [2026-07-22] T2907 Semantic wall junction graph and reliable T-junction drawing
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal-style room topology, direct wall gestures,
+floor-plan opening migration, viewport construction feedback, KMAP persistence,
+controller history, and embedded Scene/Tools/GUI Display payloads.
+
+Direct wall drawing now derives a stable semantic graph from authored rooms.
+Vertices, wall segments, and faces receive deterministic IDs; coincident wall
+segments retain every owning room edge; T-junctions and same-level crossings
+split the affected floor-plan edges before compilation. Hosted doors and
+windows migrate to the correct split segment with their world position
+preserved, while junctions that would cross or touch an opening are rejected
+with a clear reason. The graph and junction IDs persist under KMAP project
+metadata and refresh after room or opening edits without adding extra undo
+steps.
+
+Draw Walls now snaps against the actual authored floor-plan geometry instead
+of depending only on disposable screen hit zones. Roofs, selection gizmos, or
+a delayed overlay can no longer make a visible wall unsnappable. A cursor label
+and status-line message identify corner junctions and T-junctions before the
+click, and the completed room remains one undoable authoring gesture.
+
+Intersects: the same T2907 Pascal environment-kit, hosted-opening, exterior
+roof, multi-selection, Player Start, terrain-kit, and transient-overlay work on
+`ghost-studio`; prior room materials, roof output, selection behavior, and
+payload mirrors were preserved.
+
+Verification: changed Python files compile; focused controller room/opening,
+multi-window, exterior roof, semantic graph/KMAP round-trip, and viewport
+source-contract checks pass; all 22 native payload contract checks pass.
+Scene, Tools, and GUI Display Debug x64 DLLs were rebuilt and all 18 manifest
+payload DLLs staged. In the actual staged GhostStudio app, Draw Walls showed
+`T-junction · new_levelr001 wall 3` at both attachment points, closed and built
+`new_levelr002` without a dialog, and reloaded the saved proof with both rooms
+visible. The saved KMAP contains 2 faces, 8 stable vertices, 9 unique wall
+segments, 2 junction IDs, and 1 segment shared by both rooms; the original
+room's four-point loop was planarized to six points.
+
 ### [2026-07-22] T2907 Exterior building roof presets and staged workflow proof
 
 Owner: LordVaderCW

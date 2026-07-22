@@ -4230,6 +4230,8 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
             "def set_pascal_building_tool",
             "def set_pascal_building_opening_preview",
             "def _building_world_at_event",
+            "def _building_wall_snap_from_geometry",
+            "def _building_wall_point_at_event",
             "def _room_outline_edge_from_current_geometry",
             '"window_height" if kind == "window" else "opening_height"',
             "ray_from_mouse",
@@ -4252,6 +4254,7 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     assert "def _preview_map_studio_opening_from_viewport" in window_source
     assert "buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)" in window_source
     assert "Click to place" in overlay_source
+    assert 'snap_label = str(preview.get("snap_label") or "")' in overlay_source
     assert "multi_opening_fill" in _read(
         "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py"
     )
@@ -4260,3 +4263,8 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     )
     assert "def build_floor_plan_roof_meshes" in floorplan_source
     assert '"Gable roofs currently require a rectangular room footprint."' in floorplan_source
+    graph_source = _read(
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_pascal_graph.py"
+    )
+    assert "def planarize_pascal_building_rooms" in graph_source
+    assert '"junction_vertex_ids"' in graph_source

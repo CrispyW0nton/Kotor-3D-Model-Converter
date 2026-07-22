@@ -3147,6 +3147,61 @@ def test_t2907_exterior_building_compiles_gable_roof_and_roundtrips() -> None:
     assert controller.command_history.undo_stack[-1].metadata["roof_type"] == "hip"
 
 
+def test_t2907_pascal_graph_planarizes_t_junction_and_preserves_window() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grjunction", game="K2")
+    first_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (8.0, 0.0), (8.0, 4.0), (0.0, 4.0)),
+    )
+    controller.set_map_studio_building_opening(
+        room_resref=first_resref,
+        edge_index=2,
+        opening_kind="window",
+        center_fraction=0.125,
+        width=0.8,
+        height=1.0,
+        bottom=1.0,
+    )
+    controller.add_map_studio_building_room(
+        points=((3.0, 4.0), (5.0, 4.0), (5.0, 7.0), (3.0, 7.0)),
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    restored = authored_project_from_kmap_payload(authored_project_to_kmap_payload(authored))
+    first = restored.rooms[0].primitive
+    opening = first.openings[0]
+    graph = restored.extra["pascal_wall_graph"]
+    edge_start = first.points[opening.edge_index]
+    edge_end = first.points[(opening.edge_index + 1) % len(first.points)]
+    opening_world_x = edge_start[0] + (edge_end[0] - edge_start[0]) * opening.center_fraction
+
+    assert len(first.points) == 6
+    assert opening.name == "window_edge_2_001"
+    assert opening.edge_index == 2
+    assert math.isclose(opening_world_x, 7.0, abs_tol=1.0e-7)
+    assert opening.metadata["pascal_split_from_edge_index"] == 2
+    assert graph["schema_version"] == 1
+    assert graph["face_count"] == 2
+    assert graph["inserted_vertex_count"] == 2
+    assert len(graph["junction_vertex_ids"]) == 2
+    assert any(len(wall["room_edges"]) == 2 for wall in graph["walls"])
+    assert any(wall["openings"] for wall in graph["walls"])
+    assert compile_floor_plan_room_geometry(first).metadata["opening_count"] == 1
+    assert [record.action_key for record in controller.command_history.undo_stack] == [
+        "map_studio.building.room.create",
+        "map_studio.building.window.create",
+        "map_studio.building.room.create",
+    ]
+
+
 def test_t2907_vanilla_building_style_catalog_learns_surface_roles_and_roundtrips(
     monkeypatch,
     tmp_path: Path,

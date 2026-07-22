@@ -4297,6 +4297,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         }
         self._building_points: list[tuple[float, float, float]] = []
         self._building_hover_world: tuple[float, float, float] | None = None
+        self._building_hover_snap_label = ""
         self._building_opening_preview: dict[str, Any] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
@@ -6328,6 +6329,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if isinstance(settings, Mapping):
             self._building_settings.update(dict(settings))
         self._building_opening_preview = None
+        self._building_hover_snap_label = ""
         if key != "walls":
             self._building_points.clear()
             self._building_hover_world = None
@@ -6364,6 +6366,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "tool": self._building_tool,
                 "points": tuple(self._building_points),
                 "hover_world": self._building_hover_world,
+                "snap_label": self._building_hover_snap_label,
                 "floor_z": float(self._building_settings.get("floor_z", 0.0) or 0.0),
                 "wall_height": float(self._building_settings.get("wall_height", 3.0) or 3.0),
                 "close_ready": bool(len(self._building_points) >= 3 and self._building_hover_world is not None and self._building_close_ready()),
@@ -6435,10 +6438,127 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         grid = max(0.001, float(self._building_settings.get("grid_size", 0.25) or 0.25))
         return (round(point[0] / grid) * grid, round(point[1] / grid) * grid, point[2])
 
+    def _building_wall_snap_from_geometry(
+        self,
+        point: tuple[float, float, float],
+    ) -> tuple[tuple[float, float, float], str] | None:
+        """Resolve a junction from the authored floor plan, independent of overlay hit zones."""
+
+        geometry = getattr(self, "_room_outline_geometry", None)
+        if geometry is None:
+            return None
+        grid = max(0.001, float(self._building_settings.get("grid_size", 0.25) or 0.25))
+        level_tolerance = max(0.05, grid * 0.5)
+        vertex_tolerance = max(0.18, grid)
+        edge_tolerance = max(0.25, grid * 1.5)
+        best_vertex: tuple[float, str, int, tuple[float, float, float]] | None = None
+        best_edge: tuple[float, str, int, tuple[float, float, float]] | None = None
+        for polygon in tuple(getattr(geometry, "polygons", ()) or ()):
+            if str(getattr(polygon, "role", "") or "").strip().lower() != "floor":
+                continue
+            room_resref = str(getattr(polygon, "room_resref", "") or "")
+            world_points = tuple(
+                tuple(float(value) for value in tuple(value)[:3])
+                for value in tuple(getattr(polygon, "points", ()) or ())
+            )
+            if not room_resref or len(world_points) < 3 or any(len(value) < 3 for value in world_points):
+                continue
+            if abs(float(world_points[0][2]) - float(point[2])) > level_tolerance:
+                continue
+            for point_index, world in enumerate(world_points):
+                distance = math.hypot(float(point[0]) - world[0], float(point[1]) - world[1])
+                if distance <= vertex_tolerance and (best_vertex is None or distance < best_vertex[0]):
+                    best_vertex = (distance, room_resref, point_index, world)
+            for edge_index, (start, end) in enumerate(zip(world_points, world_points[1:] + world_points[:1])):
+                dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+                length_sq = dx * dx + dy * dy
+                if length_sq <= 1.0e-9:
+                    continue
+                fraction = max(
+                    0.0,
+                    min(
+                        1.0,
+                        ((float(point[0]) - float(start[0])) * dx + (float(point[1]) - float(start[1])) * dy)
+                        / length_sq,
+                    ),
+                )
+                snapped = (
+                    float(start[0]) + dx * fraction,
+                    float(start[1]) + dy * fraction,
+                    float(point[2]),
+                )
+                distance = math.hypot(float(point[0]) - snapped[0], float(point[1]) - snapped[1])
+                if distance <= edge_tolerance and (best_edge is None or distance < best_edge[0]):
+                    best_edge = (distance, room_resref, edge_index, snapped)
+        if best_vertex is not None:
+            _, room_resref, point_index, world = best_vertex
+            return (
+                (float(world[0]), float(world[1]), float(point[2])),
+                f"Junction · {room_resref} corner {point_index + 1}",
+            )
+        if best_edge is not None:
+            _, room_resref, edge_index, snapped = best_edge
+            return (snapped, f"T-junction · {room_resref} wall {edge_index + 1}")
+        return None
+
+    def _building_wall_point_at_event(self, event: QtCore.QEvent) -> tuple[float, float, float] | None:
+        """Snap a wall corner to an existing vertex or wall before the grid."""
+
+        point = self._building_world_at_event(event)
+        self._building_hover_snap_label = ""
+        if point is None:
+            return None
+        geometry_snap = self._building_wall_snap_from_geometry(point)
+        if geometry_snap is not None:
+            snapped, label = geometry_snap
+            self._building_hover_snap_label = label
+            return snapped
+        level_tolerance = max(0.05, float(self._building_settings.get("grid_size", 0.25) or 0.25) * 0.5)
+        vertex = self._room_outline_point_at_event(event)
+        if vertex is not None:
+            room_resref, point_index, world = vertex
+            if abs(float(world[2]) - float(point[2])) <= level_tolerance:
+                self._building_hover_snap_label = f"Junction · {room_resref} corner {point_index + 1}"
+                return (float(world[0]), float(world[1]), float(point[2]))
+        edge = self._room_outline_edge_at_event(event)
+        if edge is not None:
+            room_resref, edge_index, start, end = edge
+            if abs(float(start[2]) - float(point[2])) <= level_tolerance:
+                dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+                length_sq = dx * dx + dy * dy
+                if length_sq > 1.0e-9:
+                    fraction = max(
+                        0.0,
+                        min(
+                            1.0,
+                            ((float(point[0]) - float(start[0])) * dx + (float(point[1]) - float(start[1])) * dy)
+                            / length_sq,
+                        ),
+                    )
+                    self._building_hover_snap_label = f"T-junction · {room_resref} wall {edge_index + 1}"
+                    return (
+                        float(start[0]) + dx * fraction,
+                        float(start[1]) + dy * fraction,
+                        float(point[2]),
+                    )
+        return point
+
     def _update_building_hover(self, event: QtCore.QEvent) -> bool:
         if self._building_tool == "walls":
-            self._building_hover_world = self._building_world_at_event(event)
+            self._building_hover_world = self._building_wall_point_at_event(event)
             self._sync_building_preview()
+            if self._building_hover_world is None:
+                self.marker_summary_label.setText(
+                    "Draw Walls: move over a visible floor, wall edge, or the active level plane."
+                )
+            else:
+                snap_prefix = f"{self._building_hover_snap_label}. " if self._building_hover_snap_label else ""
+                next_step = (
+                    "Click to close the room."
+                    if self._building_close_ready()
+                    else f"Click to place corner {len(self._building_points) + 1}."
+                )
+                self.marker_summary_label.setText(snap_prefix + next_step)
             return self._building_hover_world is not None
         if self._building_tool not in {"door", "window"}:
             return False
@@ -6493,7 +6613,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
     def _handle_building_left_click(self, event: QtCore.QEvent) -> bool:
         if self._building_tool == "walls":
-            point = self._building_world_at_event(event)
+            point = self._building_wall_point_at_event(event)
             if point is None:
                 self.marker_summary_label.setText("Draw Walls needs a visible floor or the active level plane under the pointer.")
                 return True
@@ -6506,6 +6626,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 }
                 self._building_points.clear()
                 self._building_hover_world = None
+                self._building_hover_snap_label = ""
                 self._sync_building_preview()
                 self.buildingRoomRequested.emit(payload)
                 self.marker_summary_label.setText("Room closed and built. Click to start the next room.")
@@ -6514,7 +6635,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 self._building_points.append(point)
             self._sync_building_preview()
             self.marker_summary_label.setText(
-                f"Draw Walls: {len(self._building_points)} corner(s). "
+                (f"{self._building_hover_snap_label}. " if self._building_hover_snap_label else "")
+                + f"Draw Walls: {len(self._building_points)} corner(s). "
                 + ("Click the first corner to close." if len(self._building_points) >= 3 else "Place the next corner.")
             )
             return True
