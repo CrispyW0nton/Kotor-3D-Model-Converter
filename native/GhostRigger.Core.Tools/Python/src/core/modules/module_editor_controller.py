@@ -195,6 +195,7 @@ from .map_studio_environment_kits import (
     environment_kit_collection_rows,
     environment_kit_piece,
     environment_kit_piece_rows,
+    kotor_module_world_label,
     nearest_environment_kit_snap,
     scan_vanilla_environment_kits,
     vanilla_environment_kit_collections,
@@ -3073,6 +3074,7 @@ class ModuleEditorController:
                 "ceiling_texture": style.ceiling_texture,
                 "source_module": style.source_module,
                 "source_room": style.source_room,
+                "world_label": kotor_module_world_label(style.game, style.source_module),
                 "environment_kind": next(
                     (tag for tag in tuple(style.tags) if tag in {"interior", "exterior"}),
                     "both",

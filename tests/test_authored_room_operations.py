@@ -3328,6 +3328,66 @@ def test_t2907_environment_kit_catalog_indexes_both_games_with_real_provenance_a
     assert any(piece.magnets for piece in room_tiles)
 
 
+def test_t2907_environment_kit_styles_are_searchable_by_familiar_world_names() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        environment_kit_collection_rows,
+        kotor_module_world_label,
+    )
+    from src.core.modules.map_studio_pascal_building import available_pascal_building_styles
+
+    assert kotor_module_world_label("K1", "m13aa") == "Dantooine"
+    assert kotor_module_world_label("K1", "m17aa") == "Tatooine"
+    assert kotor_module_world_label("K2", "201tel") == "Telos"
+    assert kotor_module_world_label("K2", "401dxn") == "Dxun"
+    assert kotor_module_world_label("K2", "601dan") == "Dantooine"
+
+    k1_rows = environment_kit_collection_rows(game="K1")
+    k2_rows = environment_kit_collection_rows(game="K2")
+    assert any(row["world_label"] == "Dantooine" and "Dantooine" in row["label"] for row in k1_rows)
+    assert any(row["world_label"] == "Dxun" and "Dxun" in row["label"] for row in k2_rows)
+
+    k2_styles = available_pascal_building_styles("K2")
+    assert any(style.style_id == "kit:k2_201tel" and "Telos" in style.label for style in k2_styles)
+    assert any(style.style_id == "kit:k2_401dxn" and "Dxun" in style.label for style in k2_styles)
+
+
+def test_t2907_pascal_builds_multiple_planet_interior_and_exterior_styles() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grstyles", game="K2")
+    cases = (
+        ("kit:k2_201tel", "interior", "none", "tel_hcl1", "tel_hjk", "tel_hcl1"),
+        ("kit:k2_301nar", "interior", "none", "nar_wl07", "nar_wl01", "nar_lt01"),
+        ("kit:k2_401dxn", "exterior", "hip", "dxn_grs5", "dxn_flora1", "dxn_flora1"),
+        ("kit:k2_601dan", "exterior", "gable", "dan_grass07", "dan_bark04", "dan_unwal07"),
+    )
+    for index, (style_id, kind, roof, _floor, _wall, _ceiling) in enumerate(cases):
+        x = float(index * 8)
+        controller.add_map_studio_building_room(
+            points=((x, 0.0), (x + 6.0, 0.0), (x + 6.0, 4.0), (x, 4.0)),
+            style_id=style_id,
+            building_kind=kind,
+            roof_type=roof,
+        )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    assert len(authored.rooms) == 4
+    for room, (style_id, kind, roof, floor, wall, ceiling) in zip(authored.rooms, cases):
+        primitive = room.primitive
+        assert primitive.metadata["style_id"] == style_id
+        assert primitive.metadata["building_kind"] == kind
+        assert primitive.metadata["building_roof_type"] == roof
+        assert primitive.material.texture == floor
+        assert primitive.wall_material.texture == wall
+        assert primitive.ceiling_material.texture == ceiling
+
+
 def test_t2907_environment_kit_nearest_snap_aligns_compatible_edge_magnets() -> None:
     _install_native_payload_paths()
 

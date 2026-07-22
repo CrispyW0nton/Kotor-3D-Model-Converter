@@ -296,12 +296,15 @@ def write_vanilla_pascal_style_catalog(
 def available_pascal_building_styles(game: str = "") -> tuple[PascalBuildingStyle, ...]:
     wanted = str(game or "").strip().upper()
     try:
-        from .map_studio_environment_kits import vanilla_environment_kit_collections
+        from .map_studio_environment_kits import (
+            environment_kit_collection_display_label,
+            vanilla_environment_kit_collections,
+        )
 
         kit_styles = tuple(
             PascalBuildingStyle(
                 style_id=f"kit:{collection.collection_id}",
-                label=collection.label,
+                label=environment_kit_collection_display_label(collection),
                 game=collection.game,
                 floor_texture=collection.floor_texture,
                 wall_texture=collection.wall_texture,

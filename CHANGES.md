@@ -11,6 +11,47 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-22
 
+### [2026-07-22] T2907 Planet-searchable vanilla building styles and multi-style proof
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal Building style discovery, vanilla environment-kit
+metadata, Build workflow presentation, Scene/Tools/GUI Display payloads, and
+multi-style authored-room proof.
+
+The searchable Module style field now uses familiar KOTOR locations instead of
+requiring users to recognize raw module codes. K1 families resolve to Endar
+Spire, Taris, Ebon Hawk, Dantooine, Tatooine, Kashyyyk, Manaan, Korriban,
+Leviathan, Unknown World, Star Forge, and Yavin Station; K2 families resolve to
+Ebon Hawk, Peragus, Harbinger, Telos, Nar Shaddaa, Dxun, Onderon, Dantooine,
+Korriban, Ravager, Malachor V, Coruscant, and Prologue. The editable chooser
+can therefore be searched by planet/ship name while retaining the exact source
+module in each label.
+
+The Build workflow adds a compact selected-style summary showing location,
+interior/exterior role, source module, and learned floor/wall/ceiling-or-roof
+palette. Style ordering groups familiar locations consistently, item tooltips
+show the complete palette, and the existing Interior/Exterior filter and roof
+defaults remain intact. This presents the already-trained 210 vanilla module
+collections and 9,174 typed room/terrain pieces as understandable art styles
+without copying game geometry into Ghost Studio.
+
+Intersects: the T2907 environment-kit, terrain-kit, direct-wall, roof, and
+multi-level work on `ghost-studio`; catalog identities, drag payloads, KMAP
+style IDs, and Odyssey export materials are unchanged.
+
+Verification: changed Python files compile; focused world-name mapping,
+210-collection/9,174-piece catalog, searchable Builder UI, and four-style
+interior/exterior build checks pass. The four-style K2 proof contains Telos and
+Nar Shaddaa interiors plus Dxun and Dantooine exteriors, with hip/gable roofs
+and learned palettes preserved after KMAP reload. Scene, Tools, and GUI Display
+Debug x64 DLLs were rebuilt and all 18 payload DLLs staged. The staged app
+opened `artifacts/map_studio_proof/pascal_multistyle_k2.kmap`, rendered all four
+authored buildings together, and exposed human-readable entries such as
+`Dantooine — Exterior · 601dan`; captures include
+`multistyle_k2_loaded.png`, `multistyle_k2_top.png`, and
+`multistyle_k2_style_expanded.png`.
+
 ### [2026-07-22] T2907 Unified Maya-style Map Studio object selection
 
 Owner: LordVaderCW

@@ -4233,6 +4233,36 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
         assert builder._building_settings()["roof_type"] == "hip"
         assert builder._building_settings()["roof_pitch_degrees"] == 30.0
         assert builder._building_settings()["roof_overhang"] == 0.25
+
+        builder.set_building_styles(
+            (
+                {
+                    "style_id": "kit:k1_m01aa",
+                    "label": "Endar Spire — Interior · m01aa",
+                    "world_label": "Endar Spire",
+                    "environment_kind": "interior",
+                    "source_module": "m01aa",
+                    "floor_texture": "lhr_flr01",
+                    "wall_texture": "lhr_wall01",
+                    "ceiling_texture": "lhr_tech01",
+                },
+                {
+                    "style_id": "kit:k1_m13aa",
+                    "label": "Dantooine — Exterior · m13aa",
+                    "world_label": "Dantooine",
+                    "environment_kind": "exterior",
+                    "source_module": "m13aa",
+                    "floor_texture": "lda_grass07",
+                    "wall_texture": "lda_trim03",
+                    "ceiling_texture": "lda_window01",
+                },
+            )
+        )
+        assert builder.select_building_style("kit:k1_m13aa", "exterior") is True
+        assert builder.buildingStyleComboBox.currentText() == "Dantooine — Exterior · m13aa"
+        assert "Dantooine · Exterior · m13aa" in builder.buildingStyleSummaryLabel.text()
+        assert "lda_grass07" in builder.buildingStyleSummaryLabel.text()
+        assert "Dantooine exterior style selected" in builder.buildingStatusLabel.text()
     finally:
         builder.close()
         app.processEvents()

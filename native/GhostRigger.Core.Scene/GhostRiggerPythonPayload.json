@@ -375,7 +375,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ENVIRONMENT_KITS",
             "source_path": "src/core/modules/map_studio_environment_kits.py",
             "packaged_path": "Python/src/core/modules/map_studio_environment_kits.py",
-            "sha256": "8c7d12c2f6d92eec9aa6b506cacecb6d41a7bc6302921c5cd1318c093b71a2f8"
+            "sha256": "9f7fc1ea9f4526b7f798861a64017de825c19a2b5d422b1cb48257a064f108b4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS",
@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "5ffca2832f598949d9e31252df5f56da6e9bc0dbd1d6b62eb195ab440b1ba216"
+            "sha256": "8d7fd557d8d59912cd17089fda68d2ef4836098adb6ee1f28fca85efa07db502"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
@@ -621,7 +621,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "0cc0da45e13d1f9a532952d7719300d082999f942a353662ac7332c40409e771"
+            "sha256": "6047b0a4dc39e406ea97a337a99eb9788ec3a8b4d881cc205f4e1f7605d191f6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

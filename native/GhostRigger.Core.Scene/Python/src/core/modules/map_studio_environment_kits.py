@@ -25,6 +25,79 @@ ENVIRONMENT_KIT_PAYLOAD_SCHEMA = "ghostrigger.map-environment-kit/v1"
 _CATALOG_RELATIVE = Path("assets/map_studio/environment_kits/vanilla_kits.json")
 
 
+_K1_MODULE_WORLDS = (
+    (1, 1, "Endar Spire"),
+    (2, 11, "Taris"),
+    (12, 12, "Ebon Hawk"),
+    (13, 16, "Dantooine"),
+    (17, 21, "Tatooine"),
+    (22, 25, "Kashyyyk"),
+    (26, 29, "Manaan"),
+    (33, 39, "Korriban"),
+    (40, 43, "Leviathan"),
+    (44, 44, "Unknown World"),
+    (45, 45, "Star Forge"),
+    (50, 50, "Yavin Station"),
+)
+
+_K2_MODULE_WORLDS = {
+    "ebo": "Ebon Hawk",
+    "per": "Peragus",
+    "har": "Harbinger",
+    "tel": "Telos",
+    "nar": "Nar Shaddaa",
+    "dxn": "Dxun",
+    "ond": "Onderon",
+    "dan": "Dantooine",
+    "kor": "Korriban",
+    "dro": "Ravager",
+    "nih": "Ravager",
+    "mal": "Malachor V",
+    "cor": "Coruscant",
+    "trl": "Prologue",
+}
+
+
+def kotor_module_world_label(game: str, module_resref: str) -> str:
+    """Return a user-facing planet/ship name for a vanilla module family."""
+
+    target_game = str(game or "").strip().upper()
+    module = str(module_resref or "").strip().lower()
+    if not module:
+        return "Vanilla KOTOR"
+    if target_game == "K2":
+        suffix = "".join(character for character in module if character.isalpha())[-3:]
+        if suffix in _K2_MODULE_WORLDS:
+            return _K2_MODULE_WORLDS[suffix]
+        if module.startswith("000test") or module.startswith("999dia"):
+            return "Development"
+        return "KOTOR II"
+    if module == "plcaa":
+        return "Neutral Blockout"
+    if "ebon" in module or module.startswith("stunt_ebo") or module.startswith("mgf_ebo"):
+        return "Ebon Hawk"
+    for token, label in (
+        ("stunt_end", "Endar Spire"),
+        ("stunt_lev", "Leviathan"),
+        ("stunt_starforge", "Star Forge"),
+        ("stunt_unk", "Unknown World"),
+    ):
+        if module.startswith(token):
+            return label
+    if module.startswith("m") and len(module) >= 3 and module[1:3].isdigit():
+        number = int(module[1:3])
+        for first, last, label in _K1_MODULE_WORLDS:
+            if first <= number <= last:
+                return label
+    return "KOTOR I"
+
+
+def environment_kit_collection_display_label(collection: "EnvironmentKitCollection") -> str:
+    world = kotor_module_world_label(collection.game, collection.module_resref)
+    kind = "Exterior" if collection.environment_kind == "exterior" else "Interior"
+    return f"{world} — {kind} · {collection.module_resref}"
+
+
 @dataclass(frozen=True)
 class EnvironmentKitMagnet:
     magnet_id: str
@@ -439,7 +512,8 @@ def environment_kit_collection_rows(*, game: str = "", kind: str = "") -> tuple[
     return tuple(
         {
             "collection_id": collection.collection_id,
-            "label": collection.label,
+            "label": environment_kit_collection_display_label(collection),
+            "world_label": kotor_module_world_label(collection.game, collection.module_resref),
             "game": collection.game,
             "module_resref": collection.module_resref,
             "environment_kind": collection.environment_kind,
@@ -486,7 +560,8 @@ def environment_kit_piece_rows(
                     "piece_id": piece.piece_id,
                     "asset_id": piece.piece_id,
                     "collection_id": collection.collection_id,
-                    "collection_label": collection.label,
+                    "collection_label": environment_kit_collection_display_label(collection),
+                    "world_label": kotor_module_world_label(collection.game, collection.module_resref),
                     "label": piece.label,
                     "game": piece.game,
                     "module_resref": piece.module_resref,
@@ -647,10 +722,12 @@ __all__ = [
     "EnvironmentKitSnapResult",
     "environment_kit_catalog_path",
     "environment_kit_collection_rows",
+    "environment_kit_collection_display_label",
     "environment_kit_drag_payload",
     "environment_kit_piece",
     "environment_kit_piece_index",
     "environment_kit_piece_rows",
+    "kotor_module_world_label",
     "magnet_snap_transform",
     "nearest_environment_kit_snap",
     "scan_vanilla_environment_kits",

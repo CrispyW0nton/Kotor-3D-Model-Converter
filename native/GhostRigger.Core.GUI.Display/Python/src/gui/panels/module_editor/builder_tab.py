@@ -201,6 +201,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingStyleComboBox.setEditable(True)
         self.buildingStyleComboBox.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
         self.buildingStyleComboBox.setMaxVisibleItems(18)
+        self.buildingStyleComboBox.setPlaceholderText("Type a planet, ship, or module…")
+        self.buildingStyleComboBox.setToolTip(
+            "Search by a familiar location such as Dantooine, Telos, Dxun, Manaan, or Ebon Hawk."
+        )
         self.buildingStyleComboBox.completer().setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
         self.buildingStyleComboBox.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
         self.buildingStyleComboBox.addItem("PLCaa Neutral Blockout", {"style_id": "plcaa_graybox"})
@@ -271,6 +275,10 @@ class BuilderTab(QtWidgets.QWidget):
         building_form.addRow("Build type:", self.buildingKindComboBox)
         building_form.addRow("Module style:", self.buildingStyleComboBox)
         building_layout.addLayout(building_form)
+        self.buildingStyleSummaryLabel = QtWidgets.QLabel("Neutral Blockout · interior/exterior preview palette", building_box)
+        self.buildingStyleSummaryLabel.setObjectName("mapStudioBuildingStyleSummaryLabel")
+        self.buildingStyleSummaryLabel.setWordWrap(True)
+        building_layout.addWidget(self.buildingStyleSummaryLabel)
         self.buildingSettingsToggle = QtWidgets.QToolButton(building_box)
         self.buildingSettingsToggle.setObjectName("mapStudioPascalBuildingSettingsToggle")
         self.buildingSettingsToggle.setText("Building settings")
@@ -1574,6 +1582,7 @@ class BuilderTab(QtWidgets.QWidget):
         rows.sort(
             key=lambda row: (
                 1 if str(row.get("environment_kind") or "both").lower() == "both" else 0,
+                str(row.get("world_label") or "").lower(),
                 str(row.get("source_module") or "").lower(),
                 str(row.get("label") or "").lower(),
             )
@@ -1584,6 +1593,18 @@ class BuilderTab(QtWidgets.QWidget):
             style_id = str(row.get("style_id") or "")
             if style_id:
                 self.buildingStyleComboBox.addItem(str(row.get("label") or style_id), row)
+                item_index = self.buildingStyleComboBox.count() - 1
+                self.buildingStyleComboBox.setItemData(
+                    item_index,
+                    (
+                        f"{str(row.get('world_label') or 'Vanilla KOTOR')} · "
+                        f"{str(row.get('environment_kind') or 'both').title()} · {str(row.get('source_module') or 'PLCaa')}\n"
+                        f"Floor {str(row.get('floor_texture') or 'ruler01')} · "
+                        f"Walls {str(row.get('wall_texture') or 'ruler01')} · "
+                        f"Ceiling/Roof {str(row.get('ceiling_texture') or 'ruler01')}"
+                    ),
+                    QtCore.Qt.ItemDataRole.ToolTipRole,
+                )
         if self.buildingStyleComboBox.count() <= 0:
             self.buildingStyleComboBox.addItem("PLCaa Neutral Blockout", {"style_id": "plcaa_graybox"})
         index = self.buildingStyleComboBox.findData(current, role=QtCore.Qt.ItemDataRole.UserRole)
@@ -1619,8 +1640,16 @@ class BuilderTab(QtWidgets.QWidget):
         style_id = str(row.get("style_id") or "plcaa_graybox")
         kind = str(row.get("environment_kind") or self.buildingKindComboBox.currentData() or "both")
         source = str(row.get("source_module") or "PLCaa")
+        world = str(row.get("world_label") or "Neutral Blockout")
+        kind_label = "Exterior" if kind == "exterior" else "Interior" if kind == "interior" else "Interior / Exterior"
+        self.buildingStyleSummaryLabel.setText(
+            f"{world} · {kind_label} · {source}   |   "
+            f"Floor: {str(row.get('floor_texture') or 'ruler01')}   "
+            f"Walls: {str(row.get('wall_texture') or 'ruler01')}   "
+            f"Ceiling/Roof: {str(row.get('ceiling_texture') or 'ruler01')}"
+        )
         self.buildingStatusLabel.setText(
-            f"{self.buildingStyleComboBox.currentText()} selected from {source}. Draw Walls uses this palette; "
+            f"{world} {kind_label.lower()} style selected. Draw Walls uses the {source} palette; "
             + (
                 f"the closed footprint will include a {str(self.buildingRoofTypeComboBox.currentText()).lower()}."
                 if str(self.buildingRoofTypeComboBox.currentData() or "none") != "none"
