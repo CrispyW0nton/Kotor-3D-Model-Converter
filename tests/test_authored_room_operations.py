@@ -3353,7 +3353,7 @@ def test_t2907_environment_kit_styles_are_searchable_by_familiar_world_names() -
     assert any(style.style_id == "kit:k2_401dxn" and "Dxun" in style.label for style in k2_styles)
 
 
-def test_t2907_pascal_builds_multiple_planet_interior_and_exterior_styles() -> None:
+def test_t2907_pascal_builds_multiple_planet_interior_and_exterior_styles(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
@@ -3386,6 +3386,26 @@ def test_t2907_pascal_builds_multiple_planet_interior_and_exterior_styles() -> N
         assert primitive.material.texture == floor
         assert primitive.wall_material.texture == wall
         assert primitive.ceiling_material.texture == ceiling
+
+    export = controller.export_authored_module(tmp_path / "multistyle_export")
+    assert export.ok is True
+    assert Path(export.module_path).is_file()
+    assert export.package_verification is not None
+    assert export.package_verification.ok is True
+    assert export.package_verification.parsed_gff == (
+        "grstyles.are",
+        "grstyles.git",
+        "module.ifo",
+        "grstyles.pth",
+    )
+    assert export.package_verification.parsed_wok == tuple(
+        f"grstylesr{index:03d}.wok" for index in range(1, 5)
+    )
+    assert export.package_verification.model_pairs == tuple(
+        f"grstylesr{index:03d}.mdl/.mdx" for index in range(1, 5)
+    )
+    assert len(export.resources) == 18
+    assert not export.blocking_issues
 
 
 def test_t2907_environment_kit_nearest_snap_aligns_compatible_edge_magnets() -> None:

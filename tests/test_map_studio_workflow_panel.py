@@ -1778,6 +1778,40 @@ def test_t2600_map_studio_export_uses_progressive_disclosure_without_horizontal_
         export.close()
 
 
+def test_t2907_map_studio_first_mod_export_is_not_blocked_by_resources_it_generates() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from types import SimpleNamespace
+
+    from PySide6 import QtWidgets
+    from src.gui.panels.module_editor.export_panel import ModuleExportPanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = ModuleExportPanel()
+    try:
+        panel.set_readiness(
+            SimpleNamespace(
+                can_preview=True,
+                can_export_candidate=False,
+                export_status="Missing runtime resources",
+                missing_runtime_resources=(("grstyles", "are"), ("grstylesr001", "mdl")),
+                blocking_messages=(),
+                metadata={"pathing": {"blocking_messages": (), "blocking_targets": ()}},
+            )
+        )
+        app.processEvents()
+
+        assert panel.authored_module_button.isEnabled()
+        assert panel.authored_install_button.isEnabled()
+        assert panel.export_gate_label.text() == (
+            "Status: Ready to build a .mod. Required KOTOR files will be generated during export."
+        )
+        assert panel.export_blocker_table.item(0, 0).text() == "No current build blockers"
+    finally:
+        panel.close()
+
+
 def test_t2907_build_workspace_has_three_task_sections_and_direct_terrain_sculpting() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _install_native_payload_paths()

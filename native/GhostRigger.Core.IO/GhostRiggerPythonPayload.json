@@ -51,7 +51,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_EXPORT_JOB",
             "source_path": "src/core/export/export_job.py",
             "packaged_path": "Python/src/core/export/export_job.py",
-            "sha256": "949a87fd8edfac6e3c748802c3289ab6f242b64a6a3d1fd789d4d7df937976a5"
+            "sha256": "44354f2e376d07d93a06dc01ca16fbcb8d5015301655bb0552d6103cf5997cda"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER",

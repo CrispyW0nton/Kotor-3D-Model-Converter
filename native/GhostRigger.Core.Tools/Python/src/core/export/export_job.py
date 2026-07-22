@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import tempfile
@@ -136,7 +137,7 @@ def run_export_job(
     staging_parent.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(
         tempfile.mkdtemp(
-            prefix=f".ghostrigger_export_{_safe_job_id(request.job_id)}_",
+            prefix=f".grx_{_bounded_safe_component(request.job_id, max_length=24)}_",
             dir=str(staging_parent),
         )
     )
@@ -412,7 +413,15 @@ def _default_staging_parent(outputs: list[ExportOutputSpec]) -> Path:
     if not parents:
         return Path(".")
     shared = _shared_output_parent(outputs)
-    return shared if shared is not None else parents[0]
+    if shared is not None:
+        return shared
+    try:
+        common = Path(os.path.commonpath([str(parent) for parent in parents]))
+    except ValueError:
+        return parents[0]
+    # Never choose a drive/filesystem root merely because outputs span
+    # unrelated trees; use the first output parent in that uncommon case.
+    return common if common.parent != common else parents[0]
 
 
 def _shared_output_parent(outputs: list[ExportOutputSpec]) -> Path | None:
@@ -432,7 +441,7 @@ def _staged_output_map(outputs: list[ExportOutputSpec], staging_dir: Path) -> di
         if shared_parent is not None:
             candidate = staging_dir / spec.final_path.name
         else:
-            parent_slug = _safe_job_id(_normalized_path_key(spec.final_path.parent))
+            parent_slug = _staged_parent_slug(spec.final_path.parent)
             candidate = staging_dir / f"{index:04d}_{parent_slug}" / spec.final_path.name
         key = _normalized_path_key(candidate)
         if key in used:
@@ -474,6 +483,24 @@ def _normalized_path_key(path: Path) -> str:
 def _safe_job_id(job_id: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in str(job_id or "job"))
     return safe.strip("_") or "job"
+
+
+def _bounded_safe_component(value: str, *, max_length: int) -> str:
+    """Return a readable deterministic component without growing temp paths."""
+
+    safe = _safe_job_id(value)
+    limit = max(12, int(max_length))
+    if len(safe) <= limit:
+        return safe
+    digest = hashlib.sha256(str(value).encode("utf-8", errors="replace")).hexdigest()[:8]
+    return f"{safe[: limit - 9]}_{digest}"
+
+
+def _staged_parent_slug(parent: Path) -> str:
+    normalized = _normalized_path_key(parent)
+    leaf = Path(parent).name or "output"
+    digest = hashlib.sha256(normalized.encode("utf-8", errors="replace")).hexdigest()[:8]
+    return f"{_bounded_safe_component(leaf, max_length=16)}_{digest}"
 
 
 def _ensure_json_serializable(value: Any, context: str) -> None:

@@ -36,6 +36,20 @@ defaults remain intact. This presents the already-trained 210 vanilla module
 collections and 9,174 typed room/terrain pieces as understandable art styles
 without copying game geometry into Ghost Studio.
 
+The visible export proof also removed a circular first-export gate. A valid new
+map previously reported `Missing runtime resources` and disabled the same
+Export button responsible for generating those resources. Map Studio now
+recognizes this as a build-ready state, explains that the KOTOR files will be
+created during export, and enables Export/Install while continuing to lock
+those actions for real geometry, walkmesh/pathing, texture, or placement
+blockers.
+
+The same click-through proof caught a Windows path-length failure in the shared
+staged export transaction: multi-directory jobs embedded the complete absolute
+destination path into a temporary subfolder. Staging now uses the common output
+root plus short deterministic job/parent identifiers, preserving atomic
+promotion while allowing normal user-selected package folders to export.
+
 Intersects: the T2907 environment-kit, terrain-kit, direct-wall, roof, and
 multi-level work on `ghost-studio`; catalog identities, drag payloads, KMAP
 style IDs, and Odyssey export materials are unchanged.
@@ -50,7 +64,18 @@ opened `artifacts/map_studio_proof/pascal_multistyle_k2.kmap`, rendered all four
 authored buildings together, and exposed human-readable entries such as
 `Dantooine — Exterior · 601dan`; captures include
 `multistyle_k2_loaded.png`, `multistyle_k2_top.png`, and
-`multistyle_k2_style_expanded.png`.
+`multistyle_k2_style_expanded.png`. The same four-style project also completes
+the production K2 package path: the strict exporter wrote `grstyles.mod` with
+18 resources, and the package verifier parsed ARE/GIT/IFO/PTH, LYT/VIS, four
+room MDL/MDX pairs, and four WOK files with zero blocking issues. A focused
+regression now locks that multi-style authoring-to-MOD contract. The rebuilt
+staged application then repeated the workflow through Export -> Export .mod
+Package -> Package Wizard using a deliberately long user-selected folder. The
+visible status advanced from `Ready to build a .mod` to `Ready to export a
+.mod`; the transaction manifest reported `succeeded`, package readback reported
+`verified`, and `install/Modules/grstyles.mod` plus all 18 loose resources were
+present. Captures include `multistyle_export_ui_ready.png`,
+`multistyle_export_ui_wizard.png`, and `multistyle_export_ui_succeeded.png`.
 
 ### [2026-07-22] T2907 Unified Maya-style Map Studio object selection
 

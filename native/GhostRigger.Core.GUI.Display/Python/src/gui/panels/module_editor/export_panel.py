@@ -343,7 +343,17 @@ class ModuleExportPanel(QtWidgets.QWidget):
         )
         fix_hint = str(pathing.get("fix_hint") or "Use Builder/Walkmesh tools to put the module entry point and gameplay anchors on generated walkable WOK.")
 
-        self._set_authored_module_buttons_enabled(can_export)
+        missing_runtime_resources = tuple(
+            getattr(readiness, "missing_runtime_resources", ()) or ()
+        )
+        can_build_initial_package = (
+            bool(getattr(readiness, "can_preview", False))
+            and bool(missing_runtime_resources)
+            and export_status.strip().lower() == "missing runtime resources"
+            and not pathing_blockers
+            and not blocking_messages
+        )
+        self._set_authored_module_buttons_enabled(can_export or can_build_initial_package)
         if can_export:
             self.export_gate_label.setText(
                 "Status: Ready to export a .mod. Test it in KOTOR before release."
@@ -355,6 +365,22 @@ class ModuleExportPanel(QtWidgets.QWidget):
                         "No current export blockers",
                         "Authored .mod package actions are unlocked.",
                         "Stage or install, warp in-game, and record proof before game-ready status.",
+                    ),
+                )
+            )
+            return
+
+        if can_build_initial_package:
+            self.export_gate_label.setText(
+                "Status: Ready to build a .mod. Required KOTOR files will be generated during export."
+            )
+            self._set_fix_action_state(builder=False, walkmesh=False, placement=False, validate=False)
+            self._set_export_blocker_rows(
+                (
+                    (
+                        "No current build blockers",
+                        "The first export will generate the missing room and module resources.",
+                        "Choose Export .mod Package, then test the result in KOTOR before release.",
                     ),
                 )
             )

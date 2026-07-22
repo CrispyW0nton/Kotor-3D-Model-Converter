@@ -240,6 +240,36 @@ def test_multi_directory_outputs_stage_and_promote_together(tmp_path: Path) -> N
     assert seen_staging_dirs and all(not path.exists() for path in seen_staging_dirs)
 
 
+def test_multi_directory_staging_does_not_repeat_long_absolute_paths(tmp_path: Path) -> None:
+    output_root = tmp_path / ("user_selected_map_studio_package_" + ("x" * 64))
+    module = output_root / "install" / "Modules" / "grstyles.mod"
+    room = output_root / "source" / "resources" / "grstylesr001.mdl"
+    seen_staged: list[Path] = []
+
+    def writer(context: ExportJobContext) -> None:
+        seen_staged.extend((context.staged_path_for(module), context.staged_path_for(room)))
+        context.write_bytes(module, b"mod")
+        context.write_bytes(room, b"mdl")
+
+    result = run_export_job(
+        _request(
+            module,
+            job_id="map_studio.custom_module_package.grstyles.with_a_long_descriptive_job_name",
+            outputs=(
+                ExportOutputSpec(module, "module_package"),
+                ExportOutputSpec(room, "loose_resource"),
+            ),
+        ),
+        writer=writer,
+    )
+
+    assert result.succeeded is True
+    assert module.read_bytes() == b"mod"
+    assert room.read_bytes() == b"mdl"
+    assert seen_staged
+    assert all(str(output_root.resolve()).lower() not in path.parent.name.lower() for path in seen_staged)
+
+
 def test_manifest_writer_output_is_promoted(tmp_path: Path) -> None:
     final = tmp_path / "payload.txt"
     manifest = tmp_path / "payload.manifest.json"
@@ -272,4 +302,3 @@ def test_manifest_writer_output_is_promoted(tmp_path: Path) -> None:
     assert result.manifest_path == manifest
     assert manifest.exists()
     assert json.loads(manifest.read_text(encoding="utf-8"))["job_id"] == "job1"
-
