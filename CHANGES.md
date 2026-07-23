@@ -9,7 +9,811 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-23
+
+### [2026-07-23] T2909 Measured Korriban dressing shelf and complete-selection delete UX
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Korriban environment-kit browsing, installed-game mesh
+extraction, click-and-drag placement, Outliner multi-selection, object deletion,
+undo/redo, clean-view HUD state, native payload delivery, and visible UX proof.
+
+Expanded the K1 Korriban Tombs style shelf with eight measured dressing assets
+extracted from installed `m37aa_12` and `m39aa_07` room geometry: a sarcophagus
+and reliquary frame, burial offering stones, chamber floor dais, carved vault
+pier, circular vault trim, ritual stone dais, monument pylon, and fallen
+monument rock. These retain their stock diffuse textures and source UVs,
+discard baked lightmaps for authored-room relighting, expose source provenance,
+and remain separate visual-only Odyssey room objects so they do not introduce
+false walkable surfaces.
+
+Corrected the pinned shelf Delete command so it operates on the complete
+viewport/Outliner selection instead of sending whole authored-room rows to the
+primitive-only dispatcher. Structural outline refreshes now also update the
+clean-view room count immediately, eliminating stale HUD text after batch
+delete, undo, or redo.
+
+Affected files: Korriban environment-kit definitions in Core Scene/Core Tools;
+Map Studio window and viewport-panel payloads in Core Tools/Core GUI Display;
+focused authored-room, placement-browser, and workflow tests; T2909 roadmap;
+and `artifacts/korriban_proof/visible_dressing_library/`.
+
+Verification: the installed K1 extraction probe resolved all eight assets with
+nonempty geometry, matching diffuse UV/vertex counts, stripped lightmaps, and
+zero-face visual-only WOKs. Focused tests passed for all dressing previews,
+drag placement, wall alignment, source UV retention, batch delete/undo,
+style-filtered browser coverage, shelf-delete dispatch, HUD synchronization,
+and native payload identity. Core Scene, Core Tools, and Core GUI Display were
+regenerated and rebuilt in Debug x64; all 18 manifest DLLs were staged beside
+the repository-root executable. In the actual staged application, two measured
+Korriban props were physically dragged from their thumbnail cards into the
+viewport, Shift-selected together in the Outliner, and removed with the pinned
+Delete button. The HUD changed from three authored room meshes to one, Ctrl+Z
+restored both rows and the count of three, and Ctrl+R removed them again and
+returned to one.
+
+### [2026-07-23] T2909 Full K1/K2 Pascal reconstruction goal contract
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio architecture-kit roadmap, geometry/material quality gates,
+style-owned content browsing, room connectivity, and live navigation generation.
+
+Rebuilt the active T2909 goal around the complete product outcome rather than
+the initial Endar Spire/Taris demonstration slice. The canonical contract now
+requires every visually distinct KOTOR I and KOTOR II module-area style to
+produce measured, editable Pascal geometry with source-authentic silhouettes,
+bevels, layered relief, trims, openings, exterior envelopes, and organic forms.
+Flat boxes, simple extrusions, texture-only resemblance, UV stretching, and
+single-tile room normalization are explicit failure conditions.
+
+Every style must also auto-populate a categorized click-and-drag Content Browser
+with compatible vanilla rooms and environmental props; preserve each connected
+section as a separate editable room; magnet-snap measured portals with sealed
+joins and authentic working area doors/frames; and regenerate per-room WOK,
+reciprocal transitions, PTH, LYT, VIS, and connection validation while rooms are
+built. Completion requires visible viewport/PIE user-experience proof,
+export/readback, clean traversal, and a retail-game warp for every style.
+
+Affected files: `knowledge_base/roadmap/05_kotor_architecture_kit_rollout.md`,
+`knowledge_base/roadmap/02_roadmap_2026_05.md`, and `CHANGES.md`.
+
+Verification: reviewed both roadmap surfaces for the complete K1/K2 scope and
+confirmed that detailed measured geometry, undistorted UVs, style-filtered
+assets, stock-room drag placement, seamless snapping, authentic doors, live
+walkmesh/connectivity generation, separate-room editing, export/readback, and
+manual proof are all explicit completion gates.
+
+### [2026-07-23] T2909 Measured Korriban junction, burial, and monumental room contours
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Pascal architecture recipes, generated room geometry,
+world-scale floor/ceiling UVs, room-shape UX, live walkmesh generation, native
+payload delivery, and staged PIE proof.
+
+Expanded the K1 Korriban Tombs builder from corridor and reliquary chamber into
+five distinct authoring shapes. New Cross-vault junction, Burial alcove, and
+Monumental tomb hall recipes use measurements from the regenerated 23-room
+`m37aa`/`m38aa`/`m38ab`/`m39aa` rendered-geometry corpus. The new contours add
+closed cross-vault crowns, junction piers/capitals, recessed burial niches,
+lintels, jambs, sarcophagus plinths, and 10.5 m-cadence monumental pylons rather
+than stretching or palette-swapping the corridor shell. Zero-surface layout
+container nodes are no longer accepted as geometric training evidence.
+
+The shared generated floor and ceiling mesh path now uses world-space tiled UVs
+with a material repeat distance instead of normalizing every footprint to one
+0-1 texture island. This prevents a stock floor texture from stretching once
+across large rooms; the 42 x 31.5 m monumental proof now produces 14 x 10.5 UV
+repeats at the measured 3 m Korriban density. The policy applies to every
+Pascal-built room style.
+
+Affected files: Core Scene/Core Tools Pascal-building and authored-floor-plan
+payloads; focused authored-room and Builder-panel tests; the T2909 rollout
+roadmap; and the staged proof fixtures under
+`artifacts/korriban_proof/visible_measured_archetypes/`.
+
+Verification: eight focused Endar, Shadowlands, Korriban geometry, UV, WOK,
+door/portal, and real Builder-panel tests passed. The Korriban corpus rebuilt
+from 23 nonempty rendered rooms. Core Scene and Core Tools payload mirrors were
+hash-identical, regenerated, and rebuilt in Debug x64, then all 18 manifest
+payload DLLs were staged and verified beside the repository-root executable.
+In the actual staged application, Map Studio exposed all five Korriban Room
+shape choices and physically selected the three new shapes. PIE rendered the
+10.24 m junction (254 helpers, 526 collision triangles), 10.28 m burial alcove
+(557 helpers, 1,116 collision triangles), and 22.08 m monumental hall
+(417 helpers, 852 collision triangles), each with two walkable WOK faces.
+The final monumental capture visibly confirms repeated floor texels instead of
+the earlier full-footprint stretch.
+
+### [2026-07-23] T2909 Measured Korriban corridor and reliquary-chamber authoring split
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Pascal architecture recipes, Korriban room-shape UX,
+generated room geometry/UVs, live walkmesh generation, and native payloads.
+
+The K1 Korriban Tombs style no longer forces a corridor contour onto tall tomb
+chambers. Its Room shape control now offers a 3.90 m carved corridor and a
+separate 10.35 m reliquary chamber trained from `m37aa_12`, `m37aa_16`,
+`m38aa_08`, `m38aa_11`, and `m39aa_07`. The chamber recipe enforces a viable
+footprint and headroom, generates tiled world-scale materials, layered relief
+walls, corbel courses, vault shoulders, beveled ledges, massive two-stage
+corner buttresses/capitals, and a closed vault ceiling, and clamps every detail
+to the measured chamber height. The selected archetype persists in KMAP room
+metadata and command history, remains a separate editable room, and triggers
+the existing live WOK regeneration path.
+
+Affected files: Core Scene/Core Tools Pascal-building, authored-floor-plan, and
+module-editor-controller payloads; Core GUI Display/Core Tools Builder panel;
+focused authored-room and workflow-panel tests; T2909 rollout roadmap; and the
+visible proof fixture under `artifacts/korriban_proof/visible_chamber_archetype/`.
+
+Verification: seven focused Endar, Taris, Shadowlands, Korriban geometry, WOK,
+UV, and real Builder-panel tests passed, followed by both focused native payload
+manifest/byte-identity checks. Core Scene, Core Tools, and Core GUI Display
+payloads were regenerated and rebuilt in Debug x64, then all 18 payload DLLs
+were staged to the repository root. In the actual staged Ghost Studio
+application, Map Studio loaded `grkorrchamber.kmap`, exposed both Korriban room
+shapes, switched the live summary to `Reliquary chamber`,
+`Korriban Tomb Chamber`, and `10.350 m`, and entered PIE at the authored player
+start. The visible status reported two walkable WOK faces and 684
+camera-collision triangles while the player stood inside the generated
+relief-and-vault chamber.
+
+### [2026-07-23] T2909 Canonical K1/K2 Pascal kit completion contract
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio architecture-kit roadmap and acceptance criteria.
+
+Replaced the earlier starter-slice objective with the canonical full-rollout
+goal: Ghost Studio must recreate every distinct KOTOR I and KOTOR II module-area
+art style from measured vanilla geometry through the Pascal-style builder.
+Completion now explicitly requires beveled and detailed style-authentic
+geometry rather than flat texture-swapped primitives; stable source-scale UVs
+without stretching; a style-filtered click-and-drag browser for categorized
+environment props and compatible vanilla rooms; seamless portal snapping;
+area-authentic working doors and frames; separate editable rooms; and live
+WOK, transition, LYT/VIS, and connection regeneration during construction.
+Each style must pass viewport, PIE, export/readback, and manual user-experience
+proof before it can be marked complete.
+
+Affected files: `knowledge_base/roadmap/05_kotor_architecture_kit_rollout.md`
+and `CHANGES.md`.
+
+Verification: reviewed the revised goal against the K1/K2 rollout inventory and
+the existing per-style acceptance gate; confirmed that geometry fidelity, UV
+quality, browser population, snapping, doors, live walkmesh generation,
+separate-room ownership, export/readback, and visible proof are all explicit
+completion requirements.
+
+### [2026-07-23] T2909 Korriban stock-opening intent and authentic sealed doors
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Rooms workflow, authored stock-room connection metadata,
+Korriban door resources, module-layout audit, standalone KMAP staging, and
+native Python payload contracts.
+
+Unused openings in imported vanilla rooms can now be deliberately classified
+as an available connector, an intentional module exit, or sealed. Sealing an
+opening places a locked, key-required, non-blastable appearance-40 Korriban
+door at the measured retail WOK threshold; it does not stretch or remesh the
+source room. Reopening that connector removes the generated seal cleanly.
+Opening intent persists in the KMAP, participates in undo, and keeps the
+connection audit strict for genuinely forgotten openings while accepting
+deliberate exits and seals. The Rooms workflow exposes the operation through a
+focused `Set Opening Intent` action, and the standalone staging path accepts
+repeatable `--opening-intent HOOK_ID=INTENT` overrides for deterministic proof
+packages.
+
+Affected files: Core Scene/Core Tools Pascal architecture, authored layout, and
+module-editor controller payloads; GUI Display/Core Tools Rooms panel and
+Module Editor window payloads; the authored-module staging script; focused
+layout/UI/payload tests; and the T2909 companion roadmap.
+
+Verification: six focused opening-intent, undo, Korriban stock-room snapping,
+authentic-door, reciprocal-WOK, and Rooms-panel tests passed. Both native
+payload identity/manifest checks passed after regenerating Core Scene, Core
+Tools, and Core GUI Display, with the manifest census updated to include the
+already-present Tools terrain-kit owner copy. Independent parsing of
+`artifacts/korriban_proof/three_room_export_readback_07_sealed/install/Modules/grkorrlego.mod`
+confirmed 17 resources, five GIT doors, five unique LYT hooks, three locked
+`gr_korrseal` instances, an appearance-40 sealed UTD with DC 100 and
+key-required/lockable/locked state, 98 walkable faces, and four transition
+edges across the two reciprocal joins. Core Scene, Core Tools, and Core GUI
+Display rebuilt in Debug x64 and all 18 native payload DLLs were staged.
+Visible testing in the staged Ghost Studio application loaded the three-room
+Korriban KMAP, opened both intent selectors, applied the sealed state, displayed
+the new `seal_0001_l_010` door in the Outliner, and reported that the opening
+was closed by a locked area-style door; the test edit was then undone and
+discarded. Captures are under
+`artifacts/korriban_proof/visible_opening_intent_ui/`. This is structural MOD
+and staged Ghost Studio workflow proof; a retail KOTOR warp remains a separate
+graduation gate.
+
+### [2026-07-23] T2909 Korriban complete-package structural readback
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio KMAP export, authored-module IFO migration, MDL AABB
+serialization, Pascal architecture runtime resources, room-layout auditing,
+and area WOK seam validation.
+
+The standalone KMAP staging path now exports the same deterministic
+style-owned runtime resources as the live Map Studio controller, so Korriban
+packages include their generated `gr_korrdoor.utd` instead of leaving two GIT
+doors dependent on an unresolved template. Legacy multi-room KMAPs that stored
+a room resref in the player-start area field now preserve that useful room hint
+as editor metadata while writing the module root to Odyssey's
+`Mod_Entry_Area`.
+
+Imported retail WOKs may contain zero-area faces whose raw indices must remain
+stable. The MDL writer now gives those retained faces a finite unit fallback
+plane through their first vertex, satisfying the embedded AABB
+`n·p+d=0` contract without rewriting the source face topology. Area-level WOK
+seam checks now distinguish physical reciprocal portal pairs from VIS-only
+room visibility, and the layout audit defers approximate retail hook
+facing/nominal width to the authoritative WOK portal compiler. This removes
+false seam and misalignment warnings while retaining real warnings for the
+three intentionally unconnected stock portals still requiring caps or external
+exit intent.
+
+Affected files: the standalone authored-KMAP staging script; Core Scene/Core
+Tools authored module bridge, placements, export, layout, and WOK integration
+payloads; canonical/Core IO/Runtime Host MDL writer mirrors; focused bridge,
+entry-point, AABB, layout, WOK, and payload tests; and the T2909 companion
+roadmap.
+
+Verification: focused regressions passed for module-entry migration, controller
+room-hint preservation, degenerate AABB planes, physical-vs-VIS seam selection,
+explicit retail-hook layout intent, Korriban authentic doors/reciprocal
+portals, and payload byte identity. A fresh dry-run export/readback at
+`artifacts/korriban_proof/three_room_export_readback_05` produced a
+16-resource MOD with no blocking issue: three separate rooms and three
+MDL/MDX/WOK triples, ARE/GIT/IFO/PTH/LYT/VIS, two LYT door hooks, two
+`gr_korrdoor` GIT instances, and a bundled non-static appearance-40 UTD.
+Independent archive parsing confirmed `Mod_Entry_Area=grkorrlego`, matching
+three-room ARE/LYT lists, reciprocal WOK targets across both joins, 98 walkable
+faces, finite generated/imported UV channels, and byte-exact diffuse UV
+readback for all 70 imported surfaces with maximum error `0.0` and zero
+texture mismatches. This is structural MOD readback plus the previously
+recorded staged Ghost Studio traversal; retail KOTOR warp proof and remaining
+unused-portal closure are still required.
+
+### [2026-07-23] T2909 Korriban stock-room LEGO snapping and UV-preserving traversal
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio environment-kit dragging, stock-room WOK connections,
+Korriban style browser, authentic door placement, and imported-room UV fidelity.
+
+Dragging a vanilla environment room now treats the viewport cursor as the
+target-doorway selector instead of comparing the cursor with the room's hidden
+origin. The exact source magnet transform is solved after the target doorway is
+chosen, allowing a room tens of metres from its origin to snap naturally onto
+an unused doorway in an already placed vanilla room.
+
+Same-style stock-room joins now compile their reciprocal WOK portal immediately
+and place the area's authentic working door at the shared measured threshold.
+The K1 Korriban browser contract covers straight, bend, T-junction,
+four-way-hub, cross, dead-end, and chamber room topologies across `m37aa`,
+`m38aa`, `m38ab`, and `m39aa`. A focused installed-game regression also proves
+that object/world transforms do not modify the imported diffuse UV arrays.
+
+Affected files: Core Scene/Core Tools
+`map_studio_environment_kits.py` and `module_editor_controller.py`, focused
+authored-room tests, and the T2909 companion roadmap.
+
+Verification: `py_compile` passed for both exact Scene/Tools payload copies.
+Five focused Korriban catalog/profile/door/WOK tests passed, including a
+generated room plus retail `m39aa_16` hub plus retail `m38aa_05` bend with
+three separate rooms, two reciprocal portals, maximum midpoint gap
+`0.0000001134 m`, two `gr_korrdoor` placements, and exact diffuse-UV equality
+after the snap/KMAP round trip. The native payload byte-identity test passed.
+Core Scene and Core Tools rebuilt in Debug x64, and all 18 manifest-owned DLLs
+were staged and verified in the repository root.
+
+A fresh focus-safe staged Ghost Studio PIE proof retained 98 walkable faces and
+5,759 collision triangles, resolved and built both `dor_lko04` door actors,
+observed the player walk animation, and moved 3.842 m across the
+retail-hub-to-retail-bend threshold. The proof initially rejected a point that
+was inside a WOK triangle but lacked full 0.24 m capsule clearance; moving the
+authored start to the measured clearance-safe interior point passed. This is
+Ghost Studio staged proof, not completion of every tomb tile and not retail
+KOTOR proof.
+
+Proof artifacts:
+
+- `artifacts/korriban_proof/grkorriban_three_room_lego.kmap`
+- `artifacts/korriban_proof/visible_k1_three_room_stock_join_clearance_02/pie_frame_00.png`
+- `artifacts/korriban_proof/visible_k1_three_room_stock_join_clearance_02/pie_motion.png`
+- `artifacts/korriban_proof/visible_k1_three_room_stock_join_clearance_02_result.json`
+
+### [2026-07-23] T2909 canonical full K1/K2 architecture-kit goal
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio roadmap and environment-kit acceptance contract.
+
+Replaced the earlier starter-slice framing with a canonical, completion-driven
+goal for every unique KOTOR I and KOTOR II module art style. The contract now
+explicitly requires measured and serialized vanilla-geometry evidence,
+beveled/layered and silhouette-accurate procedural architecture, undistorted
+world-scale UVs, a style-filtered click-drag browser for environmental props
+and compatible vanilla rooms, seamless magnet assembly, authentic working
+area doors, and live separate-room WOK/PTH/LYT/VIS generation.
+
+Flat or merely retextured boxes, stretched UVs, open/clipping seams, manual room
+alignment, generic doors, and walkmeshes that need a later repair pass are
+recorded as blocking failure conditions. Endar Spire and Taris Apartments
+remain reference implementations rather than completion of T2909.
+
+Affected files: `knowledge_base/roadmap/05_kotor_architecture_kit_rollout.md`
+and `knowledge_base/roadmap/02_roadmap_2026_05.md`.
+
+Verification: reviewed both roadmap surfaces to confirm the companion contract
+and T2909 summary now state the same complete K1-before-K2 acceptance scope.
+
+### [2026-07-23] T2909 Korriban tomb relief closure and retail door-material parity
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Korriban architecture kit, stock door preview/runtime
+actors, renderer self-illumination, and generated-room walkmesh connections.
+
+Korriban tomb shells now close every beveled and broken relief course back to
+the measured wall profile with lower, upper, start, and end caps. This removes
+the floating-strip/open-slit failure at doorway cuts and grazing camera angles
+without changing the generated WOK. Stock-content flattening now preserves
+zero-alpha helper meshes and the source material contract instead of turning
+invisible Odyssey helpers into fallback-texture panels.
+
+The ModernGL and software render paths now apply self-illumination as a
+texture-modulated lighting contribution. The previous flat RGB addition erased
+dark atlas detail and made the K1 `DOR_LKO04` tomb door appear as an oversized
+white panel. The corrected path follows the shared reone, KotOR.js, and
+KotorBlender contract: self-illumination brightens the diffuse texture rather
+than replacing it. The fix is renderer-wide for other stock doors, props,
+foliage, and meshes authored with the same material state.
+
+Affected files: Core Scene/Core Tools Korriban floor-plan and stock-content
+preview modules, Core Rendering ModernGL/material/software raster paths, Core
+GUI Display material-state handoff, and focused Korriban/stock-preview tests.
+
+Verification: `py_compile` passed for the touched payload sources. Four focused
+tests passed for capped K1/K2 Korriban profiles, nondegenerate cap triangles,
+two reciprocal bridge WOK portals, zero-alpha stock helpers, and
+texture-preserving shader self-illumination. Core Rendering was regenerated and
+rebuilt in Debug x64, then all 18 manifest-owned payload DLLs were staged and
+verified in the repository root. A fresh visible Ghost Studio PIE proof rendered
+six continuous content frames with no blockers, loaded two animated
+`dor_lko04` actors, retained six walkable faces and 2,628 collision triangles,
+and moved the player 13.173 m through the first live doorway. Close-range visual
+inspection confirms the carved dark door atlas remains visible and the former
+white panel is gone. This proves the generated K1 Korriban bridge workflow in
+Ghost Studio; attaching and visually accepting the full vanilla tomb/cave room
+set remains the next Korriban graduation gate and is not yet retail-game proof.
+
+Proof artifacts:
+
+- `artifacts/korriban_proof/visible_k1_bridge_selfillum_fix/pie_frame_00.png`
+- `artifacts/korriban_proof/visible_k1_bridge_selfillum_fix/pie_motion.png`
+
+The mixed procedural/retail graduation slice now also attaches the installed
+K1 `m38aa_02` room as a separate style-browser room. The generated wall keeps
+the 5.25 m `DOR_LKO04` render clearance while its live WOK inserts the exact
+5.100006 m retail portal edge at zero midpoint gap. The door metadata now
+distinguishes the aperture from the measured 6.802 x 3.900 m outer frame, and
+the generated Korriban shell builds three stepped stone frame tiers plus sealed
+jamb, lintel, and threshold reveals. This covers the relief-course ends that
+were exposed when the stock panels opened; it does not alter the retail room
+mesh or merge the two authored rooms.
+
+Additional verification: four focused Korriban catalog/profile/door/WOK tests
+and the native payload byte-identity test passed. Scene and Tools rebuilt in
+Debug x64 and all 18 payload DLLs were staged. A fresh real-app threshold proof
+shows a closed, fully textured tomb door seated in the generated stone surround
+and then opens into the installed retail corridor without a visible black seam.
+PIE retained 47 walkable faces and 7,595 collision triangles; the long traversal
+moved 16.480 m into the stock room, and the close threshold traversal moved
+3.893 m through the animated door. This is staged Ghost Studio proof for one
+installed tomb tile, not completion of the remaining Korriban room families or
+retail-game proof.
+
+Additional proof artifacts:
+
+- `artifacts/korriban_proof/visible_k1_generated_to_m38aa_framed/pie_frame_00.png`
+- `artifacts/korriban_proof/visible_k1_generated_to_m38aa_framed/pie_motion.png`
+- `artifacts/korriban_proof/visible_k1_generated_to_m38aa_threshold/pie_frame_00.png`
+- `artifacts/korriban_proof/visible_k1_generated_to_m38aa_threshold/pie_motion.png`
+
+### [2026-07-23] Preserve KOTOR modular-head `neck_g` attachment links
+
+Owner: LordVaderCW
+
+Subsystem: KOTOR MDL loading/writing and Character Builder model export.
+
+Ghost Studio now preserves the distinct model-header super-root reference used
+by modular player and companion heads. The geometry tree continues to begin at
+the model root, while the model header can independently point to `neck_g`.
+Previously both fields were serialized to the geometry root, so an otherwise
+valid skinned head animated in actor/world space instead of staying composed
+through the headless body's animated head hook. The loader recovers the native
+secondary reference, the writer resolves and validates it by node name, and
+Character Builder carries it through fallback model-shell copies.
+
+Affected files: Core Math model data, Core Resources KOTOR loader, Core IO and
+Runtime Core Host MDL writers, Core Workflow Character Builder, synchronized
+payload manifests, and focused modular-head regression tests.
+
+Verification: focused modular-head writer, loader/writer round-trip, missing
+target, duplicate-target, sparse-supernode, and payload-identity tests passed.
+An authoritative retail K2 `PFHA04` round-trip retained geometry root
+`PFHA04` and secondary root `neck_g`. The rebuilt `p_xariah` likewise retains
+geometry root `p_xariah` and secondary root `neck_g`; it was transactionally
+staged for a clean retail visual test with the custom renderer disabled.
+
 ## 2026-07-22
+
+### [2026-07-22] T2909 Shadowlands sealed floor seams and snapped-room cave throats
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Shadowlands exterior kit, generated-room/vanilla-room
+connections, PIE walkmesh assembly, and ModernGL area-fog preview.
+
+The organic berm's first terrain ring now shares the authored floor outline
+exactly, eliminating the open floor-to-wall slit. Collapsed lower corner caps
+are emitted as valid triangle fans, while normal corner bands retain welded
+terrain quads. When a Shadowlands opening is magnet-snapped to a vanilla room,
+Map Studio now clips only the imported render geometry to the far side of the
+shared doorway plane, then builds the double-sided rounded cave throat wholly
+inside the authored clearing. The stock WOK retains its original raw vertex
+identities and threshold boundary so the automatic reciprocal portal remains
+traversable. A visual-only, double-sided dirt-bank continuation now follows
+every remaining exposed WOK boundary edge (while leaving the doorway clear),
+closing the black exterior gaps left by a partial retail LYT tile.
+
+Map Studio also reapplies world-preview state after lazy GPU creation and uses
+a compact-view fog range for viewport/PIE readability. The exported ARE still
+uses the measured retail K1 values unchanged: fog 0–70 m, RGB `(46, 36, 33)`,
+and `lka_grass` settings.
+
+Affected files: Core Scene and Core Tools authored room/preview modules,
+Core GUI Display viewport-state handoff, Core Rendering ModernGL fog path, and
+focused Shadowlands/world-preview tests.
+
+Verification: `py_compile` passed for all touched payload sources. The focused
+retail K1 m24aa/m25aa connection test passed with preserved stock WOK topology,
+reciprocal portal transitions, PIE traversal across the generated seam, and a
+sealed visual exterior boundary. The Shadowlands regression now also asserts
+that the attached retail-tile closure mesh is double-sided for every sealed
+WOK boundary edge and spans the configured dirt bank height. The updated Core
+Scene, Core Tools, and Core Rendering Debug payload DLLs were rebuilt. Root
+staging was then completed after the hidden `GhostStudio` process was closed.
+Fresh GhostStudio PIE visual proofs loaded generated KMAPs with attached
+vanilla Shadowlands upper and lower room pieces, rendered the grass/fog
+preview, and walked the player from the authored clearing through the snapped
+cave connection into each stock room. Korriban rollout remains deferred until
+the user accepts this Shadowlands proof.
+
+Follow-up cleanup replaced the stock-room exterior filler strips with an
+indexed organic boundary mound. The new closure shares vertices across retail
+WOK boundary edges, uses a four-ring sloped dirt profile, preserves the retail
+raw-index WOK, and keeps PIE traversal/export behavior intact while reducing
+the pasted-panel look seen in the first visual proof.
+
+Proof artifacts:
+`artifacts/map_studio/architecture_kit_proof/shadowlands/vanilla_connection_fresh/shadowlands_connection_summary.json`,
+`.../upper_pie_capture_north/pie_frame_00.png`,
+`.../upper_pie_capture_north/pie_motion.png`,
+`.../lower_pie_capture_north/pie_frame_00.png`, and
+`.../lower_pie_capture_north/pie_motion.png`. Cleanup proof:
+`artifacts/map_studio/architecture_kit_proof/shadowlands/organic_mound_cleanup/shadowlands_organic_mound_summary.json`,
+`.../lower_pie_capture/pie_frame_00.png`, and
+`.../lower_pie_capture/pie_motion.png`.
+
+### [2026-07-22] T2909 Shadowlands welded berms, cave passages, and live grass/fog preview
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Shadowlands exterior architecture, ARE environment
+metadata, preview-model grass generation, and ModernGL authored-area fog.
+
+Shadowlands berm bands now share their height/depth rings, split at cave-arch
+breakpoints, and receive corner caps that use the exact adjacent ring vertices.
+This closes the triangular cracks that previously exposed the editor background
+between procedural terrain pieces. New openings taper into walkable rounded
+earthen arches, using K1 m24aa/m25aa as the source reference, instead of
+placing a rectangular doorway under a decorative crown.
+
+Map Studio now previews the retail K1 `lka_grass` ARE field as lightweight,
+non-exporting crossed blade clusters over the authored WOK. It also applies the
+measured 0–70 m Shadowlands distance fog in the ModernGL Map Studio preview.
+The exported ARE remains authoritative and writes the unchanged retail values:
+`lka_grass`, density `5.0`, quad size `0.8`, and fog RGB `(46, 36, 33)`.
+
+Affected files: `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`
+authored room/preview/world metadata modules; Core Rendering ModernGL shader
+and uniform submission; focused Map Studio regression tests; and the refreshed
+Shadowlands PIE proof fixture.
+
+Verification: four focused regressions passed (Shadowlands architecture/ARE,
+retail room-to-WOK seam, world-light preview state, and viewport ownership).
+The rebuilt Debug payload DLLs were staged to the workspace root. A real
+GhostStudio Map Studio PIE capture rendered the generated grass cards, active
+distance-fog state, cave-passaged berm boundary, and player at ~34 viewport FPS:
+`artifacts/map_studio/architecture_kit_proof/shadowlands/earthen_berm/final_grass_fog_cave/pie_frame_00.png`.
+
+### [2026-07-22] Xaria split-character root contract and textured animation proof
+
+Owner: LordVaderCW
+
+Subsystem: Character Builder native skeleton export/reload validation and the
+live Character Studio WGPU preview used by the KOTOR II Xaria companion
+fixture.
+
+Character Builder now records an explicit resource-root rename when a native
+donor model is exported under a custom resref. The model name, root node, and
+local animation roots are renamed together, and reload preflight accepts only
+that recorded identity change. This keeps custom split body/head resources
+internally consistent without weakening normal donor-identity validation.
+
+The live Qt WGPU/D3D12 viewport exposed two asset-side failures that parser
+readback did not: nearest-vertex body weights collapsed the moving silhouette,
+and a second vertical image flip during game-texture packaging scrambled the
+otherwise valid OBJ UV atlas. The Xaria build now uses nearest-donor-triangle
+barycentric weight transfer, preserves Ghost Studio's exported TGA row
+orientation, and verifies that every rendered skin has a one-to-one vertex/UV
+stream and matching face/face-UV indices after MDL/MDX reload.
+
+Affected files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/`
+`native_skeleton.py`, `character_export_preflight.py`, and
+`character_export_transaction.py`; focused native-skeleton and export-
+preflight tests. The companion build and proof harness live in the separate
+Kotor-Patch-Manager workspace.
+
+Verification: focused tests passed; the actual Ghost Studio live WGPU viewport
+rendered the textured headless body at two `walkST` fractions beside PFBNM and
+the textured modular head at two `talk` fractions. The corrected body kept the
+donor stride without limb collapse, the face/hair atlas reconstructed
+correctly, and the jaw/lower-face silhouette changed during `talk`. This is
+visual editor proof, not retail KOTOR II proof; hair/cloth runtime writes remain
+disabled and unverified.
+
+### [2026-07-22] T2909/T2910 Stock-room LEGO joins, automatic WOK portals, and single-player PIE handoff
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio environment-kit placement, Pascal room openings, stock
+room WOK rebasing, reciprocal room transitions, LYT/VIS/PTH/MOD compilation,
+PIE player presentation, architecture-kit rollout instructions, and staged
+Endar Spire/Taris user-experience proof.
+
+Dragging a compatible vanilla room onto an authored wall now commits one
+stable room connection rather than only aligning the render meshes. Map Studio
+cuts the authored opening to the stock room's measured threshold, rebases the
+retail WOK into the placed room, regenerates the authored floor boundary,
+writes reciprocal transition indices against final LYT room order, refreshes
+VIS/PTH, and rejects a cracked or non-walkable join before the scene changes.
+The same path is active for Endar Spire and Taris Apartments. Taris uses the
+measured 4.5 x 2.396 m apartment threshold and working `dor_lts02` door
+(`genericdoors.2da` appearance 20), rather than the Endar doorway.
+
+PIE now removes the complete editor-only Player Start group before attaching
+the runtime player. Body, head, and attachments stay one hierarchy and are
+restored together when simulation stops, eliminating the two characters drawn
+at the same spawn transform.
+
+The persistent T2909 rollout contract is recorded in
+`knowledge_base/roadmap/05_kotor_architecture_kit_rollout.md` and linked from
+the main roadmap. It now explicitly supersedes the earlier Endar/Taris
+starter-slice framing: every unique K1/K2 style requires measured,
+silhouette-accurate beveled geometry, stable world-scale UVs without
+stretching, a style-filtered browser containing compatible vanilla rooms and
+categorized environmental props, authentic working doors, live per-room WOK
+generation, and seamless mixed procedural/stock assembly. Endar Spire and
+Taris Apartments are reference implementations, not completion of T2909.
+Finish and visibly prove all KOTOR I families before applying the identical
+acceptance gate to KOTOR II.
+
+Affected files: Scene/Tools automatic walkmesh, layout, room snapping,
+environment-kit, Pascal-building, controller, export, and area-WOK modules;
+Tools `module_editor_window.py`; focused room-snap/PIE tests; T2909 roadmaps;
+and proof KMAP/captures under
+`artifacts/map_studio/architecture_kit_proof/automatic_walkmesh_ui/`.
+
+Verification: 20 focused room/pathing/snap tests and three payload
+identity/manifest tests passed for the connection slice; the Player Start
+replacement regression and Python compile pass. Installed K1 data produced
+measured portal midpoint gaps of 0.0067 m (Endar) and 0.0038 m (Taris), and
+both generated MOD packages passed readback. Scene, Tools, Workflow, and GUI
+Display Debug x64 payloads were rebuilt as applicable, and all 18 DLLs were
+staged beside the root executable. In the real staged `GhostStudio.exe`, the
+Endar proof passed with one player, 17 walkable faces, eight content frames,
+and 13.41 m of movement through the joined doorway; the Taris proof passed
+with one player, 37 walkable faces, eight content frames, and 15.75 m of
+movement from authored geometry into the attached vanilla apartment. Retail
+manual-warp acceptance remains required before either style is marked Done.
+
+### [2026-07-22] T2909 Measured Taris apartment shell and live generated-WOK proof
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Pascal architecture profiles, floor-plan shell topology,
+automatic authored-room walkmesh, Scene/Tools payloads, generated K1 package
+readback, and staged-root PIE validation.
+
+Taris Apartments no longer use a decorated rectangular wall shell. The
+`taris_apartment` profile sweeps the repeated vanilla interior stations around
+the user's convex floor plan: 0.187 m skirting, 0.45 m lower service return,
+1.35 m wall-panel field, 1.50 m light belt, 1.65 m utility return, 1.95 m upper
+panel, 2.10 m shoulder, 2.396 m ceiling cove, and a recessed 2.55 m ceiling.
+The style records the observed 3.075 m floor-to-floor envelope and 3.0 x 2.396
+m opening recommendation. The generic box walls and flat ceiling are removed,
+structural ribs follow the new contour, and every band and rib remains aware of
+authored door/window cuts.
+
+Room construction continues to generate its WOK directly from the authored
+floor plan. Whole-room doorway snapping retains the previously added symmetric
+portal hooks, regenerated room WOKs, and seam validation, so visual shell work
+cannot silently replace or detach the walkable floor. The measured Taris proof
+KMAP therefore required no separate walkmesh-authoring step.
+
+Affected files: Scene/Tools `authored_room_floorplan.py` and
+`map_studio_pascal_building.py`, focused authored-room tests, regenerated Scene
+and Tools payload manifests, the T2909 architecture roadmap, and proof artifacts
+under `artifacts/map_studio/architecture_kit_proof/taris_apartment_measured/`.
+
+Verification: MCP pipeline comparisons for K1 `m02aa_03a` and `m02aa_06a`
+matched PyKotor ground truth with zero node discrepancies. Seven focused
+architecture/opening/snap/PIE/export tests and two payload identity/manifest
+tests pass; generated K1 MDL/MDX/WOK/MOD readback reports no blockers. Scene and
+Tools rebuilt in Debug x64 and all 18 manifest-owned DLLs were staged beside
+the root executable. The real staged `GhostStudio.exe` opened
+`taris_apartment_measured.kmap`; its focus-safe PIE proof passed with two
+walkable WOK faces, 384 collision triangles, six continuous content frames, a
+correctly attached player actor, and 3.733 m of walk movement. This is editor
+PIE evidence, not yet the required retail K1 manual-warp acceptance proof.
+
+### [2026-07-22] T2909 Lego-style doorway room snapping and automatic WOK seams
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio authored-room dragging, doorway topology, shared door
+ownership, VIS/WOK connection metadata, PIE door traversal, Scene/Tools/GUI
+Display payloads, and visible authoring workflow.
+
+Dragging one complete authored room near a doorway now previews and commits an
+exact wall-to-wall magnet snap. Map Studio rotates and translates the room as a
+single object, reuses a compatible source opening or cuts a dimension-matched
+opening automatically, preserves both rooms, and owns one shared working KOTOR
+door instead of overlapping duplicate actors. Free-moving a room also carries
+its owned door. The live HUD identifies the target wall, opening dimensions,
+and automatic cut before the user releases the mouse.
+
+Every committed connection refreshes the Pascal wall graph and symmetric VIS
+links, regenerates both room WOKs, and validates that the portal hooks coincide,
+face opposite directions, and retain walkable faces. Endar `DOR_LHR01`
+transitions now include two-sided corner infill and depth-closing reveals so the
+rectangular authored wall cut does not expose open shell edges around the stock
+octagonal frame. PIE derives its portal normal and passage width from the
+authored opening rather than treating the door model's tangent bearing as the
+walk-through direction.
+
+Affected files: Scene/Tools `authored_module_layout.py`,
+`module_editor_controller.py`, `authored_room_floorplan.py`,
+`map_studio_pie.py`, `map_studio_pie_entities.py`; the Tools/GUI Display Map
+Studio viewport panel; `module_editor_window.py`; focused authored-room,
+drop-target, and PIE-door tests; and regenerated payload manifests.
+
+Verification: 17 focused tests pass, covering exact room/opening alignment,
+automatic source-wall cutting, one shared door actor, room-owned door movement,
+four-side vanilla room magnets, sealed Endar transition topology, generated K1
+package readback, portal-normal derivation, and crossing the joined WOK seam.
+Scene, Tools, and GUI Display Debug x64 projects rebuilt successfully and all 18
+manifest-owned DLLs were staged and verified beside the root executable. The
+real staged application opened `endar_two_room_lego_snap.kmap`; focus-safe PIE
+reported four walkable WOK faces, one loadable `dor_lhr01`, zero blockers, and
+moved the player from `(4.00, 3.60, 0.00)` to `(4.00, 11.70, 0.00)` across the
+door. A separate manual Alt+P/W workflow visibly opened the door and moved the
+player to y=9.04 inside the second room. Proof:
+`artifacts/map_studio/republic_warship_connection_proof/whole_room_drag_snap/`.
+
+### [2026-07-22] T2909 Endar Spire structural corridor contour
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Pascal building shell generation, authored-room topology,
+opening cuts, KMAP style metadata, Builder presentation, Scene/Tools payloads,
+and generated K1 room export.
+
+The Endar architecture kit no longer places themed panels over a rectangular
+wall-and-ceiling box. Its `endar_corridor` structural profile sweeps a measured
+faceted cross-section around the authored convex footprint: shallow side deck,
+sloped lower bulkhead, illuminated belt, mid-wall return, inward-canted upper
+bulkhead, shoulder/cove, ceiling light coffer, and recessed central ceiling.
+Structural ribs follow the entire cross-section rather than remaining vertical
+pilasters. The ordinary box walls and full-width flat ceiling are omitted for
+this profile, making the silhouette readable with neutral materials.
+
+Every band is constructed from consistently inset polygon rings. Narrow valid
+rooms scale the contour uniformly rather than folding topology, and door/window
+intervals cut through every intersecting shell and rib band. The style and KMAP
+metadata now preserve `architecture_shell_profile=endar_corridor`, while the
+Builder identifies the active structural contour separately from its material
+and detail profile. This establishes the contract needed for distinct Endar
+quarters, junction, and doorway archetypes instead of applying one corridor
+shape to every room.
+
+Affected files: Scene/Tools `authored_room_floorplan.py`,
+`map_studio_pascal_building.py`, `module_editor_controller.py`, the Map Studio
+Builder panel, focused authored-room tests, and the T2909 architecture roadmap.
+
+Verification: four focused tests pass, including contour identity, non-box
+shell replacement, canted-wall and inset-ceiling dimensions, non-degenerate
+triangles, door-opening clearance across contour bands, semantic serialization,
+and generated K1 MOD/MDL/MDX/WOK package readback. Scene and Tools Debug x64
+payload DLLs rebuilt successfully. An isolated real Debug application loaded the
+authored `endar_corridor_contour.kmap` through Map Studio's visible Open workflow;
+PIE at the player start visibly confirmed the sloped lower bulkheads, continuous
+light belt, canted upper walls, contour-following ribs, recessed ceiling coffer,
+and open doorway. Proof: `artifacts/map_studio/architecture_kit_proof/`
+`endar_corridor_pie_active.png`. After the user closed Ghost Studio, Scene and
+Tools were rebuilt again, all 18 manifest-owned payload DLLs were staged and
+verified beside the root executable, and that exact root `GhostStudio.exe`
+loaded the KMAP through the visible Map Studio Open workflow. Final staged-root
+PIE proof: `endar_corridor_root_staged_pie_final.png`.
+
+### [2026-07-22] T2909 Endar Spire and Taris Apartments architecture kits
+
+Owner: ShaolinGhost
+
+Subsystem: Map Studio Pascal building geometry, installed-game architecture
+analysis, local semantic geometry corpus, Scene/Tools payloads, and K1 visual
+proof.
+
+Map Studio's first geometry-derived architecture profiles now replace the
+generic-box treatment for Endar Spire and Taris Apartments. Drawing an Endar
+room compiles stock-inspired bulkhead bays, red inset and angled upper panels,
+structural and arched ribs, skirting/cornice, luminous strips, and faceted
+wall-ceiling coves. Drawing a Taris apartment compiles framed utility bays,
+apartment recesses, pilasters, utility rails, trim bands, and integrated
+lights. Both recipes adapt to arbitrary footprints and skip door/window spans
+so decoration does not seal authored openings. Generated pieces use installed
+K1 material references and remain ordinary authored-room geometry for the
+existing MDL/MDX/WOK/MOD path.
+
+The new architecture-corpus utility converts installed room models into a
+LLaMA-Mesh-inspired, readable OBJ sequence with source provenance, semantic
+role, confidence, bounds, `v`/`vt`/`vn`/`usemtl`/`f` records, and a review list.
+Automatic orientation/material/topology classification separates likely
+floors, walls, ceilings, trims, lights, terrain, and props without requiring
+the user to pre-split every room. Corpus output is local-only under the Ghost
+Studio cache; no game geometry is added to the repository. The companion T2909
+roadmap defines the planet-by-planet K1/K2 extraction, recipe, UI, export, and
+manual-warp acceptance gates.
+
+Affected files: `core/modules/map_studio_pascal_building.py`,
+`core/modules/authored_room_floorplan.py`,
+`core/modules/module_editor_controller.py`, the Map Studio Builder panel,
+`scripts/build_kotor_architecture_corpus.py`, focused authored-room tests, and
+`knowledge_base/roadmap/05_kotor_architecture_kit_rollout.md`.
+
+Verification: the local K1 corpus generated nine evidence rooms, 416 surfaces,
+47,172 triangles, and ten manifest/sequence files. Focused architecture profile,
+opening-clearance, serializer, and existing multi-style tests pass. MCP-backed
+pipeline comparisons for `m01aa_08a` and `m02aa_06a` match PyKotor ground truth
+with zero node differences. Scene and Tools Debug x64 DLLs were regenerated,
+built, and all 18 payload DLLs staged. The real staged Debug app opened
+`artifacts/map_studio/architecture_kit_proof/endar_taris_architecture.kmap` and
+visibly rendered distinct open-ceiling Endar and Taris rooms; the Build workflow
+also selected the Endar architecture style, armed Draw Walls, and registered a
+two-corner wall-plan input. Full closed-loop construction plus in-game K1 warp
+proof remains part of the T2909 acceptance gate.
 
 ### [2026-07-22] T2907 Planet-searchable vanilla building styles and multi-style proof
 

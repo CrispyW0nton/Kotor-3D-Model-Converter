@@ -55,6 +55,16 @@ class AuthoredAreaMetadata:
     fog_near: float = 100.0
     fog_far: float = 200.0
     sun_fog_on: bool = False
+    # K1 exterior ARE fields.  Keeping them first-class means a custom
+    # Shadowlands clearing exports the same terrain layer as the retail rooms
+    # it connects to rather than losing grass when no stock ARE is preserved.
+    grass_texture: str = ""
+    grass_density: float = 0.0
+    grass_quad_size: float = 0.0
+    grass_prob_ll: float = 0.25
+    grass_prob_lr: float = 0.25
+    grass_prob_ul: float = 0.25
+    grass_prob_ur: float = 0.25
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -272,6 +282,16 @@ def authored_area_metadata(
             "fog_near": legacy.get("fog_near", legacy.get("sun_fog_near", current.fog_near)),
             "fog_far": legacy.get("fog_far", legacy.get("sun_fog_far", current.fog_far)),
             "sun_fog_on": legacy.get("sun_fog_on", current.sun_fog_on),
+            "grass": {
+                "texture": legacy.get("grass_tex_name", legacy.get("Grass_TexName", current.grass_texture)),
+                "density": legacy.get("grass_density", legacy.get("Grass_Density", current.grass_density)),
+                "quad_size": legacy.get("grass_quad_size", legacy.get("Grass_QuadSize", current.grass_quad_size)),
+                "prob_ll": legacy.get("grass_prob_ll", legacy.get("Grass_Prob_LL", current.grass_prob_ll)),
+                "prob_lr": legacy.get("grass_prob_lr", legacy.get("Grass_Prob_LR", current.grass_prob_lr)),
+                "prob_ul": legacy.get("grass_prob_ul", legacy.get("Grass_Prob_UL", current.grass_prob_ul)),
+                "prob_ur": legacy.get("grass_prob_ur", legacy.get("Grass_Prob_UR", current.grass_prob_ur)),
+                "source": "legacy:are",
+            },
         }
     if not source:
         return current
@@ -285,16 +305,42 @@ def authored_area_metadata(
         fog_far = float(source.get("fog_far", current.fog_far))
     except (TypeError, ValueError):
         fog_far = float(current.fog_far)
+    grass = _dict(source.get("grass"))
+    grass_texture = str(
+        grass.get("texture", source.get("grass_texture", source.get("grass_tex_name", current.grass_texture))) or ""
+    ).strip().lower()
+
+    def grass_value(key: str, fallback: float) -> float:
+        try:
+            value = float(grass.get(key, source.get(f"grass_{key}", fallback)))
+        except (TypeError, ValueError):
+            value = float(fallback)
+        return max(0.0, value) if math.isfinite(value) else float(fallback)
+
+    grass_density = grass_value("density", current.grass_density)
+    grass_quad_size = grass_value("quad_size", current.grass_quad_size)
+    grass_prob_ll = grass_value("prob_ll", current.grass_prob_ll)
+    grass_prob_lr = grass_value("prob_lr", current.grass_prob_lr)
+    grass_prob_ul = grass_value("prob_ul", current.grass_prob_ul)
+    grass_prob_ur = grass_value("prob_ur", current.grass_prob_ur)
     return replace(
         current,
         fog_color=fog_color,
         fog_near=fog_near,
         fog_far=fog_far,
         sun_fog_on=bool(source.get("sun_fog_on", current.sun_fog_on)),
+        grass_texture=grass_texture,
+        grass_density=grass_density,
+        grass_quad_size=grass_quad_size,
+        grass_prob_ll=grass_prob_ll,
+        grass_prob_lr=grass_prob_lr,
+        grass_prob_ul=grass_prob_ul,
+        grass_prob_ur=grass_prob_ur,
         metadata={
             **source,
             **dict(current.metadata),
             "world_lighting_source": str(source.get("source") or "kmap:area"),
+            "grass_source": str(grass.get("source") or source.get("grass_source") or "kmap:area"),
         },
     )
 
@@ -592,16 +638,15 @@ def build_authored_are_gff(
     root.set_single("AlphaTest", 0.2)
     root.set_int32("CameraStyle", 1 if not is_k2 else 0)
     _set_empty_resref(root, "DefaultEnvMap")
-    _set_empty_resref(root, "Grass_TexName")
-    root.set_single("Grass_Density", 0.0)
-    root.set_single("Grass_QuadSize", 0.0)
+    root.set_resref("Grass_TexName", str(area.grass_texture or ""))
+    root.set_single("Grass_Density", float(area.grass_density))
+    root.set_single("Grass_QuadSize", float(area.grass_quad_size))
     root.set_uint32("Grass_Ambient", 0)
     root.set_uint32("Grass_Diffuse", 0)
-    grass_probability = 0.0 if is_k2 else 0.25
-    root.set_single("Grass_Prob_LL", grass_probability)
-    root.set_single("Grass_Prob_LR", grass_probability)
-    root.set_single("Grass_Prob_UL", grass_probability)
-    root.set_single("Grass_Prob_UR", grass_probability)
+    root.set_single("Grass_Prob_LL", float(area.grass_prob_ll))
+    root.set_single("Grass_Prob_LR", float(area.grass_prob_lr))
+    root.set_single("Grass_Prob_UL", float(area.grass_prob_ul))
+    root.set_single("Grass_Prob_UR", float(area.grass_prob_ur))
     root.set_uint32("MoonAmbientColor", 0)
     root.set_uint32("MoonDiffuseColor", 0)
     root.set_uint8("MoonFogOn", 0)

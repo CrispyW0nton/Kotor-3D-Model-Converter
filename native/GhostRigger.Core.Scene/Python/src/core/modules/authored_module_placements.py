@@ -515,10 +515,18 @@ def update_authored_module_entry_point(
 ) -> AuthoredModuleEntryPointUpdate:
     """Update the module entry point/player start that compiles into IFO."""
 
-    area = normalise_resref(area_resref or project.module_root)
+    requested_area = normalise_resref(area_resref or project.module_root)
+    room_resrefs = {room.normalised_resref() for room in project.rooms}
+    entry_room_resref = requested_area if requested_area in room_resrefs else ""
+    area = project.module_root if entry_room_resref else requested_area
     issue = authored_resref_blocking_issue("Module entry area", area)
     if issue:
         raise ValueError(issue)
+    if area != project.module_root:
+        raise ValueError(
+            f"Module entry area {area} does not match module root {project.module_root}. "
+            "Choose the module area; the player-start position determines its room."
+        )
     pos = _vec3(position)
     entry = ModuleEntryPoint(
         area_resref=area,
@@ -530,22 +538,35 @@ def update_authored_module_entry_point(
         "position": [float(pos[0]), float(pos[1]), float(pos[2])],
         "facing": float(facing),
     }
+    if entry_room_resref:
+        metadata["entry_room_resref"] = entry_room_resref
+        metadata["requested_area_resref"] = requested_area
+    placement_metadata = {
+        **dict(project.placements.metadata),
+        "last_entry_point_update": metadata,
+    }
+    if entry_room_resref:
+        placement_metadata["entry_room_resref"] = entry_room_resref
+    else:
+        placement_metadata.pop("entry_room_resref", None)
     updated_placements = replace(
         project.placements,
         entry_point=entry,
-        metadata={
-            **dict(project.placements.metadata),
-            "last_entry_point_update": metadata,
-        },
+        metadata=placement_metadata,
     )
+    project_extra = {
+        **dict(project.extra),
+        "last_entry_point_update": metadata,
+    }
+    if entry_room_resref:
+        project_extra["entry_room_resref"] = entry_room_resref
+    else:
+        project_extra.pop("entry_room_resref", None)
     updated = replace(
         project,
         placements=updated_placements,
         notes=tuple(project.notes) + (f"Updated Map Studio module entry point: {area}.",),
-        extra={
-            **dict(project.extra),
-            "last_entry_point_update": metadata,
-        },
+        extra=project_extra,
     )
     return AuthoredModuleEntryPointUpdate(
         project=updated,

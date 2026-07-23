@@ -1784,7 +1784,7 @@ def test_t2907_map_studio_first_mod_export_is_not_blocked_by_resources_it_genera
 
     from types import SimpleNamespace
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
     from src.gui.panels.module_editor.export_panel import ModuleExportPanel
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -2169,6 +2169,8 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
         assert "mapStudioRoomsRemoveRoomButton" in source
         assert "mapStudioRoomsDuplicateRoomButton" in source
         assert "mapStudioRoomsConnectOpeningsButton" in source
+        assert "mapStudioRoomsOpeningIntentButton" in source
+        assert "available connectors, intentional module exits, or sealed authentic doors" in source
         assert "mapStudioRoomsAuditConnectionsButton" in source
         assert "def set_connection_audit" in source
         assert "WOK transition edges and in-game traversal" in source
@@ -2176,6 +2178,13 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
         assert "mapStudioRoomsFocusSelectedButton" in source
         assert "mapStudioRoomsAutoArrangeButton" in source
         assert "mapStudioRoomsSnapToGridButton" in source
+
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
+    assert "def _set_authored_room_opening_intent" in window_source
+    assert "Sealed — locked area-style door" in window_source
+    assert 'if action == "Set Opening Intent"' in window_source
 
 
 def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
@@ -4065,6 +4074,50 @@ def test_map_studio_terrain_release_keeps_resident_mesh_and_defers_wok_validatio
     assert target._last_map_studio_terrain_release_ms >= 0.0
 
 
+def test_map_studio_tool_belt_delete_uses_complete_scene_selection() -> None:
+    _install_native_payload_paths()
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    calls: list[str] = []
+    target = SimpleNamespace(
+        delete_map_studio_current_selection=lambda: calls.append("delete_current_selection"),
+    )
+
+    ModuleEditorWindow._handle_map_studio_tool_belt_action(
+        target,
+        SimpleNamespace(
+            key="delete_selected",
+            workspace_key="geometry",
+            tool_key="delete_selected",
+        ),
+    )
+
+    assert calls == ["delete_current_selection"]
+
+
+def test_map_studio_room_outline_refresh_updates_clean_view_count() -> None:
+    _install_native_payload_paths()
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    marker = SimpleNamespace(kind="placeable")
+    outline = SimpleNamespace(room_count=1)
+    calls: dict[str, object] = {}
+    target = SimpleNamespace(
+        _placement_markers={"authored:fixture": marker},
+        _placement_marker_geometry=SimpleNamespace(),
+        _terrain_walkability_overlay=SimpleNamespace(),
+        _sync_room_outline_overlay=lambda value: calls.setdefault("outline", value),
+        _update_marker_summary=lambda *values: calls.setdefault("summary", values),
+    )
+
+    ModuleEditorViewportPanel.set_authored_room_outline_geometry(target, outline)
+
+    assert target._room_outline_geometry is outline
+    assert calls["outline"] is outline
+    assert calls["summary"][0] == (marker,)
+    assert calls["summary"][2] is outline
+
+
 def test_map_studio_live_terrain_stroke_redoes_the_same_kmap_heights() -> None:
     _install_native_payload_paths()
     from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
@@ -4297,6 +4350,111 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
         assert "Dantooine · Exterior · m13aa" in builder.buildingStyleSummaryLabel.text()
         assert "lda_grass07" in builder.buildingStyleSummaryLabel.text()
         assert "Dantooine exterior style selected" in builder.buildingStatusLabel.text()
+    finally:
+        builder.close()
+        app.processEvents()
+
+
+def test_t2909_shadowlands_style_defaults_to_open_air_organic_authoring() -> None:
+    from dataclasses import asdict
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+    from src.core.modules.map_studio_pascal_building import available_pascal_building_styles
+    from src.gui.panels.module_editor.builder_tab import BuilderTab
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    builder = BuilderTab()
+    try:
+        builder.set_building_styles(tuple(asdict(style) for style in available_pascal_building_styles("K1")))
+        assert builder.select_building_style("architecture:k1_shadowlands", "exterior") is True
+        app.processEvents()
+
+        settings = builder._building_settings()
+        style = dict(builder.buildingStyleComboBox.currentData() or {})
+        assert settings["building_kind"] == "exterior"
+        assert settings["roof_type"] == "none"
+        assert settings["include_ceiling"] is False
+        assert style["architecture_profile"] == "shadowlands"
+        assert style["architecture_shell_profile"] == "shadowlands_root_wall"
+        assert builder.buildingKindComboBox.currentData() == "exterior"
+        assert builder.buildingRoofTypeComboBox.currentData() == "none"
+        assert builder.buildingCeilingCheckBox.isChecked() is False
+        assert "organic terrain kit" in builder.buildingStatusLabel.text().lower()
+    finally:
+        builder.close()
+        app.processEvents()
+
+
+def test_t2909_korriban_builder_exposes_all_measured_room_shapes() -> None:
+    from dataclasses import asdict
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtCore, QtWidgets
+    from src.core.modules.map_studio_pascal_building import available_pascal_building_styles
+    from src.gui.panels.module_editor.builder_tab import BuilderTab
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    builder = BuilderTab()
+    try:
+        builder.set_building_styles(tuple(asdict(style) for style in available_pascal_building_styles("K1")))
+        assert builder.select_building_style("architecture:k1_korriban_tombs", "interior") is True
+        app.processEvents()
+
+        assert builder.buildingArchetypeComboBox.isEnabled() is True
+        archetype_ids = tuple(
+            str(dict(builder.buildingArchetypeComboBox.itemData(index) or {}).get("archetype_id") or "")
+            for index in range(builder.buildingArchetypeComboBox.count())
+        )
+        assert archetype_ids == ("corridor", "chamber", "junction", "burial", "monumental")
+        assert builder._building_settings()["architecture_archetype"] == "corridor"
+        assert builder.buildingWallHeightSpinBox.value() == pytest.approx(3.90)
+        assert builder.buildingFloorToFloorSpinBox.value() == pytest.approx(4.50)
+        assert "ROOM SHAPE: Carved tomb corridor" in builder.buildingStyleSummaryLabel.text()
+        assert "CONTOUR: Korriban Tomb" in builder.buildingStyleSummaryLabel.text()
+
+        chamber_index = archetype_ids.index("chamber")
+        builder.buildingArchetypeComboBox.setCurrentIndex(chamber_index)
+        app.processEvents()
+
+        settings = builder._building_settings()
+        assert settings["style_id"] == "architecture:k1_korriban_tombs"
+        assert settings["architecture_archetype"] == "chamber"
+        assert settings["wall_height"] == pytest.approx(10.35)
+        assert settings["floor_to_floor_height"] == pytest.approx(11.10)
+        assert "ROOM SHAPE: Reliquary chamber" in builder.buildingStyleSummaryLabel.text()
+        assert "CONTOUR: Korriban Tomb Chamber" in builder.buildingStyleSummaryLabel.text()
+        assert "measured bays, supports, relief" in builder.buildingStatusLabel.text().lower()
+        assert "trained from 5 retail room(s)" in builder.buildingArchetypeComboBox.toolTip().lower() or (
+            "trained from 5 retail room(s)"
+            in str(
+                builder.buildingArchetypeComboBox.itemData(
+                    chamber_index,
+                    role=QtCore.Qt.ItemDataRole.ToolTipRole,
+                )
+                or ""
+            ).lower()
+        )
+
+        expectations = {
+            "junction": (10.24, 11.10, "Cross-vault junction", "Korriban Tomb Junction"),
+            "burial": (10.28, 11.10, "Burial alcove", "Korriban Tomb Burial"),
+            "monumental": (22.08, 23.00, "Monumental tomb hall", "Korriban Tomb Monumental"),
+        }
+        for archetype_id, (height, floor_to_floor, label, contour) in expectations.items():
+            builder.buildingArchetypeComboBox.setCurrentIndex(archetype_ids.index(archetype_id))
+            app.processEvents()
+            settings = builder._building_settings()
+            assert settings["architecture_archetype"] == archetype_id
+            assert settings["wall_height"] == pytest.approx(height)
+            assert settings["floor_to_floor_height"] == pytest.approx(floor_to_floor)
+            assert f"ROOM SHAPE: {label}" in builder.buildingStyleSummaryLabel.text()
+            assert f"CONTOUR: {contour}" in builder.buildingStyleSummaryLabel.text()
+            assert "measured bays, supports, relief" in builder.buildingStatusLabel.text().lower()
     finally:
         builder.close()
         app.processEvents()

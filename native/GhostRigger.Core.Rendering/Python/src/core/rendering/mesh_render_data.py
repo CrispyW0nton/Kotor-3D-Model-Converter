@@ -833,7 +833,8 @@ def _node_has_lightmap(node, lightmap_name: str) -> bool:
 
 
 def _alpha_mode(node) -> str:
-    node_alpha = _clamp01(float(getattr(node, "alpha", 1.0) or 1.0))
+    raw_node_alpha = getattr(node, "alpha", None)
+    node_alpha = _clamp01(float(1.0 if raw_node_alpha is None else raw_node_alpha))
     txi_blend = int(getattr(node, "txi_blending", 0) or 0)
     alpha_test = float(getattr(node, "txi_alpha_test", 0.0) or 0.0)
     transparency_hint = int(getattr(node, "transparency_hint", 0) or 0)
@@ -1675,7 +1676,8 @@ def _material_color(node) -> tuple[float, float, float, float]:
         r, g, b = (float(raw[0]), float(raw[1]), float(raw[2]))
     except Exception:
         r, g, b = (0.72, 0.74, 0.76)
-    alpha = float(getattr(node, "alpha", 1.0) or 1.0)
+    raw_alpha = getattr(node, "alpha", None)
+    alpha = float(1.0 if raw_alpha is None else raw_alpha)
     alpha *= float(getattr(node, "txi_wateralpha", 1.0) or 1.0)
     return (_clamp01(r), _clamp01(g), _clamp01(b), _clamp01(alpha))
 

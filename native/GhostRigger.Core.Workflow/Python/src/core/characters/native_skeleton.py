@@ -48,6 +48,10 @@ KOTOR_EXPORT_HELPER_NAMES: set[str] = {
 }
 
 
+CHARACTER_BUILDER_ROOT_IDENTITY_KEY = "character_builder_root_identity"
+CHARACTER_BUILDER_ROOT_IDENTITY_STATUS = "resource_root_renamed"
+
+
 @dataclass(frozen=True)
 class NativeNodeSnapshot:
     """Read-only facts about one node in a native KotOR model hierarchy."""
@@ -207,6 +211,68 @@ def find_snapshot_node(
     return None
 
 
+def character_builder_root_identity_alias(
+    snapshot: NativeSkeletonSnapshot,
+    model: Any,
+) -> tuple[str, str] | None:
+    """Return the explicit donor-root -> resource-root alias for ``model``.
+
+    A Character Builder export normally preserves the selected native DAG
+    byte-for-byte.  Odyssey modular resources are the one deliberate
+    exception: their geometry name, DAG root, and local animation root must
+    share the output resref.  Accept that exception only when workflow
+    metadata names the sole snapshot root and the current model/root identity
+    agrees exactly.  Descendant paths remain strict.
+    """
+
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    record = metadata.get(CHARACTER_BUILDER_ROOT_IDENTITY_KEY)
+    if not isinstance(record, dict):
+        return None
+    if str(record.get("status") or "") != CHARACTER_BUILDER_ROOT_IDENTITY_STATUS:
+        return None
+
+    roots = [
+        node.name
+        for node in snapshot.nodes
+        if len(tuple(node.full_path)) == 1 and not tuple(node.parent_path)
+    ]
+    if len(roots) != 1:
+        return None
+
+    source_root = str(record.get("source_root") or "")
+    target_root = str(record.get("target_root") or "")
+    current_root = getattr(model, "root_node", None)
+    current_root_name = str(getattr(current_root, "name", "") or "")
+    model_name = str(getattr(model, "name", "") or "")
+    if not source_root or not target_root or source_root == target_root:
+        return None
+    if source_root != roots[0]:
+        return None
+    if target_root != current_root_name or target_root != model_name:
+        return None
+    return source_root, target_root
+
+
+def normalize_model_path_to_native_snapshot(
+    snapshot: NativeSkeletonSnapshot,
+    model: Any,
+    path: Iterable[str],
+) -> tuple[str, ...]:
+    """Map an explicitly renamed model-root path into snapshot path space."""
+
+    normalized = tuple(str(part or "") for part in path)
+    alias = character_builder_root_identity_alias(snapshot, model)
+    if alias is None or not normalized:
+        return normalized
+    source_root, target_root = alias
+    if normalized[0] != target_root:
+        return normalized
+    return (source_root, *normalized[1:])
+
+
 def build_native_skeleton_structural_diff(
     snapshot: NativeSkeletonSnapshot,
     model: Any,
@@ -222,7 +288,10 @@ def build_native_skeleton_structural_diff(
         for node in current_raw_nodes
     ]
     snapshot_by_path = {node.full_path: node for node in snapshot.nodes}
-    current_by_path = {node.full_path: node for node in current_nodes}
+    current_by_path = {
+        normalize_model_path_to_native_snapshot(snapshot, model, node.full_path): node
+        for node in current_nodes
+    }
     snapshot_paths = set(snapshot_by_path)
     current_paths = set(current_by_path)
     payload_names = {str(name or "") for name in payload_mesh_names}

@@ -635,6 +635,7 @@ class SceneWorkflowMixin:
 
     @staticmethod
     def _sprite_material_payload(node) -> dict:
+        raw_alpha = getattr(node, "alpha", None)
         return {
             "mesh": str(getattr(node, "name", "") or ""),
             "texture": str(getattr(node, "texture", "") or ""),
@@ -646,7 +647,7 @@ class SceneWorkflowMixin:
             "txi_wateralpha": float(getattr(node, "txi_wateralpha", 1.0) or 1.0),
             "txi_decal": bool(getattr(node, "txi_decal", False)),
             "transparency_hint": int(getattr(node, "transparency_hint", 0) or 0),
-            "alpha": float(getattr(node, "alpha", 1.0) or 1.0),
+            "alpha": float(1.0 if raw_alpha is None else raw_alpha),
             "sprite_alpha_source": str(getattr(node, "_gr_sprite_alpha_source", "") or ""),
             "sprite_glow": float(getattr(node, "_gr_sprite_glow", 0.0) or 0.0),
         }
@@ -668,7 +669,8 @@ class SceneWorkflowMixin:
         setattr(node, "txi_wateralpha", float(payload.get("txi_wateralpha", getattr(node, "txi_wateralpha", 1.0)) or 1.0))
         setattr(node, "txi_decal", bool(payload.get("txi_decal", getattr(node, "txi_decal", False))))
         setattr(node, "transparency_hint", int(payload.get("transparency_hint", getattr(node, "transparency_hint", 0)) or 0))
-        setattr(node, "alpha", float(payload.get("alpha", getattr(node, "alpha", 1.0)) or 1.0))
+        payload_alpha = payload.get("alpha", getattr(node, "alpha", 1.0))
+        setattr(node, "alpha", float(1.0 if payload_alpha is None else payload_alpha))
         setattr(node, "_gr_sprite_alpha_source", str(payload.get("sprite_alpha_source") or ""))
         setattr(node, "_gr_sprite_glow", float(payload.get("sprite_glow", 0.0) or 0.0))
         setattr(node, "_gr_revision", int(getattr(node, "_gr_revision", 0) or 0) + 1)

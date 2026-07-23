@@ -36,7 +36,14 @@ from .character_export_preflight import (
     preflight_character_mdl_export,
 )
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
-from .native_skeleton import NativeSkeletonSnapshot, native_skeleton_fingerprint
+from .native_skeleton import (
+    CHARACTER_BUILDER_ROOT_IDENTITY_KEY,
+    CHARACTER_BUILDER_ROOT_IDENTITY_STATUS,
+    NativeSkeletonSnapshot,
+    character_builder_root_identity_alias,
+    native_skeleton_fingerprint,
+    normalize_model_path_to_native_snapshot,
+)
 from .character_validation_report import (
     CharacterBuilderValidationReport,
     validation_report_paths,
@@ -187,6 +194,22 @@ def export_character_mdl_mdx_transaction(
             )
             return report
 
+        root_alias = character_builder_root_identity_alias(
+            native_snapshot,
+            request.model,
+        ) if native_snapshot is not None else None
+        if root_alias is not None:
+            source_root, target_root = root_alias
+            loaded_metadata = getattr(loaded, "metadata", None)
+            if not isinstance(loaded_metadata, dict):
+                loaded_metadata = {}
+                setattr(loaded, "metadata", loaded_metadata)
+            loaded_metadata[CHARACTER_BUILDER_ROOT_IDENTITY_KEY] = {
+                "status": CHARACTER_BUILDER_ROOT_IDENTITY_STATUS,
+                "source_root": source_root,
+                "target_root": target_root,
+            }
+
         reload_preflight = preflight_character_mdl_export(
             loaded,
             native_snapshot=native_snapshot,
@@ -297,9 +320,23 @@ def _verify_reloaded_native_dag_contract(
         )
 
     current_nodes = _model_nodes(model)
-    current_paths = {_node_path(node): node for node in current_nodes}
+    current_paths = {
+        normalize_model_path_to_native_snapshot(
+            native_snapshot,
+            model,
+            _node_path(node),
+        ): node
+        for node in current_nodes
+    }
     current_paths_lower = {
-        tuple(part.lower() for part in _node_path(node)): node
+        tuple(
+            part.lower()
+            for part in normalize_model_path_to_native_snapshot(
+                native_snapshot,
+                model,
+                _node_path(node),
+            )
+        ): node
         for node in current_nodes
     }
     current_names: dict[str, Any] = {}

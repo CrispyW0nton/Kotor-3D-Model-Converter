@@ -26,7 +26,7 @@ def _rasterize_triangle_textured(pixels, W, H, z_buf,
     - Affine UV interpolation
     - Per-vertex normal Gouraud shading
     - Phong specular (approximated)
-    - Self-illumination color (additive)
+    - Self-illumination color (texture-modulated lighting contribution)
     - Alpha transparency (written to pixels directly – no true blending in SW rasterizer)
     - Depth buffer test
 
@@ -105,20 +105,22 @@ def _rasterize_triangle_textured(pixels, W, H, z_buf,
                 # Skip fully transparent pixels
                 if ta < 8:
                     continue
-                # Modulate: texture × lighting
-                r = int(_clamp(tr * shade + specular_col * spec * 255
-                               + si_r * 255, 0, 255))
-                g = int(_clamp(tg * shade + specular_col * spec * 255
-                               + si_g * 255, 0, 255))
-                b = int(_clamp(tb * shade + specular_col * spec * 255
-                               + si_b * 255, 0, 255))
+                # Odyssey/reone: (lighting + selfillum) × diffuse texture.
+                # Never add selfillum as a flat RGB value; that erases dark
+                # atlas detail on stock doors and other high-selfillum meshes.
+                r = int(_clamp(tr * (shade + si_r)
+                               + specular_col * spec * 255, 0, 255))
+                g = int(_clamp(tg * (shade + si_g)
+                               + specular_col * spec * 255, 0, 255))
+                b = int(_clamp(tb * (shade + si_b)
+                               + specular_col * spec * 255, 0, 255))
             else:
-                r = int(_clamp(diffuse_color[0] * shade * 255
-                               + specular_col * spec * 255 + si_r * 255, 0, 255))
-                g = int(_clamp(diffuse_color[1] * shade * 255
-                               + specular_col * spec * 255 + si_g * 255, 0, 255))
-                b = int(_clamp(diffuse_color[2] * shade * 255
-                               + specular_col * spec * 255 + si_b * 255, 0, 255))
+                r = int(_clamp(diffuse_color[0] * (shade + si_r) * 255
+                               + specular_col * spec * 255, 0, 255))
+                g = int(_clamp(diffuse_color[1] * (shade + si_g) * 255
+                               + specular_col * spec * 255, 0, 255))
+                b = int(_clamp(diffuse_color[2] * (shade + si_b) * 255
+                               + specular_col * spec * 255, 0, 255))
 
             pixels[px, py] = (r, g, b)
 

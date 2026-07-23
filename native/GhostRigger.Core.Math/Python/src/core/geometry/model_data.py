@@ -1281,7 +1281,12 @@ class ModelNode:
         self.tangents = result
 
     def clone_shallow(self) -> 'ModelNode':
-        n = ModelNode(name=self.name, flags=self.flags, index=self.index)
+        n = ModelNode(
+            name=self.name,
+            flags=self.flags,
+            index=self.index,
+            number=self.number,
+        )
         n.position = self.position
         n.rotation = self.rotation
         n.texture  = self.texture
@@ -1421,6 +1426,18 @@ class KotorModel:
     # File paths
     mdl_path: str = ""
     mdx_path: str = ""
+
+    # Binary model-header attachment contract. Most resources leave
+    # ``offset_to_super_root`` pointing at the geometry root, represented by an
+    # empty name here. Modular player heads are the important exception: stock
+    # KOTOR heads point it at ``neck_g`` so the engine can link the otherwise
+    # independent head DAG to the body's animated headhook.
+    super_root_node_name: str = ""
+
+    # Native character rigs use sparse node-header +2 identities. Generated
+    # models keep the historical dense fallback unless a donor-preserving
+    # workflow explicitly opts into retaining those native values.
+    preserve_native_supernode_numbers: bool = False
 
     @property
     def nodes(self) -> List[ModelNode]:

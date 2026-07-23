@@ -1243,6 +1243,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_scope_text = ""
         self._map_studio_pie_control_states: list[tuple[Any, bool]] = []
         self._map_studio_pie_actor: Any = None
+        self._map_studio_pie_hidden_player_start_groups: list[tuple[int, Any]] = []
         self._map_studio_pie_party_actors: list[dict[str, Any]] = []
         self._map_studio_pie_animation_engine: Any = None
         self._map_studio_pie_animation_name = ""
@@ -1963,6 +1964,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomPrimitiveRotated.connect(self._rotate_authored_room_primitive)
         self.viewport_panel.roomPrimitiveScaled.connect(self._scale_authored_room_primitive)
         self.viewport_panel.roomPrimitivesTransformCommitted.connect(self._transform_authored_room_primitives)
+        self.viewport_panel.authoredRoomSnapPreviewRequested.connect(self._preview_authored_room_drag_snap)
         self.viewport_panel.sceneObjectsTranslated.connect(self._translate_map_studio_scene_objects)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
         self.viewport_panel.terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)
@@ -2121,16 +2123,23 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.placement_tab.thumbnailRequested.connect(self._render_map_studio_placement_thumbnail)
         self.terrain_kit_browser.thumbnailRequested.connect(self._render_map_studio_terrain_kit_thumbnail)
         self.terrain_kit_browser.refreshVanillaRequested.connect(self._refresh_vanilla_terrain_kit_catalog)
+        self.terrain_kit_browser.collectionStyleChanged.connect(
+            self.builder_tab.select_building_style
+        )
         self.environment_kit_browser.thumbnailRequested.connect(self._render_map_studio_environment_kit_thumbnail)
         self.environment_kit_browser.refreshVanillaRequested.connect(self._refresh_vanilla_environment_kit_catalog)
         self.environment_kit_browser.statusChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.environment_kit_browser.collectionStyleChanged.connect(
-            lambda collection_id, kind: self.builder_tab.select_building_style(f"kit:{collection_id}", kind)
+            lambda selection_id, kind: self.builder_tab.select_building_style(
+                str(selection_id)[6:] if str(selection_id).startswith("style:") else f"kit:{selection_id}",
+                kind,
+            )
         )
         self.builder_tab.buildingStyleChanged.connect(
-            lambda style_id, kind: self.environment_kit_browser.select_collection(style_id[4:], kind)
-            if str(style_id).startswith("kit:")
-            else None
+            self.environment_kit_browser.select_building_style
+        )
+        self.builder_tab.buildingStyleChanged.connect(
+            self.terrain_kit_browser.select_building_style
         )
         self.terrainCatalogProgress.connect(
             lambda message: self.terrain_kit_browser.set_refreshing(True, message)
@@ -3882,12 +3891,29 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self.select_item(placement_id)
             return
         resref = clicked_id.lower()
-        selected = list(getattr(self, "_map_studio_selected_rooms", []) or [])
+        authored_rooms = {
+            str(value or "").strip().lower()
+            for value in tuple(self.controller.authored_room_resrefs() or ())
+            if str(value or "").strip()
+        }
         if not resref:
-            if not additive and not subtractive and selected:
-                self._map_studio_selected_rooms = []
-                self.statusBar().showMessage("Map Studio selection cleared.", 2500)
+            if not additive and not subtractive:
+                self._select_map_studio_items(())
             return
+        if resref in authored_rooms:
+            item_id = f"authored_room:{resref}"
+            selected_ids = list(self.controller.model.selected_ids or ())
+            if subtractive:
+                selected_ids = [value for value in selected_ids if str(value).lower() != item_id]
+                self._select_map_studio_items(selected_ids)
+            elif additive:
+                if not any(str(value).lower() == item_id for value in selected_ids):
+                    selected_ids.append(item_id)
+                self._select_map_studio_items(selected_ids)
+            else:
+                self.select_item(item_id)
+            return
+        selected = list(getattr(self, "_map_studio_selected_rooms", []) or [])
         if subtractive:
             selected = [value for value in selected if value != resref]
         elif additive:
@@ -3908,11 +3934,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for resref in incoming:
             if resref not in selected:
                 selected.append(resref)
-        self._map_studio_selected_rooms = selected
-        placements = [value for value in selected if value.startswith("authored:") or value == "entry_point"]
-        if placements:
-            self.controller.model.select_many(placements)
-            self.outliner.select_ids(placements)
+        authored_rooms = {
+            str(value or "").strip().lower()
+            for value in tuple(self.controller.authored_room_resrefs() or ())
+            if str(value or "").strip()
+        }
+        scene_ids = [f"authored_room:{value}" if value in authored_rooms else value for value in selected]
+        if scene_ids:
+            if additive:
+                existing = list(self.controller.model.selected_ids or ())
+                scene_ids = existing + [value for value in scene_ids if value not in existing]
+            self._select_map_studio_items(scene_ids)
+        else:
+            self._select_map_studio_items(())
         summary = ", ".join(selected) if selected else "(none)"
         self.statusBar().showMessage(
             f"Marquee selected {len(incoming)} object(s); selection: {summary} — press Delete to remove.", 6000
@@ -4035,12 +4069,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if self.controller.authored_module_entry_point_preview_row() is not None:
             known_placements.add("entry_point")
         placement_ids = tuple(item_id for item_id in selected_ids if item_id in known_placements)
-        if not primitive_selections and not placement_ids:
+        room_resrefs = tuple(
+            item_id.split(":", 1)[1].strip().lower()
+            for item_id in selected_ids
+            if item_id.startswith("authored_room:") and item_id.split(":", 1)[1].strip()
+        )
+        if not primitive_selections and not placement_ids and not room_resrefs:
             return False
         try:
             removed_primitives, removed_placements = self.controller.remove_map_studio_scene_objects(
                 primitive_selections=primitive_selections,
                 placement_ids=placement_ids,
+                room_resrefs=room_resrefs,
             )
         except Exception as exc:
             self._log(f"Map Studio: selected scene objects could not be removed: {exc}")
@@ -8010,6 +8050,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
+        if key == "delete_selected":
+            # The object-mode shelf command acts on the same complete scene
+            # selection as Delete/Backspace.  Routing this through the
+            # primitive dispatcher loses authored-room selections because
+            # those rows do not have a composition primitive_name.
+            self.delete_map_studio_current_selection()
+            return
         if key == "duplicate_special_options":
             self._open_map_studio_modeling_tool_options(key)
             return
@@ -10803,6 +10850,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 level_index=int(values.get("level_index", 0) or 0),
                 level_name=str(values.get("level_name") or ""),
                 style_id=str(values.get("style_id") or "plcaa_graybox"),
+                architecture_archetype=str(values.get("architecture_archetype") or ""),
                 include_ceiling=bool(values.get("include_ceiling", True)),
                 building_kind=str(values.get("building_kind") or "interior"),
                 roof_type=str(values.get("roof_type") or "none"),
@@ -11896,6 +11944,50 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return f"Animated player setup failed: {exc}"
         return warning
 
+    def _hide_map_studio_pie_player_start_preview(self, preview_model: Any) -> None:
+        """Hide the complete authoring Player Start while its PIE actor exists.
+
+        The authoring preview is a single tagged parent containing the body,
+        head, and any attachment meshes. Removing that parent keeps the parts
+        indivisible and prevents the runtime player from being drawn directly
+        over its editor-only twin.
+        """
+
+        self._map_studio_pie_hidden_player_start_groups = []
+        if self._map_studio_pie_actor is None:
+            return
+        root = getattr(preview_model, "root_node", None)
+        if root is None:
+            return
+        original_children = list(tuple(getattr(root, "children", ()) or ()))
+        hidden = [
+            (index, node)
+            for index, node in enumerate(original_children)
+            if str(getattr(node, "_gr_map_studio_placement_kind", "") or "").strip().lower()
+            == "entry_point"
+            or str(getattr(node, "_gr_map_studio_placement_id", "") or "").strip().lower()
+            == "entry_point"
+        ]
+        if not hidden:
+            return
+        hidden_ids = {id(node) for _index, node in hidden}
+        root.children = [node for node in original_children if id(node) not in hidden_ids]
+        for node in tuple(root.children or ()):
+            node.parent = root
+        self._map_studio_pie_hidden_player_start_groups = hidden
+
+    def _restore_map_studio_pie_player_start_preview(self, preview_model: Any) -> None:
+        """Restore the authoring Player Start after all transient PIE DAGs leave."""
+
+        root = getattr(preview_model, "root_node", None)
+        if root is not None:
+            for original_index, group in self._map_studio_pie_hidden_player_start_groups:
+                if any(group is child for child in tuple(root.children or ())):
+                    continue
+                group.parent = root
+                root.children.insert(min(max(0, int(original_index)), len(root.children)), group)
+        self._map_studio_pie_hidden_player_start_groups = []
+
     def _create_map_studio_pie_party_actors(self, session: Any, preview_model: Any, game: str) -> str:
         """Attach runtime-only companion actors that trail the player.
 
@@ -12741,6 +12833,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     continue
                 group.parent = root
                 root.children.insert(min(max(0, int(original_index)), len(root.children)), group)
+            # The entry-point group was removed before creature/door statics,
+            # so restore it last to recover the original authored child order.
+            self._restore_map_studio_pie_player_start_preview(preview_model)
         if preview_model is not None:
             try:
                 preview_model.compute_bounds()
@@ -12753,6 +12848,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception:
                     pass
         self._map_studio_pie_actor = None
+        self._map_studio_pie_hidden_player_start_groups = []
         self._map_studio_pie_party_actors = []
         self._map_studio_pie_animation_engine = None
         self._map_studio_pie_animation_name = ""
@@ -13098,6 +13194,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._set_map_studio_pie_command_active(True)
         self.viewport_panel.set_map_studio_pie_active(True)
         self._map_studio_pie_actor_warning = self._create_map_studio_pie_player_actor(session, preview_model, game)
+        self._hide_map_studio_pie_player_start_preview(preview_model)
         creature_warning = self._create_map_studio_pie_creature_actors(preview_model, game)
         party_warning = self._create_map_studio_pie_party_actors(session, preview_model, game)
         if party_warning:
@@ -14066,9 +14163,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _room_connection_hook_choice_label(hook: object) -> str:
         label = str(getattr(hook, "label", "") or getattr(hook, "hook_id", "") or "Room opening")
         kind = str(getattr(hook, "opening_kind", "door") or "door")
+        intent = str(getattr(hook, "intent", "connectable") or "connectable").replace("_", " ")
         width = float(getattr(hook, "width", 0.0) or 0.0)
         height = float(getattr(hook, "height", 0.0) or 0.0)
-        return f"{label} — {kind} {width:g}m x {height:g}m"
+        return f"{label} — {kind} {width:g}m x {height:g}m — {intent}"
 
     def _connect_authored_room_openings(self) -> None:
         audit = self.controller.authored_room_connection_audit()
@@ -14119,6 +14217,65 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Connect Room Openings", str(exc))
+            return
+        self._refresh_all(update.summary)
+
+    def _set_authored_room_opening_intent(self) -> None:
+        audit = self.controller.authored_room_connection_audit()
+        hooks = [
+            hook
+            for hook in tuple(getattr(audit, "hooks", ()) or ())
+            if not str(getattr(hook, "connected_room_resref", "") or "").strip()
+            and str(getattr(hook, "opening_kind", "door") or "door").strip().lower()
+            not in {"window", "backdrop", "view"}
+        ]
+        if not hooks:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Set Opening Intent",
+                "There are no unconnected room openings to classify. Draw a doorway or drag in a vanilla room first.",
+            )
+            return
+        labels = [self._room_connection_hook_choice_label(hook) for hook in hooks]
+        selected_label, accepted = QtWidgets.QInputDialog.getItem(
+            self,
+            "Set Opening Intent",
+            "Room opening:",
+            labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return
+        hook = hooks[labels.index(str(selected_label))]
+        choices = (
+            ("Available connector", "connectable"),
+            ("Sealed — locked area-style door", "sealed"),
+            ("Intentional module exit", "external"),
+        )
+        current_intent = str(getattr(hook, "intent", "connectable") or "connectable")
+        current_index = next(
+            (index for index, (_label, value) in enumerate(choices) if value == current_intent),
+            0,
+        )
+        intent_label, accepted = QtWidgets.QInputDialog.getItem(
+            self,
+            "Set Opening Intent",
+            "How should this opening behave?",
+            [label for label, _value in choices],
+            current_index,
+            False,
+        )
+        if not accepted:
+            return
+        intent = dict(choices)[str(intent_label)]
+        try:
+            update = self.controller.set_authored_room_opening_intent(
+                hook_id=str(getattr(hook, "hook_id", "") or ""),
+                intent=intent,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Set Opening Intent", str(exc))
             return
         self._refresh_all(update.summary)
 
@@ -14451,6 +14608,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if action == "Connect Room Openings":
             self._connect_authored_room_openings()
             return
+        if action == "Set Opening Intent":
+            self._set_authored_room_opening_intent()
+            return
         if action == "Audit Room Connections":
             self._show_authored_room_connection_audit()
             return
@@ -14614,18 +14774,49 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.controller.model.select_many(moved)
         self.outliner.select_ids(moved)
 
+    def _preview_authored_room_drag_snap(self, payload: object) -> None:
+        """Resolve a live whole-room doorway magnet without changing KMAP."""
+
+        values = dict(payload) if isinstance(payload, dict) else {}
+        try:
+            preview = self.controller.preview_authored_room_drag_snap(
+                source_room_resref=str(values.get("source_room_resref") or ""),
+                world_delta=tuple(values.get("world_delta") or ()),
+            )
+        except Exception:
+            preview = None
+        self.viewport_panel.set_authored_room_snap_preview(preview)
+
     def _translate_map_studio_scene_objects(self, payload: object) -> None:
         """Commit one drag spanning terrain/building pieces and placements."""
 
         values = dict(payload) if isinstance(payload, dict) else {}
         primitive_selections = tuple(values.get("primitive_selections") or ())
         placement_ids = tuple(values.get("placement_ids") or ())
+        room_resrefs = tuple(values.get("room_resrefs") or ())
         item_ids = tuple(str(value or "") for value in tuple(values.get("item_ids") or ()) if str(value or ""))
         delta = tuple(values.get("world_delta") or ())
+        room_opening_snap = values.get("room_opening_snap")
+        if isinstance(room_opening_snap, dict) and bool(room_opening_snap.get("magnet_snapped", False)):
+            try:
+                update = self.controller.connect_authored_room_drag_snap(room_opening_snap)
+            except Exception as exc:
+                self.viewport_panel.cancel_pending_room_primitive_commit_preview()
+                QtWidgets.QMessageBox.warning(self, "Snap Rooms at Doorway", str(exc))
+                self._refresh_all()
+                return
+            source = str(getattr(update.source_hook, "room_resref", "") or "")
+            target = str(getattr(update.target_hook, "room_resref", "") or "")
+            self._refresh_all(
+                f"Snapped {source} to {target}; openings, shared door, VIS intent, and PIE portal are aligned."
+            )
+            self._select_map_studio_items(item_ids or ((f"authored_room:{source}",) if source else ()))
+            return
         try:
             moved_primitives, moved_placements = self.controller.translate_map_studio_scene_objects(
                 primitive_selections=primitive_selections,
                 placement_ids=placement_ids,
+                room_resrefs=room_resrefs,
                 world_delta=delta,
             )
         except Exception as exc:
@@ -15451,6 +15642,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
         self.builder_tab.set_building_styles(self.controller.available_map_studio_building_styles())
+        building_style_context = self.controller.map_studio_building_style_context()
+        if building_style_context:
+            self.builder_tab.select_building_style(
+                str(building_style_context.get("style_id") or ""),
+                str(building_style_context.get("environment_kind") or ""),
+            )
         self.builder_tab.set_building_levels(self.controller.map_studio_building_levels())
         self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())
         self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)

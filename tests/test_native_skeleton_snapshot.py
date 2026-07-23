@@ -3,11 +3,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from src.core.characters.native_skeleton import (
+    CHARACTER_BUILDER_ROOT_IDENTITY_KEY,
     build_native_skeleton_structural_diff,
     capture_native_skeleton_snapshot,
+    character_builder_root_identity_alias,
     classify_native_socket_name,
     find_snapshot_node,
     native_skeleton_fingerprint,
+    normalize_model_path_to_native_snapshot,
     snapshot_node_paths,
 )
 from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
@@ -156,3 +159,34 @@ def test_native_skeleton_structural_diff_reports_binding_changes() -> None:
             "bone_map_count": 1,
         }
     ]
+
+
+def test_native_skeleton_structural_diff_normalizes_explicit_resource_root() -> None:
+    root = _node("PMBAM")
+    pelvis = _node("pelvis_g", parent=root)
+    _node("headhook", parent=pelvis)
+    model = KotorModel(name="pmbam", root_node=root, supermodel="S_Male02")
+    snapshot = capture_native_skeleton_snapshot(model, game="K1")
+
+    model.name = "grbody01"
+    model.root_node.name = "grbody01"
+    model.metadata = {}
+    model.metadata[CHARACTER_BUILDER_ROOT_IDENTITY_KEY] = {
+        "status": "resource_root_renamed",
+        "source_root": "PMBAM",
+        "target_root": "grbody01",
+    }
+
+    assert character_builder_root_identity_alias(snapshot, model) == (
+        "PMBAM",
+        "grbody01",
+    )
+    assert normalize_model_path_to_native_snapshot(
+        snapshot,
+        model,
+        ("grbody01", "pelvis_g", "headhook"),
+    ) == ("PMBAM", "pelvis_g", "headhook")
+    diff = build_native_skeleton_structural_diff(snapshot, model)
+    assert diff["summary"]["preserved_node_count"] == 3
+    assert diff["summary"]["missing_node_count"] == 0
+    assert diff["summary"]["added_node_count"] == 0

@@ -40,6 +40,7 @@ from .native_skeleton import (
     NativeSkeletonSnapshot,
     capture_native_skeleton_snapshot,
     native_skeleton_fingerprint,
+    normalize_model_path_to_native_snapshot,
 )
 
 
@@ -1195,7 +1196,14 @@ def _validate_native_render_replacement_evidence(
                 details={"declared_count": replacement_count},
             ))
 
-    current_paths = {_node_path(node) for node in _iter_nodes(model)}
+    current_paths = {
+        normalize_model_path_to_native_snapshot(
+            native_snapshot,
+            model,
+            _node_path(node),
+        )
+        for node in _iter_nodes(model)
+    }
     snapshot_by_path = {
         tuple(node.full_path): node
         for node in native_snapshot.nodes
@@ -1540,9 +1548,19 @@ def _validate_native_dag(
     report: ValidationReport,
 ) -> None:
     current_nodes = list(_iter_nodes(model))
-    current_paths = {_node_path(node): node for node in current_nodes}
+    current_paths = {
+        normalize_model_path_to_native_snapshot(snapshot, model, _node_path(node)): node
+        for node in current_nodes
+    }
     current_paths_lower = {
-        tuple(part.lower() for part in _node_path(node)): node
+        tuple(
+            part.lower()
+            for part in normalize_model_path_to_native_snapshot(
+                snapshot,
+                model,
+                _node_path(node),
+            )
+        ): node
         for node in current_nodes
     }
 
@@ -1633,10 +1651,14 @@ def _validate_socket_categories(
     if not opts.require_required_sockets:
         return
     current_nodes = list(_iter_nodes(model))
+    present_model_paths = {
+        normalize_model_path_to_native_snapshot(snapshot, model, _node_path(node))
+        for node in current_nodes
+    }
     present_socket_paths = {
         tuple(node.full_path)
         for node in snapshot.nodes
-        if node.socket_category and _find_node_exact_path(current_nodes, tuple(node.full_path)) is not None
+        if node.socket_category and tuple(node.full_path) in present_model_paths
     }
     present_categories = {
         node.socket_category
@@ -1692,7 +1714,12 @@ def _validate_no_non_native_skeleton_nodes(
     native_paths = {tuple(node.full_path) for node in snapshot.nodes}
     native_names = set(snapshot.node_names())
     for node in _iter_nodes(model):
-        path = _node_path(node)
+        actual_path = _node_path(node)
+        path = normalize_model_path_to_native_snapshot(
+            snapshot,
+            model,
+            actual_path,
+        )
         if path in native_paths:
             continue
         name = str(getattr(node, "name", "") or "")
@@ -1716,7 +1743,7 @@ def _validate_no_non_native_skeleton_nodes(
             ),
             details={
                 "node_name": name,
-                "actual_path": list(path),
+                "actual_path": list(actual_path),
                 "native_snapshot_model": snapshot.model_name,
                 "native_snapshot_game": snapshot.game,
                 "allowed_non_native_role": "mesh_or_skin_payload",

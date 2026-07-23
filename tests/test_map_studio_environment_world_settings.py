@@ -4,6 +4,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 
 REPO = Path(__file__).resolve().parents[1]
 K2_ROOT = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II")
@@ -324,7 +326,14 @@ def test_world_settings_drive_renderer_preview_nodes_and_change_preview_key() ->
     assert state["sun_ambient"] == [12, 34, 56]
     assert state["sun_diffuse"] == [78, 90, 123]
     assert state["dynamic_ambient"] == [32, 48, 64]
-    assert state["fog_previewed"] is False
+    assert state["fog_previewed"] is True
+    assert state["fog_enabled"] is True
+    assert state["fog_color_rgb"] == [round(channel / 255.0, 7) for channel in (1, 2, 3)]
+    assert state["fog_near"] == 17.5
+    assert state["fog_far"] == 345.0
+    assert state["fog_preview_near"] == 17.5
+    assert state["fog_preview_far"] == pytest.approx(197.625)
+    assert state["fog_preview_calibration"] == "compact_map_studio_view"
     assert state["sun_shadows_previewed"] is False
     assert state["preview_scope"] == "non_lightmapped_scene_surfaces"
     assert state["ambient_preview_source"] == "dynamic_ambient"

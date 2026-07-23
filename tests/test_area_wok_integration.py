@@ -97,6 +97,7 @@ class _Module:
     lyt: object = None
     vis: object = None
     room_woks: dict = field(default_factory=dict)
+    walkmesh_connection_pairs: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -214,6 +215,18 @@ def test_t1604_flags_missing_room_wok_as_blocking(monkeypatch):
     assert missing.has_wok is False
 
 
+def test_t2909_visual_only_dressing_room_accepts_explicit_empty_wok(monkeypatch):
+    _install(monkeypatch)
+
+    module = _sample_module()
+    module.module.room_woks["room_b"] = _Wok()
+    report = awi.validate_area_woks(module, visual_only_room_resrefs=("room_b",))
+
+    assert report.ok is True
+    assert not any(issue.code == "NO_WALKABLE_FACES" and issue.room_id == "room_b" for issue in report.issues)
+    assert all("room_b" not in (seam.source_room, seam.target_room) for seam in report.seams)
+
+
 def test_t1604_flags_invalid_material_reversed_and_degenerate_faces(monkeypatch):
     _install(monkeypatch)
 
@@ -319,6 +332,26 @@ def test_t1604_flags_seam_gap_between_connected_rooms(monkeypatch):
     assert seam.code == "seam_gap"
     assert seam.min_boundary_distance > 0.25
     assert "WOK_SEAM_GAP" in {issue.code for issue in report.issues}
+
+
+def test_t2909_authored_wok_seams_ignore_rooms_that_are_only_vis_visible(monkeypatch):
+    _install(monkeypatch)
+
+    module = _sample_module()
+    module.module.lyt.rooms.append(_Room("room_c", 50.0, 0.0, 0.0))
+    module.module.vis.visibility = {
+        "room_a": ["room_b", "room_c"],
+        "room_b": ["room_a", "room_c"],
+        "room_c": ["room_a", "room_b"],
+    }
+    module.module.room_woks["room_c"] = _room_wok()
+    module.module.walkmesh_connection_pairs = (("room_a", "room_b"),)
+
+    report = awi.validate_area_woks(module, seam_tolerance=0.25)
+
+    assert [(seam.source_room, seam.target_room) for seam in report.seams] == [("room_a", "room_b")]
+    assert report.seams[0].ok is True
+    assert "WOK_SEAM_GAP" not in {issue.code for issue in report.issues}
 
 
 def test_t1604_no_rooms_reports_clear_error(monkeypatch):

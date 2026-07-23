@@ -16,6 +16,7 @@ being silently guessed.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Callable, Iterable, Mapping
 
 Vec3 = tuple[float, float, float]
@@ -215,6 +216,36 @@ def build_pie_entity_registry(
         return PIEEntityRegistry(coverage_warnings=("Authored project has no gameplay placements.",))
 
     behaviors = dict((getattr(placements, "metadata", {}) or {}).get("creature_behaviors") or {})
+    doorway_portals: dict[str, dict[str, Any]] = {}
+    try:
+        from .authored_module_layout import authored_room_connection_hooks
+
+        hooks = {
+            (hook.room_resref, int(hook.edge_index), hook.opening_name.lower()): hook
+            for hook in authored_room_connection_hooks(project)
+        }
+        for room in tuple(getattr(project, "rooms", ()) or ()):
+            normalised = getattr(room, "normalised_resref", None)
+            room_resref = str(
+                normalised() if callable(normalised) else getattr(room, "room_resref", "") or ""
+            ).strip().lower()
+            primitive = getattr(room, "primitive", None)
+            for opening in tuple(getattr(primitive, "openings", ()) or ()):
+                metadata = dict(getattr(opening, "metadata", {}) or {})
+                placement_id = str(metadata.get("door_placement_id") or "").strip()
+                opening_name = str(getattr(opening, "name", "") or "").strip() or f"edge_{int(opening.edge_index)}"
+                hook = hooks.get((room_resref, int(opening.edge_index), opening_name.lower()))
+                if not placement_id or hook is None:
+                    continue
+                doorway_portals[placement_id] = {
+                    "doorway_normal_bearing": math.atan2(float(hook.outward[1]), float(hook.outward[0])),
+                    "doorway_opening_width": float(hook.width),
+                    "doorway_opening_height": float(hook.height),
+                    "doorway_room_resref": hook.room_resref,
+                    "doorway_opening_name": hook.opening_name,
+                }
+    except Exception:
+        doorway_portals = {}
 
     entry = getattr(placements, "entry_point", None)
     if entry is not None and tuple(getattr(entry, "position", ()) or ()):
@@ -298,15 +329,20 @@ def build_pie_entity_registry(
 
     for index, door in enumerate(tuple(getattr(placements, "doors", ()) or ())):
         inspected = _inspect(template_inspector, "door", str(door.template_resref or ""), warnings)
+        entity_id = _entity_id("door", index, door)
+        portal = dict(doorway_portals.get(entity_id) or {})
         entities.append(
             PIEEntity(
-                entity_id=_entity_id("door", index, door),
+                entity_id=entity_id,
                 kind="door",
                 tag=_resolved_tag(inspected, door),
                 display_name=_display_name(inspected, door),
                 template_resref=str(door.template_resref or ""),
                 position=_vec3(door.position),
-                facing=float(door.bearing or 0.0),
+                # The rendered Odyssey door uses its model-plane bearing.
+                # PIE locomotion needs the perpendicular portal normal so it
+                # can probe the two WOK islands on either side of that plane.
+                facing=float(portal.get("doorway_normal_bearing", door.bearing) or 0.0),
                 focusable=True,
                 interactive=True,
                 interaction="door",
@@ -327,7 +363,11 @@ def build_pie_entity_registry(
                 transition_module=str(getattr(door, "linked_to_module", "") or ""),
                 transition_target=str(getattr(door, "linked_to", "") or ""),
                 target_radius=_TARGET_RADII["door"],
-                metadata=dict(inspected),
+                metadata={
+                    **dict(inspected),
+                    **portal,
+                    "render_model_bearing": float(door.bearing or 0.0),
+                },
             )
         )
 

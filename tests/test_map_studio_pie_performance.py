@@ -163,6 +163,45 @@ def test_player_actor_model_is_cached_across_play_presses() -> None:
         window.deleteLater()
 
 
+def test_pie_runtime_player_replaces_and_restores_complete_player_start_preview() -> None:
+    """PIE must never render its player over the editor Player Start character."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    root = md.ModelNode(name="map_root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="room", flags=int(md.NodeFlags.HEADER))
+    player_start = md.ModelNode(name="player_start", flags=int(md.NodeFlags.HEADER))
+    body = md.ModelNode(name="player_body", flags=int(md.NodeFlags.HEADER))
+    head = md.ModelNode(name="player_head", flags=int(md.NodeFlags.HEADER))
+    body.parent = player_start
+    head.parent = player_start
+    player_start.children = [body, head]
+    setattr(player_start, "_gr_map_studio_placement_id", "entry_point")
+    setattr(player_start, "_gr_map_studio_placement_kind", "entry_point")
+    room.parent = root
+    player_start.parent = root
+    root.children = [room, player_start]
+    preview = md.KotorModel(name="map_preview", root_node=root)
+    harness = SimpleNamespace(
+        _map_studio_pie_actor=object(),
+        _map_studio_pie_hidden_player_start_groups=[],
+    )
+
+    ModuleEditorWindow._hide_map_studio_pie_player_start_preview(harness, preview)
+
+    assert root.children == [room]
+    assert player_start.children == [body, head]
+    assert harness._map_studio_pie_hidden_player_start_groups == [(1, player_start)]
+
+    ModuleEditorWindow._restore_map_studio_pie_player_start_preview(harness, preview)
+
+    assert root.children == [room, player_start]
+    assert player_start.parent is root
+    assert harness._map_studio_pie_hidden_player_start_groups == []
+
+
 def test_prewarm_is_deferred_and_guarded() -> None:
     _configure_native_python_roots()
     source = (ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py").read_text(encoding="utf-8")

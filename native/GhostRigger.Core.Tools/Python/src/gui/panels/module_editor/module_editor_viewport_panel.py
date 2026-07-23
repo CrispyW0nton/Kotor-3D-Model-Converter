@@ -2701,6 +2701,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     roomPrimitiveScaled = QtCore.Signal(str, str, object)
     roomPrimitivesTransformCommitted = QtCore.Signal(object)
     sceneObjectsTranslated = QtCore.Signal(object)
+    authoredRoomSnapPreviewRequested = QtCore.Signal(object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
     terrainBrushStrokeCommitted = QtCore.Signal(str, str)
     terrainBrushOptionsChanged = QtCore.Signal(int, float)
@@ -2735,6 +2736,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     _map_studio_component_selection: list = []
     _map_studio_room_primitive_selection: list = []
     _map_studio_scene_selection_ids: list = []
+    _authored_room_drag = None
     #: Maya-style interactive extrude (Ctrl+E arms, LMB drag pulls, release commits).
     _component_extrude_armed = None
     _component_extrude_drag = None
@@ -4311,6 +4313,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._placement_previous_hover: tuple[bool, str] | None = None
         self._map_placement_drag_payload: dict[str, object] | None = None
         self._terrain_kit_snap_preview: dict[str, object] | None = None
+        self._authored_room_snap_preview: dict[str, object] | None = None
         self._building_tool = "select"
         self._building_settings: dict[str, object] = {
             "floor_z": 0.0,
@@ -4319,6 +4322,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "snap_to_grid": True,
             "include_ceiling": True,
             "style_id": "plcaa_graybox",
+            "architecture_archetype": "",
             "opening_width": 1.25,
             "opening_height": 2.2,
             "window_sill": 1.0,
@@ -4335,6 +4339,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._transform_snap_modifier_active = False
         self._transform_gizmo_mode = "translate"
         self._room_primitive_drag: dict[str, object] | None = None
+        self._authored_room_drag: dict[str, object] | None = None
         self._pending_room_primitive_commit_preview: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
         self._terrain_brush_option_drag: dict[str, object] | None = None
@@ -4938,6 +4943,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         if room_edge is not None:
                             self._select_room_outline_edge(room_edge)
                             return True
+                    hovered_context = getattr(self, "_hover_context", None)
+                    hovered_room = (
+                        str(getattr(hovered_context, "room_resref", "") or "")
+                        if hovered_context is not None and bool(getattr(hovered_context, "is_hit", False))
+                        else ""
+                    )
+                    if hovered_room and self._begin_authored_room_drag(hovered_room, event):
+                        return True
                     modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
                     if bool(modifiers & QtCore.Qt.ControlModifier):
                         return self._begin_map_studio_marquee(watched, event)
@@ -5003,6 +5016,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 if not (buttons & QtCore.Qt.LeftButton):
                     return self._finish_room_primitive_drag(event)
                 self._update_room_primitive_drag(event)
+                return True
+            if event_type == QtCore.QEvent.MouseMove and self._authored_room_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_authored_room_drag(event)
+                self._update_authored_room_drag(event)
                 return True
             if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_option_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
@@ -5080,6 +5099,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 return self._finish_room_outline_point_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._room_primitive_drag is not None:
                 return self._finish_room_primitive_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._authored_room_drag is not None:
+                return self._finish_authored_room_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_option_drag is not None:
                 return self._finish_terrain_brush_option_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_camera_drag is not None:
@@ -5278,7 +5299,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 snap = self._terrain_kit_snap_preview if is_kit else None
                 if isinstance(snap, dict) and bool(snap.get("magnet_snapped", False)):
                     target = str(snap.get("target_room_resref") or snap.get("target_piece_id") or "kit edge")
-                    self.marker_summary_label.setText(f"Release to magnet-snap {template} to {target}.")
+                    if bool(snap.get("target_is_authored_wall", False)):
+                        edge_number = int(snap.get("target_edge_index", -1) or -1) + 1
+                        opening_width = float(snap.get("opening_width", 0.0) or 0.0)
+                        opening_height = float(snap.get("opening_height", 0.0) or 0.0)
+                        self.marker_summary_label.setText(
+                            f"Release to connect {template} to {target} wall {edge_number}; "
+                            f"a {opening_width:.2f} x {opening_height:.2f} m doorway will be cut automatically."
+                        )
+                    else:
+                        self.marker_summary_label.setText(f"Release to magnet-snap {template} to {target}.")
                 else:
                     self.marker_summary_label.setText(
                         f"Release to place {template} at {x:.2f}, {y:.2f}, {z:.2f}."
@@ -7606,7 +7636,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         rect = state["band"].geometry()
         state["band"].hide()
         state["band"].deleteLater()
-        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        modifiers = self._event_keyboard_modifiers(event)
         additive = bool(modifiers & QtCore.Qt.ShiftModifier)
         rooms: list[str] = []
         for candidate in self._cached_map_studio_hover_candidates():
@@ -7623,7 +7653,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
     def _emit_map_studio_room_click(self, event: QtCore.QEvent) -> None:
         context = self._hover_context
-        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        modifiers = self._event_keyboard_modifiers(event)
         additive = bool(modifiers & (QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier))
         subtractive = bool(modifiers & QtCore.Qt.AltModifier)
         if context is None or not getattr(context, "is_hit", False):
@@ -8163,6 +8193,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if key == wanted:
                 matched = candidate
                 break
+        active_snap = self._terrain_kit_snap_preview or self._authored_room_snap_preview or {}
+        authored_room_snap = bool(self._authored_room_snap_preview)
         setter(
             {
                 "component_type": context.component_type,
@@ -8182,7 +8214,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "selector_edge_corners": tuple(getattr(context, "selector_edge_corners", (-1, -1))),
                 "walkable": context.walkable,
                 "summary": map_studio_hover_context_summary(context),
-                "placement_drop": self._map_placement_drag_payload is not None,
+                "placement_drop": self._map_placement_drag_payload is not None or self._authored_room_drag is not None,
                 "placement_label": str(
                     (self._map_placement_drag_payload or {}).get("label")
                     or (self._map_placement_drag_payload or {}).get("template_resref")
@@ -8190,12 +8222,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     or (self._map_placement_drag_payload or {}).get("kind")
                     or "object"
                 ),
-                "magnet_snapped": bool((self._terrain_kit_snap_preview or {}).get("magnet_snapped", False)),
-                "snapped_world_point": tuple((self._terrain_kit_snap_preview or {}).get("position", ()) or ()),
+                "magnet_snapped": bool(active_snap.get("magnet_snapped", False)),
+                "snapped_world_point": tuple(active_snap.get("position", ()) or ()),
                 "magnet_target_label": str(
-                    (self._terrain_kit_snap_preview or {}).get("target_room_resref")
-                    or (self._terrain_kit_snap_preview or {}).get("target_piece_id")
+                    active_snap.get("target_label")
+                    or active_snap.get("target_room_resref")
+                    or active_snap.get("target_piece_id")
                     or "kit edge"
+                ),
+                "magnet_target_is_authored_wall": bool(
+                    active_snap.get("target_is_authored_wall", False) or authored_room_snap
+                ),
+                "magnet_target_edge_index": int(
+                    active_snap.get("target_edge_index", -1)
+                ),
+                "magnet_opening_size": (
+                    float(active_snap.get("opening_width", 0.0) or 0.0),
+                    float(active_snap.get("opening_height", 0.0) or 0.0),
                 ),
             }
         )
@@ -8204,6 +8247,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         """Receive controller-resolved drag preview state without mutating KMAP."""
 
         self._terrain_kit_snap_preview = dict(payload) if isinstance(payload, dict) else None
+
+    def set_authored_room_snap_preview(self, payload: object | None) -> None:
+        """Receive an exact doorway-to-doorway whole-room preview."""
+
+        self._authored_room_snap_preview = dict(payload) if isinstance(payload, dict) else None
 
     def _rendered_placement_at_event(self, event: QtCore.QEvent) -> str:
         """Return the nearest actual-model placement under the pointer."""
@@ -8556,6 +8604,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return (float(mapped.x()), float(mapped.y()))
         return (float(pos.x()), float(pos.y()))
 
+    @staticmethod
+    def _event_keyboard_modifiers(event: QtCore.QEvent):
+        """Read modifiers reliably when a renderer child owns the mouse event."""
+
+        event_modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        return event_modifiers | QtWidgets.QApplication.keyboardModifiers()
+
     def _event_global_position(self, event: QtCore.QEvent, watched: QtCore.QObject | None = None) -> QtCore.QPoint:
         global_position = getattr(event, "globalPosition", None)
         if callable(global_position):
@@ -8573,13 +8628,173 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return mapper(QtCore.QPoint(int(round(local[0])), int(round(local[1]))))
         return self.mapToGlobal(QtCore.QPoint(0, 0))
 
+    def _begin_authored_room_drag(self, room_resref: str, event: QtCore.QEvent) -> bool:
+        """Select or floor-drag complete authored rooms as single scene objects."""
+
+        wanted = str(room_resref or "").strip().lower()
+        start_screen = self._event_position(event)
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        room_nodes = {
+            str(getattr(node, "_gr_map_studio_room_resref", "") or "").strip().lower(): node
+            for node in tuple(getattr(root, "children", ()) or ())
+            if bool(getattr(node, "_gr_map_studio_authored_room", False))
+        }
+        if not wanted or start_screen is None or wanted not in room_nodes:
+            return False
+        item_id = f"authored_room:{wanted}"
+        selected_scene = self.map_studio_scene_selection_ids()
+        modifiers = self._event_keyboard_modifiers(event)
+        if modifiers & QtCore.Qt.AltModifier:
+            selected_scene = [value for value in selected_scene if str(value).lower() != item_id]
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
+            self._authored_room_drag = None
+            return True
+        if modifiers & (QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier):
+            if not any(str(value).lower() == item_id for value in selected_scene):
+                selected_scene.append(item_id)
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
+            self._authored_room_drag = None
+            return True
+        if item_id not in selected_scene:
+            selected_scene = [item_id]
+        room_selection = [
+            value.split(":", 1)[1].strip().lower()
+            for value in selected_scene
+            if str(value).startswith("authored_room:") and value.split(":", 1)[1].strip().lower() in room_nodes
+        ]
+        if wanted not in room_selection:
+            selected_scene = [item_id]
+            room_selection = [wanted]
+        self.set_map_studio_scene_selection_ids(selected_scene)
+        self.itemsSelected.emit(tuple(selected_scene)) if len(selected_scene) > 1 else self.itemSelected.emit(item_id)
+        baselines = tuple(
+            {
+                "room_resref": resref,
+                "node": room_nodes[resref],
+                "position": tuple(float(value) for value in tuple(getattr(room_nodes[resref], "position", (0, 0, 0)))[:3]),
+                "rotation": tuple(
+                    float(value)
+                    for value in tuple(getattr(room_nodes[resref], "rotation", (0.0, 0.0, 0.0, 1.0)))[:4]
+                ),
+            }
+            for resref in room_selection
+        )
+        pivot = tuple(
+            sum(float(row["position"][axis]) for row in baselines) / max(1, len(baselines))
+            for axis in range(3)
+        )
+        self._authored_room_drag = {
+            "selection": tuple(room_selection),
+            "scene_selection": tuple(selected_scene),
+            "start_screen": start_screen,
+            "pivot": pivot,
+            "baselines": baselines,
+            "pending_delta": (0.0, 0.0, 0.0),
+            "pending_snap": None,
+            "active": False,
+        }
+        self._authored_room_snap_preview = None
+        self._sync_clean_viewport_presentation()
+        return True
+
+    def _update_authored_room_drag(self, event: QtCore.QEvent) -> bool:
+        drag = self._authored_room_drag
+        current = self._event_position(event)
+        if drag is None or current is None:
+            return False
+        start = tuple(drag.get("start_screen", current))
+        screen_dx, screen_dy = float(current[0]) - float(start[0]), float(current[1]) - float(start[1])
+        if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
+            return True
+        pivot = tuple(drag.get("pivot", (0.0, 0.0, 0.0)))
+        world_dx, world_dy = self._screen_delta_to_floor_delta(pivot, screen_dx, screen_dy)
+        proposed = self._snap_map_studio_position((pivot[0] + world_dx, pivot[1] + world_dy, pivot[2]))
+        delta = (proposed[0] - pivot[0], proposed[1] - pivot[1], proposed[2] - pivot[2])
+        rotation_degrees = 0.0
+        selection = tuple(drag.get("selection", ()) or ())
+        snap: dict[str, object] | None = None
+        if len(selection) == 1:
+            self._authored_room_snap_preview = None
+            self.authoredRoomSnapPreviewRequested.emit(
+                {
+                    "source_room_resref": str(selection[0]),
+                    "world_delta": delta,
+                }
+            )
+            candidate = self._authored_room_snap_preview
+            if isinstance(candidate, dict) and bool(candidate.get("magnet_snapped", False)):
+                snap = dict(candidate)
+                resolved_delta = tuple(float(value) for value in tuple(snap.get("world_delta", ()))[:3])
+                if len(resolved_delta) == 3:
+                    delta = resolved_delta
+                rotation_degrees = float(snap.get("rotation_degrees_z", 0.0) or 0.0)
+        drag["active"] = True
+        drag["pending_delta"] = delta
+        drag["pending_snap"] = snap
+        self._mark_room_preview_model_promoted()
+        for baseline in tuple(drag.get("baselines", ()) or ()):
+            node = baseline.get("node")
+            start_position = tuple(baseline.get("position", (0.0, 0.0, 0.0)))
+            if node is not None:
+                node.position = tuple(float(start_position[index]) + float(delta[index]) for index in range(3))
+                start_rotation = tuple(baseline.get("rotation", (0.0, 0.0, 0.0, 1.0)))
+                if len(start_rotation) >= 4:
+                    half = math.radians(rotation_degrees) * 0.5
+                    z_rotation = (0.0, 0.0, math.sin(half), math.cos(half))
+                    node.rotation = self._quat_multiply_xyzw(z_rotation, start_rotation)
+        self._hover_candidate_cache_key = None
+        self._update_map_studio_hover(event, force=True)
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(fast=True, reason="Map Studio authored room drag", overlay=True, hud=True)
+            except TypeError:
+                request()
+        if snap is not None:
+            source_wall = int(snap.get("source_edge_index", -1)) + 1
+            target = str(snap.get("target_label") or snap.get("target_room_resref") or "doorway")
+            cut_note = " A matching opening will be cut automatically." if bool(snap.get("auto_cut_source", False)) else ""
+            self.marker_summary_label.setText(
+                f"Release to snap wall {source_wall} to {target}; the room will rotate and align as one object.{cut_note}"
+            )
+        else:
+            self.marker_summary_label.setText(
+                f"Move {len(selection)} room(s): {delta[0]:+.2f}, {delta[1]:+.2f} m — approach a doorway to magnet-snap."
+            )
+        return True
+
+    def _finish_authored_room_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._authored_room_drag is None:
+            return False
+        if event is not None:
+            self._update_authored_room_drag(event)
+        drag = self._authored_room_drag
+        self._authored_room_drag = None
+        self._authored_room_snap_preview = None
+        self._sync_clean_viewport_presentation()
+        if not bool(drag.get("active", False)):
+            return True
+        self.sceneObjectsTranslated.emit(
+            {
+                "item_ids": tuple(drag.get("scene_selection", ()) or ()),
+                "room_resrefs": tuple(drag.get("selection", ()) or ()),
+                "placement_ids": (),
+                "primitive_selections": (),
+                "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0))),
+                "room_opening_snap": drag.get("pending_snap"),
+            }
+        )
+        return True
+
     def _begin_marker_drag(self, placement_id: str, event: QtCore.QEvent) -> bool:
         marker = self._placement_markers.get(str(placement_id))
         start_screen = self._event_position(event)
         if marker is None or start_screen is None:
             self._marker_drag = None
             return False
-        modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        modifiers = self._event_keyboard_modifiers(event)
         placement_id = str(placement_id)
         selected_scene = self.map_studio_scene_selection_ids()
         if not selected_scene:
@@ -9315,6 +9530,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
         self._room_outline_geometry = authored_room_outline_geometry
         self._sync_room_outline_overlay(authored_room_outline_geometry)
+        # Structural room edits use the focused geometry refresh path rather
+        # than rebuilding gameplay markers. Keep the visible room count in
+        # sync here so add/delete/undo never leaves a stale clean-view HUD.
+        self._update_marker_summary(
+            tuple(getattr(self, "_placement_markers", {}).values()),
+            getattr(self, "_placement_marker_geometry", None),
+            authored_room_outline_geometry,
+            getattr(self, "_terrain_walkability_overlay", None),
+        )
 
     def set_authored_gameplay_markers(
         self,
@@ -9456,7 +9680,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         room_resref, primitive_name, world_center = hit
         key = (str(room_resref or ""), str(primitive_name or ""))
         item_id = self._map_studio_primitive_item_id(*key)
-        modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        modifiers = self._event_keyboard_modifiers(event)
         selected_scene = self.map_studio_scene_selection_ids()
         if not selected_scene:
             selected_scene = [self._map_studio_primitive_item_id(*value) for value in self.selected_room_primitives()]
@@ -10082,6 +10306,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 texture_dir=texture_dirs[0] if texture_dirs else "",
                 extra_texture_dirs=texture_dirs[1:],
             )
+            # ``load_model`` can instantiate the GPU renderer lazily.  Repeat
+            # the state hand-off after the load so a first-opened Map Studio
+            # viewport receives fog immediately instead of waiting for the
+            # next room edit to re-sync it.
+            self._sync_world_lighting_preview_render_state(authored_room_preview_model)
             if camera is not None and camera_state is not None:
                 try:
                     camera.azimuth, camera.elevation, camera.distance = camera_state[0], camera_state[1], camera_state[2]

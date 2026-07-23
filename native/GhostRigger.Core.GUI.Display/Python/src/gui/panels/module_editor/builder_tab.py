@@ -209,6 +209,18 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingStyleComboBox.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
         self.buildingStyleComboBox.addItem("PLCaa Neutral Blockout", {"style_id": "plcaa_graybox"})
         self._buildingStyleRows: list[dict[str, object]] = []
+        self._lastAppliedBuildingStyleId = ""
+        self._lastAppliedBuildingArchetypeKey = ""
+        self.buildingArchetypeComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingArchetypeComboBox.setObjectName("mapStudioBuildingArchetypeComboBox")
+        self.buildingArchetypeComboBox.addItem(
+            "Default room contour",
+            {"archetype_id": "", "label": "Default room contour", "shell_profile": ""},
+        )
+        self.buildingArchetypeComboBox.setToolTip(
+            "Choose a measured room contour within the selected module style. "
+            "For example, a Korriban reliquary chamber is not a stretched tomb corridor."
+        )
         self.buildingKindComboBox = QtWidgets.QComboBox(building_box)
         self.buildingKindComboBox.setObjectName("mapStudioBuildingKindComboBox")
         self.buildingKindComboBox.addItem("Interior rooms", "interior")
@@ -274,6 +286,7 @@ class BuilderTab(QtWidgets.QWidget):
         building_form.addRow("Level view:", self.buildingLevelViewComboBox)
         building_form.addRow("Build type:", self.buildingKindComboBox)
         building_form.addRow("Module style:", self.buildingStyleComboBox)
+        building_form.addRow("Room shape:", self.buildingArchetypeComboBox)
         building_layout.addLayout(building_form)
         self.buildingStyleSummaryLabel = QtWidgets.QLabel("Neutral Blockout · interior/exterior preview palette", building_box)
         self.buildingStyleSummaryLabel.setObjectName("mapStudioBuildingStyleSummaryLabel")
@@ -1295,9 +1308,11 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingExplodedGapSpinBox.valueChanged.connect(self._emit_building_level_view)
         self.buildingKindComboBox.currentIndexChanged.connect(self._on_building_kind_changed)
         self.buildingStyleComboBox.currentIndexChanged.connect(self._on_building_style_changed)
+        self.buildingArchetypeComboBox.currentIndexChanged.connect(self._on_building_style_changed)
         self.buildingRoofTypeComboBox.currentIndexChanged.connect(self._update_building_roof_controls)
         for control in (
             self.buildingStyleComboBox,
+            self.buildingArchetypeComboBox,
             self.buildingWallHeightSpinBox,
             self.buildingFloorZSpinBox,
             self.buildingFloorToFloorSpinBox,
@@ -1453,6 +1468,7 @@ class BuilderTab(QtWidgets.QWidget):
     def _building_settings(self) -> dict[str, object]:
         level = dict(self.buildingLevelComboBox.currentData() or {})
         style = dict(self.buildingStyleComboBox.currentData() or {})
+        archetype = dict(self.buildingArchetypeComboBox.currentData() or {})
         return {
             "level_index": int(level.get("index", max(0, self.buildingLevelComboBox.currentIndex()))),
             "level_name": str(level.get("name") or self.buildingLevelComboBox.currentText().split(" (")[0]),
@@ -1469,6 +1485,7 @@ class BuilderTab(QtWidgets.QWidget):
             "roof_pitch_degrees": float(self.buildingRoofPitchSpinBox.value()),
             "roof_overhang": float(self.buildingRoofOverhangSpinBox.value()),
             "style_id": str(style.get("style_id") or "plcaa_graybox"),
+            "architecture_archetype": str(archetype.get("archetype_id") or ""),
             "opening_width": float(self.buildingOpeningWidthSpinBox.value()),
             "opening_height": float(self.buildingOpeningHeightSpinBox.value()),
             "window_height": float(self.buildingWindowHeightSpinBox.value()),
@@ -1565,7 +1582,51 @@ class BuilderTab(QtWidgets.QWidget):
         preserve = bool(self._buildingStyleRows)
         current = str(dict(self.buildingStyleComboBox.currentData() or {}).get("style_id", "")) if preserve else ""
         self._buildingStyleRows = [dict(style or {}) for style in tuple(styles or ())]
+        self._lastAppliedBuildingStyleId = ""
         self._rebuild_building_style_choices(preferred_style_id=current)
+
+    def _rebuild_building_archetype_choices(self, style: dict[str, object]) -> None:
+        rows = [dict(row or {}) for row in tuple(style.get("architecture_archetypes") or ())]
+        self.buildingArchetypeComboBox.blockSignals(True)
+        self.buildingArchetypeComboBox.clear()
+        for row in rows:
+            archetype_id = str(row.get("archetype_id") or "")
+            if not archetype_id:
+                continue
+            self.buildingArchetypeComboBox.addItem(
+                str(row.get("label") or archetype_id.replace("_", " ").title()),
+                row,
+            )
+            index = self.buildingArchetypeComboBox.count() - 1
+            self.buildingArchetypeComboBox.setItemData(
+                index,
+                (
+                    f"{str(row.get('description') or 'Measured room contour')}\n"
+                    f"Contour: {str(row.get('shell_profile') or '').replace('_', ' ').title()} · "
+                    f"height {float(row.get('recommended_wall_height_m') or 3.0):.2f} m · "
+                    f"trained from {len(tuple(row.get('evidence_rooms') or ()))} retail room(s)"
+                ),
+                QtCore.Qt.ItemDataRole.ToolTipRole,
+            )
+        if self.buildingArchetypeComboBox.count() <= 0:
+            self.buildingArchetypeComboBox.addItem(
+                "Default room contour",
+                {
+                    "archetype_id": "",
+                    "label": "Default room contour",
+                    "shell_profile": str(style.get("architecture_shell_profile") or ""),
+                    "recommended_wall_height_m": float(style.get("recommended_wall_height_m") or 3.0),
+                    "recommended_floor_to_floor_m": float(
+                        style.get("recommended_floor_to_floor_m")
+                        or style.get("recommended_wall_height_m")
+                        or 3.0
+                    ),
+                },
+            )
+        self.buildingArchetypeComboBox.setEnabled(bool(rows))
+        self.buildingArchetypeComboBox.setCurrentIndex(0)
+        self.buildingArchetypeComboBox.blockSignals(False)
+        self._lastAppliedBuildingArchetypeKey = ""
 
     def _rebuild_building_style_choices(
         self,
@@ -1581,6 +1642,11 @@ class BuilderTab(QtWidgets.QWidget):
         ]
         rows.sort(
             key=lambda row: (
+                0
+                if str(row.get("architecture_profile") or "")
+                else 1
+                if str(row.get("style_id") or "") == "plcaa_graybox"
+                else 2,
                 1 if str(row.get("environment_kind") or "both").lower() == "both" else 0,
                 str(row.get("world_label") or "").lower(),
                 str(row.get("source_module") or "").lower(),
@@ -1599,7 +1665,26 @@ class BuilderTab(QtWidgets.QWidget):
                     (
                         f"{str(row.get('world_label') or 'Vanilla KOTOR')} · "
                         f"{str(row.get('environment_kind') or 'both').title()} · {str(row.get('source_module') or 'PLCaa')}\n"
-                        f"Floor {str(row.get('floor_texture') or 'ruler01')} · "
+                        + (
+                            f"Geometry profile: {str(row.get('architecture_profile')).replace('_', ' ').title()} · "
+                            f"trained from {len(tuple(row.get('evidence_rooms') or ()))} retail rooms\n"
+                            if str(row.get("architecture_profile") or "")
+                            else ""
+                        )
+                        + (
+                            f"Structural contour: {str(row.get('architecture_shell_profile')).replace('_', ' ').title()}\n"
+                            if str(row.get("architecture_shell_profile") or "")
+                            else ""
+                        )
+                        + (
+                            f"Measured wall height: {float(row.get('recommended_wall_height_m') or 3.0):.3f} m · "
+                            f"floor-to-floor: {float(row.get('recommended_floor_to_floor_m') or 3.0):.3f} m\n"
+                            f"Door opening: {float(row.get('recommended_door_width_m') or 1.25):.2f} × "
+                            f"{float(row.get('recommended_door_height_m') or 2.2):.2f} m\n"
+                            if str(row.get("architecture_profile") or "")
+                            else ""
+                        )
+                        + f"Floor {str(row.get('floor_texture') or 'ruler01')} · "
                         f"Walls {str(row.get('wall_texture') or 'ruler01')} · "
                         f"Ceiling/Roof {str(row.get('ceiling_texture') or 'ruler01')}"
                     ),
@@ -1642,14 +1727,62 @@ class BuilderTab(QtWidgets.QWidget):
         source = str(row.get("source_module") or "PLCaa")
         world = str(row.get("world_label") or "Neutral Blockout")
         kind_label = "Exterior" if kind == "exterior" else "Interior" if kind == "interior" else "Interior / Exterior"
+        architecture_profile = str(row.get("architecture_profile") or "")
+        if style_id != self._lastAppliedBuildingStyleId:
+            self._lastAppliedBuildingStyleId = style_id
+            self._rebuild_building_archetype_choices(row)
+        archetype = dict(self.buildingArchetypeComboBox.currentData() or {})
+        archetype_id = str(archetype.get("archetype_id") or "")
+        archetype_label = str(archetype.get("label") or self.buildingArchetypeComboBox.currentText())
+        shell_profile = str(archetype.get("shell_profile") or row.get("architecture_shell_profile") or "")
+        archetype_key = f"{style_id}:{archetype_id}"
+        if archetype_key != self._lastAppliedBuildingArchetypeKey:
+            self._lastAppliedBuildingArchetypeKey = archetype_key
+            recommended_wall = float(
+                archetype.get("recommended_wall_height_m")
+                or row.get("recommended_wall_height_m")
+                or 3.0
+            )
+            recommended_floor = float(
+                archetype.get("recommended_floor_to_floor_m")
+                or row.get("recommended_floor_to_floor_m")
+                or recommended_wall
+            )
+            self.buildingWallHeightSpinBox.setValue(recommended_wall)
+            self.buildingFloorToFloorSpinBox.setValue(recommended_floor)
+            self.buildingOpeningWidthSpinBox.setValue(float(row.get("recommended_door_width_m") or 1.25))
+            self.buildingOpeningHeightSpinBox.setValue(float(row.get("recommended_door_height_m") or 2.2))
+            if architecture_profile == "shadowlands":
+                self.buildingCeilingCheckBox.setChecked(False)
+                roof_index = self.buildingRoofTypeComboBox.findData("none")
+                if roof_index >= 0:
+                    self.buildingRoofTypeComboBox.setCurrentIndex(roof_index)
         self.buildingStyleSummaryLabel.setText(
             f"{world} · {kind_label} · {source}   |   "
-            f"Floor: {str(row.get('floor_texture') or 'ruler01')}   "
+            + (f"GEOMETRY KIT: {architecture_profile.replace('_', ' ').title()}   |   " if architecture_profile else "")
+            + (f"ROOM SHAPE: {archetype_label}   |   " if archetype_id else "")
+            + (f"CONTOUR: {shell_profile.replace('_', ' ').title()}   |   " if shell_profile else "")
+            + (
+                f"Measured height: {float(archetype.get('recommended_wall_height_m') or row.get('recommended_wall_height_m') or 3.0):.3f} m   |   "
+                if architecture_profile
+                else ""
+            )
+            + f"Floor: {str(row.get('floor_texture') or 'ruler01')}   "
             f"Walls: {str(row.get('wall_texture') or 'ruler01')}   "
             f"Ceiling/Roof: {str(row.get('ceiling_texture') or 'ruler01')}"
         )
         self.buildingStatusLabel.setText(
-            f"{world} {kind_label.lower()} style selected. Draw Walls uses the {source} palette; "
+            (
+                f"{world} organic terrain kit selected. Draw a clearing or path boundary; Ghost Studio builds irregular earth strata, ancient-root buttresses, and hanging vegetation from {source} evidence, while the terrain shelf exposes Upper and Lower Shadowlands pieces; "
+                if architecture_profile == "shadowlands"
+                else f"{world} {archetype_label.lower()} selected. Draw Walls sweeps the {shell_profile.replace('_', ' ')} contour, then adds measured bays, supports, relief, trims, and openings from {source} evidence; "
+                if archetype_id
+                else f"{world} architecture kit selected. Draw Walls sweeps the {shell_profile.replace('_', ' ')} room contour, then adds bays, ribs, trims, and lights from {source} evidence; "
+                if shell_profile
+                else f"{world} architecture kit selected. Draw Walls generates profiled bays, ribs, trims, and lights from {source} evidence; "
+                if architecture_profile
+                else f"{world} {kind_label.lower()} style selected. Draw Walls uses the {source} palette; "
+            )
             + (
                 f"the closed footprint will include a {str(self.buildingRoofTypeComboBox.currentText()).lower()}."
                 if str(self.buildingRoofTypeComboBox.currentData() or "none") != "none"

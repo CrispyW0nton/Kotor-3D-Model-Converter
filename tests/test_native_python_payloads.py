@@ -122,7 +122,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
         # Scene/Tools and GUI Display/Tools payload rows.
     # The stable-ID Pascal wall graph and T-junction planarizer ship through
     # Scene and the embedded Tools consumer, adding two payload rows.
-    assert len(payload_files) == 1384
+    assert len(payload_files) == 1385
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

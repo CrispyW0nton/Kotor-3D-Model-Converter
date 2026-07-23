@@ -20,9 +20,12 @@ from src.gui.panels.module_editor.placement_tab import (
 _TERRAIN_SEARCH_ROLE = _PLACEMENT_THUMBNAIL_STATE_ROLE + 20
 _TERRAIN_CATEGORY_ROLE = _TERRAIN_SEARCH_ROLE + 1
 _TERRAIN_COLLECTION_ROLE = _TERRAIN_CATEGORY_ROLE + 1
+_TERRAIN_STYLE_ROLE = _TERRAIN_COLLECTION_ROLE + 1
 _TERRAIN_CATEGORY_ORDER = (
     "Terrain Forms",
     "Rock Formations",
+    "Roots & Tree Trunks",
+    "Canopy & Foliage",
     "Foliage",
     "Ruins & Structures",
     "Water & Shorelines",
@@ -64,8 +67,14 @@ class _TerrainKitFilterModel(QtCore.QSortFilterProxyModel):
         index = model.index(row, 0, parent)
         category = str(index.data(_TERRAIN_CATEGORY_ROLE) or "").lower()
         collection = str(index.data(_TERRAIN_COLLECTION_ROLE) or "").lower()
+        style = str(index.data(_TERRAIN_STYLE_ROLE) or "").lower()
         search = str(index.data(_TERRAIN_SEARCH_ROLE) or "").lower()
-        return (not self._collection or collection == self._collection) and (
+        collection_matches = (
+            not self._collection
+            or (self._collection.startswith("style:") and style == self._collection[6:])
+            or collection == self._collection
+        )
+        return collection_matches and (
             not self._category or category == self._category
         ) and (
             not self._query or self._query in search
@@ -78,6 +87,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
     thumbnailRequested = QtCore.Signal(object)
     statusChanged = QtCore.Signal(str)
     refreshVanillaRequested = QtCore.Signal()
+    collectionStyleChanged = QtCore.Signal(str, str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -96,7 +106,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         root.setSpacing(5)
 
         header = QtWidgets.QLabel(
-            "Terrain Kit — browse terrain forms, rock formations, foliage, ruins, water, and vistas; then drag a thumbnail onto the landscape."
+            "Terrain Staging — drag terrain forms, native roots, tree trunks, foliage, ruins, water, and vistas onto the landscape."
         )
         header.setObjectName("mapStudioTerrainKitGuideLabel")
         header.setWordWrap(True)
@@ -114,7 +124,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         self.search_edit = QtWidgets.QLineEdit(self)
         self.search_edit.setObjectName("mapStudioTerrainKitSearchLineEdit")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.setPlaceholderText("Search rocks, foliage, ruins, water…")
+        self.search_edit.setPlaceholderText("Search trunks, roots, rocks, foliage, ruins…")
         self.refresh_button = QtWidgets.QPushButton("Refresh Vanilla", self)
         self.refresh_button.setObjectName("mapStudioTerrainKitRefreshVanillaButton")
         self.refresh_button.setToolTip(
@@ -168,9 +178,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         root.addWidget(self.detail_label)
 
         self.search_edit.textChanged.connect(self._proxy.set_query)
-        self.collection_combo.currentIndexChanged.connect(
-            lambda _index: self._proxy.set_collection(str(self.collection_combo.currentData() or ""))
-        )
+        self.collection_combo.currentIndexChanged.connect(self._collection_changed)
         self.category_combo.currentIndexChanged.connect(
             lambda _index: self._proxy.set_category(str(self.category_combo.currentData() or ""))
         )
@@ -227,6 +235,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         self._model.clear()
         categories: list[str] = []
         collections: dict[str, str] = {}
+        styles: dict[str, str] = {}
         for entry in self._entries:
             label = str(_value(entry, "label") or _value(entry, "asset_id") or "Terrain piece")
             category = str(_value(entry, "category") or "Terrain")
@@ -237,14 +246,19 @@ class TerrainKitBrowser(QtWidgets.QWidget):
             collection_key = f"{game}:{module}".strip(":") if module else "ghost_studio"
             collection_label = f"{game} · {module}" if module else "Ghost Studio Originals"
             collections.setdefault(collection_key, collection_label)
+            style_id = str(_value(entry, "building_style_id") or "").strip().lower()
+            style_label = str(_value(entry, "building_style_label") or "").strip()
+            if style_id and style_label:
+                styles.setdefault(style_id, style_label)
             tags = " ".join(str(value) for value in tuple(_value(entry, "tags", ()) or ()))
             item = QtGui.QStandardItem(label)
             item.setEditable(False)
             item.setData(entry, _PLACEMENT_ENTRY_ROLE)
             item.setData(category, _TERRAIN_CATEGORY_ROLE)
             item.setData(collection_key, _TERRAIN_COLLECTION_ROLE)
+            item.setData(style_id, _TERRAIN_STYLE_ROLE)
             item.setData(
-                " ".join((label, category, collection_label, tags, str(_value(entry, "source")))).lower(),
+                " ".join((label, category, collection_label, style_label, tags, str(_value(entry, "source")))).lower(),
                 _TERRAIN_SEARCH_ROLE,
             )
             item.setData("placeholder", _PLACEMENT_THUMBNAIL_STATE_ROLE)
@@ -254,6 +268,7 @@ class TerrainKitBrowser(QtWidgets.QWidget):
             item.setToolTip(
                 f"{category} · {int(_value(entry, 'triangle_count', 0) or 0):,} triangles"
                 + (f" · {size_text}" if size_text else "")
+                + (f"\n{_value(entry, 'staging_role')}" if _value(entry, "staging_role") else "")
                 + "\nDrag onto terrain or another visible level surface."
             )
             self._model.appendRow(item)
@@ -274,6 +289,10 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         collection_blocked = self.collection_combo.blockSignals(True)
         self.collection_combo.clear()
         self.collection_combo.addItem("All environment kits", "")
+        for style_id, label in sorted(styles.items(), key=lambda item: item[1].lower()):
+            self.collection_combo.addItem(label, f"style:{style_id}")
+        if styles:
+            self.collection_combo.insertSeparator(self.collection_combo.count())
         for key, label in sorted(collections.items(), key=lambda item: item[1].lower()):
             self.collection_combo.addItem(label, key)
         self.collection_combo.blockSignals(collection_blocked)
@@ -281,10 +300,42 @@ class TerrainKitBrowser(QtWidgets.QWidget):
         self._proxy.set_category("")
         self._queue_visible_thumbnails()
 
+    def _collection_changed(self, _index: int = -1) -> None:
+        selection = str(self.collection_combo.currentData() or "").strip().lower()
+        self._proxy.set_collection(selection)
+        if selection.startswith("style:"):
+            self.collectionStyleChanged.emit(selection[6:], "exterior")
+
+    def select_building_style(self, style_id: str, environment_kind: str = "") -> bool:
+        """Follow the Pascal style selector when it names a terrain family."""
+
+        wanted = str(style_id or "").strip().lower()
+        if not wanted:
+            return False
+        target = f"style:{wanted}"
+        index = self.collection_combo.findData(target)
+        if index < 0 and wanted.startswith("kit:"):
+            collection_id = wanted[4:]
+            parts = collection_id.split("_", 1)
+            if len(parts) == 2 and parts[0] in {"k1", "k2"}:
+                index = self.collection_combo.findData(f"{parts[0].upper()}:{parts[1]}")
+        if index < 0:
+            return False
+        self.collection_combo.setCurrentIndex(index)
+        return True
+
     def _current_changed(self, current: QtCore.QModelIndex, _previous: QtCore.QModelIndex) -> None:
         entry = current.data(_PLACEMENT_ENTRY_ROLE) if current.isValid() else None
         if entry is None:
             return
+        try:
+            suggested_scale = float(_value(entry, "suggested_scale", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            suggested_scale = 0.0
+        if self.scale_spin.minimum() <= suggested_scale <= self.scale_spin.maximum():
+            blocked = self.scale_spin.blockSignals(True)
+            self.scale_spin.setValue(suggested_scale)
+            self.scale_spin.blockSignals(blocked)
         dimensions = tuple(_value(entry, "dimensions_m", ()) or ())
         size_text = " × ".join(f"{float(value):.1f}m" for value in dimensions[:3])
         self.detail_label.setText(
@@ -292,7 +343,9 @@ class TerrainKitBrowser(QtWidgets.QWidget):
             f"{int(_value(entry, 'triangle_count', 0) or 0):,} triangles"
             + (f" · {size_text}" if size_text else "")
             + (f" · {_value(entry, 'source')}" if _value(entry, "source") else "")
-            + ". Drag the thumbnail onto the landscape."
+            + (f" · {_value(entry, 'staging_role')}" if _value(entry, "staging_role") else "")
+            + (f"\n{_value(entry, 'staging_hint')}" if _value(entry, "staging_hint") else "")
+            + "."
         )
         icon = current.data(QtCore.Qt.ItemDataRole.DecorationRole)
         if isinstance(icon, QtGui.QIcon):

@@ -248,6 +248,14 @@ uniform int   u_proc_type;      // 0=none, 1=cycle, 2=water, 3=random, 4=ringtex
 // Camera position for specular + env map sphere projection
 uniform vec3  u_cam_pos;
 
+// Map Studio routes the measured ARE distance-fog values through these
+// uniforms only for its authored-preview model.  They default off for every
+// model/particle view, preserving existing retail rendering byte-for-byte.
+uniform int   u_map_fog_enabled;
+uniform vec3  u_map_fog_color;
+uniform float u_map_fog_near;
+uniform float u_map_fog_far;
+
 // v7.2 Order-Independent Transparency (Finding 5.5 — reone f_oit_model.glsl)
 uniform int   u_oit_enabled;    // 1 = weighted-blended OIT output mode
 uniform int   u_debug_visualize; // 0 normal, 1 red, 2 alpha, 3 diffuse, 4 lightmap
@@ -487,8 +495,13 @@ void main() {
             }
         }
 
-        // Self-illumination still applies additively
-        lit_color += u_selfillum;
+        // Odyssey self-illumination is a lighting contribution that is still
+        // modulated by the diffuse texture.  Adding the controller RGB as a
+        // flat colour destroys dark texture detail (DOR_LKO04 becomes an
+        // opaque white panel).  reone's retro shader computes
+        // ``(lighting + selfIllum) * mainTex`` and KotOR.js applies the same
+        // texture-preserving contract.
+        lit_color += diffuse_samp.rgb * u_selfillum;
 
         // Environment map compositing (rare for modules but handle it)
         if (u_has_env == 1) {
@@ -554,11 +567,11 @@ void main() {
             diffuse_samp.a = 1.0;
         }
 
-        // -- Self-illumination (additive glow)
-        // v7.1 (Finding 5.6 — reone context.cpp GL_MAX blend equation):
-        // Self-illumination uses additive compositing. For surfaces with
-        // selfillum > 0, clamp so glow doesn't over-brighten dark areas.
-        lit_color += u_selfillum;
+        // -- Self-illumination (texture-modulated lighting contribution)
+        // Preserve the albedo/atlas contours while raising their emitted
+        // light.  A flat RGB add turns high selfillum stock doors and props
+        // into featureless white silhouettes.
+        lit_color += diffuse_samp.rgb * u_selfillum;
 
         // -- Lightmap compositing for non-lm_shade path (fallback):
         // This handles lightmapped nodes that somehow reach this path
@@ -585,7 +598,10 @@ void main() {
     }
 
     if (u_scene_lighting == 0) {
-        lit_color = diffuse_samp.rgb + u_selfillum;
+        float selfillum_peak = max(u_selfillum.r, max(u_selfillum.g, u_selfillum.b));
+        lit_color = selfillum_peak > 0.0001
+            ? diffuse_samp.rgb * max(vec3(0.25), u_selfillum)
+            : diffuse_samp.rgb;
     }
 
     if (u_render_mode == 1) {
@@ -625,6 +641,21 @@ void main() {
         vec3 tint = spriteEmissionTint(diffuse_samp.rgb);
         vec3 emission = max(diffuse_samp.rgb, tint * (0.45 + diffuse_samp.a * 0.55));
         lit_color = max(lit_color, emission * (1.0 + clamp(u_sprite_glow, 0.0, 4.0)));
+    }
+
+    // K1 exterior SunFog uses camera distance.  Never apply this to additive
+    // effects or sprite-emissive particles: those retain their established
+    // renderer path, and the state is opt-in for a Map Studio world preview.
+    // Map Studio feeds a compact-view calibrated range here; the authored ARE
+    // range remains untouched for package export and real-game rendering.
+    if (u_map_fog_enabled == 1 && u_blend_mode != 1 && !sprite_emissive) {
+        float fog_range = max(0.001, u_map_fog_far - u_map_fog_near);
+        float fog_linear = clamp((length(v_world_pos - u_cam_pos) - u_map_fog_near) / fog_range, 0.0, 1.0);
+        // A slightly front-loaded atmospheric ramp makes the state readable
+        // inside author-sized clearings instead of requiring a 70 m sightline.
+        float fog_amount = 1.0 - exp(-2.15 * fog_linear);
+        fog_amount = fog_amount * fog_amount * (3.0 - 2.0 * fog_amount);
+        lit_color = mix(lit_color, u_map_fog_color, fog_amount);
     }
 
     lit_color = clamp(lit_color, 0.0, 1.0);

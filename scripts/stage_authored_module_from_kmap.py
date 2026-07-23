@@ -17,14 +17,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_PATHS = (
     "native/GhostRigger.Core.Scene/Python",
-    "native/GhostRigger.Core.Scene/Python",
     "native/GhostRigger.Core.Resources/Python",
-    "native/GhostRigger.Core.Scene/Python",
-    "native/GhostRigger.Core.Scene/Python",
     "native/GhostRigger.Core.Math/Python",
-    "native/GhostRigger.Core.Math/Python",
-    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Project/Python",
     "native/GhostRigger.Core.Rendering/Python",
+    "native/GhostRigger.Core.Validation/Python",
     ".",
 )
 
@@ -34,6 +31,9 @@ def _install_payload_paths() -> None:
         path = str((ROOT / rel).resolve())
         if path not in sys.path:
             sys.path.insert(0, path)
+    from src.core.game.pykotor_gff_runtime_fix import ensure_pykotor_gff_acquire_quiet
+
+    ensure_pykotor_gff_acquire_quiet()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -70,6 +70,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--overwrite", action="store_true", help="Back up and replace an existing module in Modules.")
     parser.add_argument("--dry-run", action="store_true", help="Build package/checklist but do not copy into Modules.")
+    parser.add_argument(
+        "--opening-intent",
+        action="append",
+        default=[],
+        metavar="HOOK_ID=INTENT",
+        help=(
+            "Apply an export-only room-opening decision before staging. INTENT is connectable, external, or sealed; "
+            "sealed openings receive the authentic locked area door."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Print a machine-readable summary.")
     return parser
 
@@ -164,8 +174,14 @@ def main(argv: list[str] | None = None) -> int:
 
     _install_payload_paths()
     from src.core.level.kmap_serializer import KMapSerializer  # noqa: WPS433
-    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install  # noqa: WPS433
+    from src.core.modules.authored_module_export import (  # noqa: WPS433
+        AuthoredModuleExportRequest,
+        AuthoredModuleInstallPrepRequest,
+        prepare_authored_module_install,
+    )
     from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload  # noqa: WPS433
+    from src.core.modules.authored_module_layout import set_authored_room_opening_intent  # noqa: WPS433
+    from src.core.modules.map_studio_pascal_building import pascal_architecture_runtime_resources  # noqa: WPS433
 
     try:
         kmap = KMapSerializer.load(args.kmap)
@@ -202,6 +218,30 @@ def main(argv: list[str] | None = None) -> int:
             _print_human_summary(summary)
         return 1
 
+    try:
+        for raw in tuple(args.opening_intent or ()):
+            hook_id, separator, intent = str(raw or "").partition("=")
+            if not separator or not hook_id.strip() or not intent.strip():
+                raise ValueError(
+                    f"Invalid --opening-intent {raw!r}; expected HOOK_ID=connectable|external|sealed."
+                )
+            authored = set_authored_room_opening_intent(
+                authored,
+                hook_id=hook_id.strip(),
+                intent=intent.strip(),
+            ).project
+    except Exception as exc:
+        summary = _error_summary(
+            code="opening_intent_failed",
+            message=f"Room-opening intent could not be applied: {exc}",
+            kmap_path=str(args.kmap),
+        )
+        if args.json:
+            print(json.dumps(summary, indent=2))
+        else:
+            _print_human_summary(summary)
+        return 1
+
     result = prepare_authored_module_install(
         AuthoredModuleInstallPrepRequest(
             project=authored,
@@ -212,6 +252,13 @@ def main(argv: list[str] | None = None) -> int:
             auto_detect_game_modules_dir=bool(args.auto_detect_game_modules_dir),
             overwrite=bool(args.overwrite),
             dry_run=bool(args.dry_run),
+            export_request=AuthoredModuleExportRequest(
+                project=authored,
+                output_dir=str(args.output_dir),
+                game_root_dir=_path_text(args.game_root_dir),
+                strict=True,
+                extra_resources=pascal_architecture_runtime_resources(authored),
+            ),
         )
     )
     summary = _result_summary(result, kmap_path=args.kmap)

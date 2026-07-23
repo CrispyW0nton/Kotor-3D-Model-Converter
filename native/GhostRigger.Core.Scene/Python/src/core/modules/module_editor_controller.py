@@ -115,6 +115,7 @@ from .authored_imported_mesh import (
     bevel_imported_mesh_edges,
     bridge_imported_mesh_border_edges,
     build_imported_mesh_primitive_from_stock_model,
+    extract_imported_mesh_room_bounds,
     fill_imported_wok_from_floor_surfaces,
     imported_mesh_room_is_backdrop,
     prepare_imported_mesh_for_static_runtime_rebuild,
@@ -153,9 +154,13 @@ from .authored_imported_mesh import (
 from .authored_module_project import AuthoredRoomSpec, authored_resref_blocking_issue, compile_authored_room_spec, normalise_resref
 from .authored_module_layout import (
     AuthoredRoomConnectionAudit,
+    AuthoredRoomOpeningIntentUpdate,
     audit_authored_room_connections,
     auto_arrange_authored_rooms as auto_arrange_authored_rooms_in_project,
+    connect_authored_room_drag_snap as connect_authored_room_drag_snap_in_project,
     connect_authored_room_openings as connect_authored_room_openings_in_project,
+    preview_authored_room_drag_snap as preview_authored_room_drag_snap_in_project,
+    set_authored_room_opening_intent as set_authored_room_opening_intent_in_project,
     snap_authored_rooms_to_grid as snap_authored_rooms_to_grid_in_project,
 )
 from .authored_module_validation_projection import authored_module_readiness_validation_issues
@@ -192,12 +197,18 @@ from .map_studio_terrain_kit import (
     write_vanilla_terrain_kit_catalog,
 )
 from .map_studio_environment_kits import (
+    EnvironmentKitWallTarget,
+    environment_kit_builder_style_id,
     environment_kit_collection_rows,
     environment_kit_piece,
     environment_kit_piece_rows,
+    environment_kit_source_room_position,
     kotor_module_world_label,
     nearest_environment_kit_snap,
+    nearest_environment_kit_wall_snap,
     scan_vanilla_environment_kits,
+    seal_environment_kit_exterior_bounds,
+    trim_environment_kit_connection_overlap,
     vanilla_environment_kit_collections,
     write_vanilla_environment_kit_catalog,
 )
@@ -205,6 +216,8 @@ from .map_studio_pascal_building import (
     add_pascal_building_room as add_pascal_building_room_to_project,
     available_pascal_building_styles,
     pascal_building_levels as pascal_building_levels_for_project,
+    pascal_architecture_door_spec,
+    pascal_architecture_runtime_resources,
     preview_pascal_building_opening,
     scan_vanilla_pascal_building_styles,
     set_pascal_building_level as set_pascal_building_level_in_project,
@@ -243,6 +256,7 @@ from .authored_module_lighting import (
     update_authored_room_light_transform,
 )
 from .authored_module_world_lighting import (
+    apply_authored_environment_style_defaults,
     authored_world_lighting_settings as read_authored_world_lighting_settings,
     default_authored_world_lighting_settings,
     update_authored_world_lighting_settings,
@@ -357,6 +371,7 @@ from .authored_module_walkmesh import combine_authored_module_walkmesh
 from .authored_walkmesh_status import AuthoredWalkmeshStatus, authored_walkmesh_status_for_project
 from .authored_walkmesh_status import authored_walkmesh_room_surface_choices
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
+from .authored_walkmesh_audit import audit_authored_wok
 from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
@@ -2166,11 +2181,37 @@ class ModuleEditorController:
     def authored_project_extra_resources(self) -> tuple[tuple[str, str, bytes], ...]:
         """Return all GUI-resolved authored resources for the final MOD."""
 
-        return (
+        resources = (
             tuple(self.authored_project_texture_resources())
             + tuple(self._authored_placeable_resources)
             + tuple(self._authored_creature_resources)
+            + tuple(self._authored_architecture_runtime_resources())
             + tuple(self._authored_scripting_resources)
+        )
+        result: list[tuple[str, str, bytes]] = []
+        seen: dict[tuple[str, str], bytes] = {}
+        for resref, restype, data in resources:
+            key = (normalise_resref(resref), str(restype or "").strip().lower().lstrip("."))
+            payload = bytes(data)
+            if key in seen:
+                if seen[key] != payload:
+                    raise ValueError(
+                        f"Authored runtime resource {key[0]}.{key[1]} has conflicting generated content."
+                    )
+                continue
+            seen[key] = payload
+            result.append((key[0], key[1], payload))
+        return tuple(result)
+
+    def _authored_architecture_runtime_resources(self) -> tuple[tuple[str, str, bytes], ...]:
+        authored = self._map_studio_authored_project_snapshot()
+        return () if authored is None else pascal_architecture_runtime_resources(authored)
+
+    def _map_studio_template_resources(self) -> tuple[tuple[str, str, bytes], ...]:
+        return (
+            tuple(self._authored_placeable_resources)
+            + tuple(self._authored_creature_resources)
+            + tuple(self._authored_architecture_runtime_resources())
         )
 
     def _require_authored_creature_resources_ready(self) -> None:
@@ -3074,6 +3115,26 @@ class ModuleEditorController:
                 "ceiling_texture": style.ceiling_texture,
                 "source_module": style.source_module,
                 "source_room": style.source_room,
+                "architecture_profile": style.architecture_profile,
+                "architecture_shell_profile": style.architecture_shell_profile,
+                "architecture_archetypes": tuple(
+                    {
+                        "archetype_id": archetype.archetype_id,
+                        "label": archetype.label,
+                        "shell_profile": archetype.shell_profile,
+                        "recommended_wall_height_m": float(archetype.recommended_wall_height_m),
+                        "recommended_floor_to_floor_m": float(archetype.recommended_floor_to_floor_m),
+                        "description": archetype.description,
+                        "evidence_rooms": tuple(archetype.evidence_rooms),
+                    }
+                    for archetype in style.architecture_archetypes
+                ),
+                "recommended_wall_height_m": float(style.recommended_wall_height_m),
+                "recommended_floor_to_floor_m": float(style.recommended_floor_to_floor_m),
+                "recommended_door_width_m": float(style.recommended_door_width_m),
+                "recommended_door_height_m": float(style.recommended_door_height_m),
+                "accent_textures": tuple(style.accent_textures),
+                "evidence_rooms": tuple(style.evidence_rooms),
                 "world_label": kotor_module_world_label(style.game, style.source_module),
                 "environment_kind": next(
                     (tag for tag in tuple(style.tags) if tag in {"interior", "exterior"}),
@@ -3150,6 +3211,42 @@ class ModuleEditorController:
             placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
         )
 
+    @staticmethod
+    def _with_automatic_room_walkmesh_status(
+        project: Any,
+        *,
+        operation: str,
+        room_resrefs: tuple[str, ...],
+    ) -> Any:
+        """Compile and audit touched room WOKs before one build action commits."""
+
+        requested = {normalise_resref(value) for value in tuple(room_resrefs or ()) if normalise_resref(value)}
+        audits: list[Any] = []
+        for room in tuple(project.rooms or ()):
+            room_resref = room.normalised_resref()
+            if requested and room_resref not in requested:
+                continue
+            geometry = compile_authored_room_spec(room)
+            audit = audit_authored_wok(room_resref, geometry.wok)
+            if not audit.ready:
+                raise ValueError(" ".join(audit.blocking_messages))
+            audits.append(audit)
+        if requested and {audit.room_resref for audit in audits} != requested:
+            missing = ", ".join(sorted(requested - {audit.room_resref for audit in audits}))
+            raise ValueError(f"Automatic walkmesh generation could not find room(s): {missing}.")
+        extra = dict(project.extra or {})
+        extra["walkmesh_generation_mode"] = "automatic_room_assembly"
+        extra["last_walkmesh_build"] = {
+            "operation": str(operation or "room_build"),
+            "auto_generated": True,
+            "room_resrefs": [audit.room_resref for audit in audits],
+            "room_face_counts": {audit.room_resref: int(audit.face_count) for audit in audits},
+            "walkable_face_counts": {audit.room_resref: int(audit.walkable_face_count) for audit in audits},
+            "warning_count": sum(len(audit.warnings) for audit in audits),
+            "ready": True,
+        }
+        return replace(project, extra=extra)
+
     def add_map_studio_building_level(
         self,
         *,
@@ -3198,6 +3295,7 @@ class ModuleEditorController:
         level_index: int = 0,
         level_name: str = "",
         style_id: str = "plcaa_graybox",
+        architecture_archetype: str = "",
         include_ceiling: bool = True,
         floor_surface_id: int | str = 4,
         building_kind: str = "interior",
@@ -3210,6 +3308,29 @@ class ModuleEditorController:
         authored = self._map_studio_building_project()
         styles = {style.style_id: style for style in available_pascal_building_styles(authored.game)}
         style = styles.get(str(style_id or "")) or next(iter(styles.values()))
+        archetype_id = str(architecture_archetype or "").strip().lower()
+        archetype = next(
+            (
+                candidate
+                for candidate in style.architecture_archetypes
+                if candidate.archetype_id == archetype_id
+            ),
+            None,
+        )
+        if style.architecture_archetypes and archetype is None:
+            archetype = style.architecture_archetypes[0]
+            archetype_id = archetype.archetype_id
+        shell_profile = (
+            archetype.shell_profile
+            if archetype is not None
+            else style.architecture_shell_profile
+        )
+        evidence_rooms = tuple(
+            dict.fromkeys(
+                tuple(style.evidence_rooms)
+                + (tuple(archetype.evidence_rooms) if archetype is not None else ())
+            )
+        )
         before = self._capture_map_studio_command_state()
         updated, room_resref = add_pascal_building_room_to_project(
             authored,
@@ -3226,17 +3347,38 @@ class ModuleEditorController:
             style_id=style.style_id,
             style_source_module=style.source_module,
             style_source_room=style.source_room,
+            architecture_profile=style.architecture_profile,
+            architecture_shell_profile=shell_profile,
+            architecture_archetype=archetype_id,
+            architecture_accent_textures=style.accent_textures,
+            architecture_evidence_rooms=evidence_rooms,
             building_kind=str(building_kind or "interior"),
             roof_type=str(roof_type or "none"),
             roof_pitch_degrees=float(roof_pitch_degrees),
             roof_overhang=float(roof_overhang),
         )
+        updated = self._with_automatic_room_walkmesh_status(
+            updated,
+            operation="add_pascal_building_room",
+            room_resrefs=(room_resref,),
+        )
+        environment_update = apply_authored_environment_style_defaults(updated, style.style_id)
+        updated = environment_update.project
         self._store_authored_project(updated)
-        roof_label = str(roof_type or "none").strip().lower()
+        created_room = next(
+            (room for room in updated.rooms if room.normalised_resref() == room_resref),
+            None,
+        )
+        created_primitive = getattr(created_room, "primitive", None)
+        created_metadata = dict(getattr(created_primitive, "metadata", {}) or {})
+        actual_kind = str(created_metadata.get("building_kind") or building_kind or "interior")
+        roof_label = str(created_metadata.get("building_roof_type") or roof_type or "none").strip().lower()
+        actual_ceiling = bool(getattr(created_primitive, "include_ceiling", include_ceiling))
         self.model.log(
-            f"Built {str(building_kind or 'interior')} room {room_resref} from a closed wall loop on "
+            f"Built {actual_kind} room {room_resref} from a closed wall loop on "
             f"{level_name or f'Level {int(level_index) + 1}'}"
             + (f" with a {roof_label} roof." if roof_label != "none" else ".")
+            + (f" {environment_update.summary}" if environment_update.applied else "")
         )
         self._record_map_studio_command(
             action_key="map_studio.building.room.create",
@@ -3249,11 +3391,17 @@ class ModuleEditorController:
                 "floor_z": float(floor_z),
                 "wall_height": float(wall_height),
                 "style_id": style.style_id,
-                "include_ceiling": bool(include_ceiling),
-                "building_kind": str(building_kind or "interior"),
+                "architecture_profile": style.architecture_profile,
+                "architecture_shell_profile": shell_profile,
+                "architecture_archetype": archetype_id,
+                "include_ceiling": actual_ceiling,
+                "building_kind": actual_kind,
                 "roof_type": roof_label,
                 "roof_pitch_degrees": float(roof_pitch_degrees),
                 "roof_overhang": float(roof_overhang),
+                "walkmesh_auto_generated": True,
+                "environment_style_defaults_applied": bool(environment_update.applied),
+                "environment_style_summary": str(environment_update.summary),
             },
         )
         return room_resref
@@ -3285,6 +3433,11 @@ class ModuleEditorController:
             height=float(height),
             bottom=float(bottom),
         )
+        updated = self._with_automatic_room_walkmesh_status(
+            updated,
+            operation=f"set_pascal_building_{str(opening_kind or 'door').strip().lower()}",
+            room_resrefs=(normalise_resref(room_resref),),
+        )
         self._store_authored_project(updated)
         kind = str(opening_kind or "door").strip().lower()
         self.model.log(f"Added {kind} opening to {normalise_resref(room_resref)} wall {int(edge_index) + 1}.")
@@ -3300,6 +3453,7 @@ class ModuleEditorController:
                 "width": float(width),
                 "height": float(height),
                 "bottom": float(bottom),
+                "walkmesh_auto_generated": True,
             },
         )
 
@@ -3373,7 +3527,7 @@ class ModuleEditorController:
         )
 
     def map_studio_environment_kit_preview_model(self, piece_id: str, *, resource_manager: Any = None):
-        """Load one trained vanilla room tile for a lazy content-browser thumbnail."""
+        """Load one trained vanilla tile or clipped dressing thumbnail."""
 
         piece = environment_kit_piece(str(piece_id or ""))
         if piece is None or resource_manager is None:
@@ -3381,7 +3535,39 @@ class ModuleEditorController:
         game = str(getattr(self.project, "game", "K1") or "K1").upper()
         if piece.game != game:
             return None
-        return load_stock_kotor_model(resource_manager, piece.model_resref or piece.room_resref, game)
+        model = load_stock_kotor_model(resource_manager, piece.model_resref or piece.room_resref, game)
+        if model is None or piece.role != "dressing":
+            return model
+        whole_room = build_imported_mesh_primitive_from_stock_model(
+            model,
+            room_resref="grkitpreview",
+            source_model=piece.model_resref or piece.room_resref,
+            game=game,
+        )
+        primitive = extract_imported_mesh_room_bounds(
+            whole_room,
+            bounds=piece.source_bounds_m,
+            room_resref="grkitpreview",
+            surface_names=piece.source_surface_names,
+            anchor_mode=piece.anchor_mode,
+            backdrop_texture=piece.backdrop_texture_resref,
+            backdrop_axis=piece.backdrop_axis,
+        )
+        from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+        from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+        room = AuthoredRoomSpec(
+            room_resref="grkitpreview",
+            primitive=primitive,
+            visible_rooms=("grkitpreview",),
+            metadata={"source": "map_studio:environment_kit_thumbnail", "visual_only": True},
+        )
+        project = AuthoredModuleProject(
+            metadata=AuthoredModuleMetadata(module_root="grkitpreview", game=game),
+            rooms=(room,),
+            placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grkitpreview")),
+        )
+        return build_authored_module_preview_model(project, include_backdrops=True).model
 
     def preview_authored_terrain_kit_placement(
         self,
@@ -3419,6 +3605,12 @@ class ModuleEditorController:
             "target_piece_id": "",
             "target_room_resref": "",
             "cursor_distance": 0.0,
+            "target_is_authored_wall": False,
+            "target_edge_index": -1,
+            "target_center_fraction": 0.5,
+            "opening_width": 0.0,
+            "opening_height": 0.0,
+            "opening_bottom": 0.0,
         }
         source_piece = environment_kit_piece(str(asset_id or ""))
         authored = self._map_studio_authored_project_snapshot()
@@ -3478,18 +3670,121 @@ class ModuleEditorController:
                     room.normalised_resref(),
                 )
             )
-        if not targets:
-            return result
-
         horizontal_span = max(0.01, *(float(value) for value in source_piece.dimensions_m[:2]))
-        snap = nearest_environment_kit_snap(
-            source_piece,
-            proposed_position=point,
-            proposed_yaw=math.radians(yaw_degrees),
-            source_scale=uniform_scale,
-            targets=tuple(targets),
-            max_distance=max(0.75, min(3.0, horizontal_span * 0.12)),
+        snap = (
+            nearest_environment_kit_snap(
+                source_piece,
+                proposed_position=point,
+                proposed_yaw=math.radians(yaw_degrees),
+                source_scale=uniform_scale,
+                targets=tuple(targets),
+                max_distance=max(0.75, min(3.0, horizontal_span * 0.12)),
+            )
+            if targets
+            else None
         )
+
+        # Pascal rooms expose every footprint edge as a live doorway target.
+        # The retail room's own LYT hook is projected onto the nearest edge,
+        # then the opening preview contract validates/clamps the exact cut.
+        from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area
+
+        wall_snap = None
+        for room in tuple(authored.rooms or ()):
+            primitive = getattr(room, "primitive", None)
+            primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+            if not isinstance(primitive, FloorPlanRoomPrimitive):
+                continue
+            if str(primitive_metadata.get("source") or "").strip().lower() != "map_studio:pascal_building":
+                continue
+            profile = str(primitive_metadata.get("architecture_profile") or "").strip().lower()
+            door_spec = pascal_architecture_door_spec(str(authored.game or "K1"), profile)
+            style_id = str(primitive_metadata.get("style_id") or "").strip().lower()
+            style = next(
+                (
+                    candidate
+                    for candidate in available_pascal_building_styles(str(authored.game or "K1"))
+                    if candidate.style_id.strip().lower() == style_id
+                ),
+                None,
+            )
+            opening_width = (
+                float(door_spec["opening_width_m"])
+                if door_spec
+                else float(style.recommended_door_width_m) if style is not None else 1.8
+            )
+            opening_height = (
+                float(door_spec["opening_height_m"])
+                if door_spec
+                else min(
+                    float(style.recommended_door_height_m) if style is not None else 2.4,
+                    float(primitive.wall_height) - 0.08,
+                )
+            )
+            origin = tuple(float(value) for value in tuple(room.position or (0.0, 0.0, 0.0))[:3])
+            points = tuple((float(value[0]), float(value[1])) for value in tuple(primitive.points or ()))
+            ccw = polygon_signed_area(points) > 0.0
+            for edge_index, local_start in enumerate(points):
+                local_end = points[(edge_index + 1) % len(points)]
+                dx = local_end[0] - local_start[0]
+                dy = local_end[1] - local_start[1]
+                edge_length = math.hypot(dx, dy)
+                if edge_length <= opening_width + 0.04:
+                    continue
+                outward = (
+                    (dy / edge_length, -dx / edge_length)
+                    if ccw
+                    else (-dy / edge_length, dx / edge_length)
+                )
+                wall = EnvironmentKitWallTarget(
+                    room_resref=room.normalised_resref(),
+                    edge_index=edge_index,
+                    start=(origin[0] + local_start[0], origin[1] + local_start[1]),
+                    end=(origin[0] + local_end[0], origin[1] + local_end[1]),
+                    floor_z=origin[2] + float(primitive.z),
+                    outward_yaw_radians=math.atan2(outward[1], outward[0]),
+                    opening_width=opening_width,
+                    opening_height=opening_height,
+                )
+                candidate = nearest_environment_kit_wall_snap(
+                    source_piece,
+                    proposed_position=point,
+                    proposed_yaw=math.radians(yaw_degrees),
+                    source_scale=uniform_scale,
+                    walls=(wall,),
+                    max_distance=max(1.5, min(4.0, edge_length * 0.35)),
+                )
+                if candidate is None:
+                    continue
+                opening_preview = preview_pascal_building_opening(
+                    authored,
+                    room_resref=room.normalised_resref(),
+                    edge_index=edge_index,
+                    opening_kind="door",
+                    center_fraction=candidate.target_center_fraction,
+                    width=opening_width,
+                    height=opening_height,
+                    bottom=0.0,
+                )
+                if not opening_preview.valid:
+                    continue
+                delta_fraction = float(opening_preview.center_fraction) - float(candidate.target_center_fraction)
+                candidate = replace(
+                    candidate,
+                    position=(
+                        float(candidate.position[0]) + dx * delta_fraction,
+                        float(candidate.position[1]) + dy * delta_fraction,
+                        float(candidate.position[2]),
+                    ),
+                    target_center_fraction=float(opening_preview.center_fraction),
+                    opening_width=float(opening_preview.width),
+                    opening_height=float(opening_preview.height),
+                    opening_bottom=float(opening_preview.bottom),
+                )
+                if wall_snap is None or candidate.cursor_distance < wall_snap.cursor_distance:
+                    wall_snap = candidate
+        if wall_snap is not None and (snap is None or wall_snap.cursor_distance < snap.cursor_distance):
+            snap = wall_snap
         if snap is None:
             return result
         result.update(
@@ -3502,6 +3797,12 @@ class ModuleEditorController:
                 "target_piece_id": snap.target_piece_id,
                 "target_room_resref": snap.target_room_resref,
                 "cursor_distance": float(snap.cursor_distance),
+                "target_is_authored_wall": bool(snap.target_is_authored_wall),
+                "target_edge_index": int(snap.target_edge_index),
+                "target_center_fraction": float(snap.target_center_fraction),
+                "opening_width": float(snap.opening_width),
+                "opening_height": float(snap.opening_height),
+                "opening_bottom": float(snap.opening_bottom),
             }
         )
         return result
@@ -3640,6 +3941,48 @@ class ModuleEditorController:
         )
         return room_key
 
+    @staticmethod
+    def _environment_kit_wall_portal_inset(
+        authored: Any,
+        *,
+        target_room_resref: str,
+        target_edge_index: int,
+        source_portal: dict[str, Any] | None,
+        source_hook: dict[str, Any] | None,
+    ) -> float:
+        """Project a stock threshold edge onto the authored room's inward normal."""
+
+        if not source_portal or not source_hook:
+            return 0.0
+        portal_midpoint = tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3])
+        hook_position = tuple(float(value) for value in tuple(source_hook.get("local_position") or ())[:3])
+        if len(portal_midpoint) != 3 or len(hook_position) != 3:
+            return 0.0
+        target = next(
+            (room for room in tuple(authored.rooms or ()) if room.normalised_resref() == normalise_resref(target_room_resref)),
+            None,
+        )
+        primitive = getattr(target, "primitive", None)
+        points = tuple(getattr(primitive, "points", ()) or ())
+        edge = int(target_edge_index)
+        if edge < 0 or edge >= len(points):
+            return 0.0
+        from .authored_room_floorplan import polygon_signed_area
+
+        start = points[edge]
+        end = points[(edge + 1) % len(points)]
+        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+        length = math.hypot(dx, dy)
+        if length <= 1.0e-8:
+            return 0.0
+        ccw = polygon_signed_area(tuple((float(point[0]), float(point[1])) for point in points)) > 0.0
+        inward = (-dy / length, dx / length) if ccw else (dy / length, -dx / length)
+        offset = (portal_midpoint[0] - hook_position[0], portal_midpoint[1] - hook_position[1])
+        projected = offset[0] * inward[0] + offset[1] * inward[1]
+        if projected < -0.01:
+            raise ValueError("The selected stock doorway threshold points away from the authored room wall.")
+        return min(1.5, max(0.0, projected))
+
     def add_authored_environment_kit_piece(
         self,
         *,
@@ -3658,8 +4001,8 @@ class ModuleEditorController:
         """
 
         piece = environment_kit_piece(str(piece_id or ""))
-        if piece is None or piece.role not in {"room_tile", "exterior_tile"}:
-            raise ValueError("Choose a trained vanilla room or exterior tile.")
+        if piece is None or piece.role not in {"room_tile", "exterior_tile", "dressing"}:
+            raise ValueError("Choose a trained vanilla room, exterior tile, or dressing piece.")
         if resource_manager is None:
             raise ValueError(f"Connect the {piece.game} game installation before placing {piece.label}.")
         game = str(getattr(self.project, "game", "K1") or "K1").upper()
@@ -3683,9 +4026,69 @@ class ModuleEditorController:
                 placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
             )
 
+        requested_position = tuple(float(value) for value in tuple(position or (0.0, 0.0, 0.0))[:3])
+        wall_aligned = False
+        if piece.anchor_mode == "wall" and target_room_resref and len(requested_position) >= 3:
+            from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area
+
+            target_key = normalise_resref(target_room_resref)
+            target_room = next(
+                (room for room in authored.rooms if room.normalised_resref() == target_key),
+                None,
+            )
+            target_primitive = getattr(target_room, "primitive", None)
+            if isinstance(target_primitive, FloorPlanRoomPrimitive):
+                room_position = tuple(getattr(target_room, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+                points = tuple(
+                    (
+                        float(point[0]) + float(room_position[0]),
+                        float(point[1]) + float(room_position[1]),
+                    )
+                    for point in target_primitive.points
+                )
+                best: tuple[float, tuple[float, float], tuple[float, float]] | None = None
+                for index, start in enumerate(points):
+                    end = points[(index + 1) % len(points)]
+                    dx, dy = end[0] - start[0], end[1] - start[1]
+                    length_squared = (dx * dx) + (dy * dy)
+                    if length_squared <= 1.0e-10:
+                        continue
+                    t = max(
+                        0.0,
+                        min(
+                            1.0,
+                            (((requested_position[0] - start[0]) * dx) + ((requested_position[1] - start[1]) * dy))
+                            / length_squared,
+                        ),
+                    )
+                    closest = (start[0] + (dx * t), start[1] + (dy * t))
+                    distance = math.hypot(requested_position[0] - closest[0], requested_position[1] - closest[1])
+                    if best is None or distance < best[0]:
+                        best = (distance, closest, (dx, dy))
+                if best is not None:
+                    _distance, closest, direction = best
+                    edge_length = math.hypot(direction[0], direction[1])
+                    ccw = polygon_signed_area(tuple(target_primitive.points)) > 0.0
+                    inward = (
+                        (-direction[1] / edge_length, direction[0] / edge_length)
+                        if ccw
+                        else (direction[1] / edge_length, -direction[0] / edge_length)
+                    )
+                    local_axis = {"x": 0.0, "y": math.pi * 0.5, "-x": math.pi, "-y": -math.pi * 0.5}.get(
+                        piece.local_normal_axis,
+                        math.pi * 0.5,
+                    )
+                    rotation_degrees_z = math.degrees(math.atan2(inward[1], inward[0]) - local_axis)
+                    requested_position = (
+                        closest[0] + (inward[0] * 0.015),
+                        closest[1] + (inward[1] * 0.015),
+                        requested_position[2],
+                    )
+                    wall_aligned = True
+
         placement = self.preview_authored_terrain_kit_placement(
             asset_id=piece.piece_id,
-            position=position,
+            position=requested_position,
             rotation_degrees_z=rotation_degrees_z,
             scale=scale,
         )
@@ -3703,13 +4106,39 @@ class ModuleEditorController:
             raise ValueError(
                 f"Vanilla room model {piece.model_resref or piece.room_resref} was not found in the configured {game} installation."
             )
-        wok_bytes = self._stock_room_wok_bytes(piece.room_resref, resource_manager, authored)
-        primitive = build_imported_mesh_primitive_from_stock_model(
+        wok_bytes = (
+            None
+            if piece.role == "dressing"
+            else self._stock_room_wok_bytes(piece.room_resref, resource_manager, authored)
+        )
+        whole_room = build_imported_mesh_primitive_from_stock_model(
             model,
             room_resref=room_key,
             source_model=piece.model_resref or piece.room_resref,
             game=game,
             wok_bytes=wok_bytes,
+        )
+        if piece.role != "dressing" and whole_room.wok is not None:
+            from .authored_module_walkmesh import prepare_environment_kit_room_walkmesh
+
+            source_origin = environment_kit_source_room_position(piece, resource_manager)
+            whole_room = prepare_environment_kit_room_walkmesh(
+                whole_room,
+                source_room_position=source_origin,
+                magnets=piece.magnets,
+            )
+        primitive = (
+            extract_imported_mesh_room_bounds(
+                whole_room,
+                bounds=piece.source_bounds_m,
+                room_resref=room_key,
+                surface_names=piece.source_surface_names,
+                anchor_mode=piece.anchor_mode,
+                backdrop_texture=piece.backdrop_texture_resref,
+                backdrop_axis=piece.backdrop_axis,
+            )
+            if piece.role == "dressing"
+            else whole_room
         )
         if not primitive.surfaces:
             raise ValueError(f"{piece.label} has no renderable room geometry.")
@@ -3728,16 +4157,87 @@ class ModuleEditorController:
                 "environment_kit_source_module": piece.module_resref,
                 "environment_kit_source_room": piece.room_resref,
                 "environment_kit_class_id": piece.class_id,
+                "environment_kit_role": piece.role,
+                "environment_kit_anchor_mode": piece.anchor_mode,
+                "environment_kit_wall_aligned": wall_aligned,
                 "environment_kit_rotation_degrees_z": rotation_degrees_z,
                 "environment_kit_scale": scale,
                 "source_lightmaps_removed_for_relighting": had_lightmaps,
             },
         )
+        source_magnet_id = str(placement.get("source_magnet_id") or "")
+        physical_portal_aligned = False
+        connection_outward_normal: tuple[float, float] | None = None
+        untransformed_source_portal = next(
+            (
+                dict(row or {})
+                for row in tuple(dict(primitive.metadata or {}).get("walkmesh_portals") or ())
+                if str(dict(row or {}).get("magnet_id") or "").strip().lower() == source_magnet_id.strip().lower()
+            ),
+            None,
+        )
+        if bool(placement.get("target_is_authored_wall", False)) and untransformed_source_portal is not None:
+            target_key = normalise_resref(str(placement.get("target_room_resref") or ""))
+            target_edge = int(placement.get("target_edge_index", -1))
+            target_room = next(
+                (candidate for candidate in authored.rooms if candidate.normalised_resref() == target_key),
+                None,
+            )
+            target_points = tuple(getattr(getattr(target_room, "primitive", None), "points", ()) or ())
+            portal_start = tuple(float(value) for value in tuple(untransformed_source_portal.get("start") or ())[:3])
+            portal_end = tuple(float(value) for value in tuple(untransformed_source_portal.get("end") or ())[:3])
+            if target_room is not None and 0 <= target_edge < len(target_points) and len(portal_start) == len(portal_end) == 3:
+                target_start = target_points[target_edge]
+                target_end = target_points[(target_edge + 1) % len(target_points)]
+                target_angle = math.atan2(
+                    float(target_end[1]) - float(target_start[1]),
+                    float(target_end[0]) - float(target_start[0]),
+                )
+                portal_angle = math.atan2(portal_end[1] - portal_start[1], portal_end[0] - portal_start[0])
+                candidates = (target_angle - portal_angle, target_angle + math.pi - portal_angle)
+                preview_angle = math.radians(rotation_degrees_z)
+
+                def angular_distance(value: float) -> float:
+                    return abs((value - preview_angle + math.pi) % (2.0 * math.pi) - math.pi)
+
+                rotation_degrees_z = math.degrees(min(candidates, key=angular_distance)) % 360.0
+                physical_portal_aligned = True
+                target_length = math.hypot(
+                    float(target_end[0]) - float(target_start[0]),
+                    float(target_end[1]) - float(target_start[1]),
+                )
+                if target_length > 1.0e-8:
+                    target_area_twice = sum(
+                        (float(point[0]) * float(target_points[(index + 1) % len(target_points)][1]))
+                        - (float(point[1]) * float(target_points[(index + 1) % len(target_points)][0]))
+                        for index, point in enumerate(target_points)
+                    )
+                    target_ccw = target_area_twice > 0.0
+                    target_inward = (
+                        (-(float(target_end[1]) - float(target_start[1])) / target_length,
+                         (float(target_end[0]) - float(target_start[0])) / target_length)
+                        if target_ccw
+                        else ((float(target_end[1]) - float(target_start[1])) / target_length,
+                              -(float(target_end[0]) - float(target_start[0])) / target_length)
+                    )
+                    connection_outward_normal = (-target_inward[0], -target_inward[1])
         primitive = transform_terrain_kit_primitive(
             primitive,
             rotation_degrees_z=rotation_degrees_z,
             scale=scale,
         )
+        runtime_graph = dict(dict(primitive.metadata or {}).get("source_runtime_graph") or {})
+        if any(
+            int(runtime_graph.get(key, 0) or 0) > 0
+            for key in ("animation_count", "light_count", "emitter_count", "reference_count")
+        ):
+            primitive = prepare_imported_mesh_for_static_runtime_rebuild(
+                primitive,
+                reason=(
+                    "Environment Kit room geometry is transformed into a reusable room-local tile; "
+                    "source module model lights/runtime nodes are deliberately replaced by authored module lighting."
+                ),
+            )
 
         angle = math.radians(rotation_degrees_z)
         cosine = math.cos(angle)
@@ -3747,7 +4247,7 @@ class ModuleEditorController:
             x = float(magnet.local_position[0]) * scale
             y = float(magnet.local_position[1]) * scale
             z = float(magnet.local_position[2]) * scale
-            yaw = magnet.yaw_radians + angle
+            yaw = magnet.snap_facing_radians + angle
             connection_points.append(
                 {
                     "door": magnet.magnet_id,
@@ -3758,6 +4258,172 @@ class ModuleEditorController:
                     "source": magnet.source,
                 }
             )
+
+        source_portal = next(
+            (
+                dict(row or {})
+                for row in tuple(dict(primitive.metadata or {}).get("walkmesh_portals") or ())
+                if str(dict(row or {}).get("magnet_id") or "").strip().lower() == source_magnet_id.strip().lower()
+            ),
+            None,
+        )
+        if physical_portal_aligned and source_portal is not None and connection_outward_normal is not None:
+            primitive = trim_environment_kit_connection_overlap(
+                primitive,
+                portal_midpoint=tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3]),
+                outward_normal=connection_outward_normal,
+            )
+            if (
+                piece.role == "exterior_tile"
+                and environment_kit_builder_style_id(piece.game, piece.module_resref, piece.collection_id)
+                == "architecture:k1_shadowlands"
+            ):
+                # A single Shadowlands LYT partition is deliberately only one
+                # slice of an outdoor map.  Give its remaining WOK perimeter a
+                # continuous dirt-bank continuation so it cannot expose void
+                # gaps while the selected doorway stays open to the clearing.
+                primitive = seal_environment_kit_exterior_bounds(
+                    primitive,
+                    portal_midpoint=tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3]),
+                    portal_width=float(source_portal.get("width_m", 0.0) or 0.0),
+                )
+            source_portal = next(
+                (
+                    dict(row or {})
+                    for row in tuple(dict(primitive.metadata or {}).get("walkmesh_portals") or ())
+                    if str(dict(row or {}).get("magnet_id") or "").strip().lower() == source_magnet_id.strip().lower()
+                ),
+                None,
+            )
+        source_hook_row = next(
+            (row for row in connection_points if str(row.get("door") or "").strip().lower() == source_magnet_id.strip().lower()),
+            None,
+        )
+        if source_portal is not None and source_hook_row is not None:
+            portal_midpoint = tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3])
+            hook_position = tuple(float(value) for value in tuple(source_hook_row.get("local_position") or ())[:3])
+            if len(portal_midpoint) == 3 and len(hook_position) == 3:
+                if physical_portal_aligned:
+                    target_key = normalise_resref(str(placement.get("target_room_resref") or ""))
+                    target_edge = int(placement.get("target_edge_index", -1))
+                    target_room = next(
+                        (candidate for candidate in authored.rooms if candidate.normalised_resref() == target_key),
+                        None,
+                    )
+                    target_primitive = getattr(target_room, "primitive", None)
+                    target_points = tuple(getattr(target_primitive, "points", ()) or ())
+                    if target_room is not None and 0 <= target_edge < len(target_points):
+                        start = target_points[target_edge]
+                        end = target_points[(target_edge + 1) % len(target_points)]
+                        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+                        edge_length = math.hypot(dx, dy)
+                        if edge_length > 1.0e-8:
+                            portal_width = max(
+                                0.05,
+                                float(source_portal.get("width_m", placement.get("opening_width", 1.8)) or 1.8),
+                            )
+                            aligned_opening = preview_pascal_building_opening(
+                                authored,
+                                room_resref=target_key,
+                                edge_index=target_edge,
+                                opening_kind="door",
+                                center_fraction=float(placement.get("target_center_fraction", 0.5) or 0.5),
+                                width=portal_width,
+                                height=float(placement.get("opening_height", 2.4) or 2.4),
+                                bottom=float(placement.get("opening_bottom", 0.0) or 0.0),
+                            )
+                            if not aligned_opening.valid:
+                                raise ValueError(aligned_opening.reason or "The stock room threshold does not fit this wall edge.")
+                            target_origin = tuple(
+                                float(value) for value in tuple(target_room.position or (0.0, 0.0, 0.0))[:3]
+                            )
+                            center_fraction = float(aligned_opening.center_fraction)
+                            point = (
+                                target_origin[0] + float(start[0]) + dx * center_fraction - portal_midpoint[0],
+                                target_origin[1] + float(start[1]) + dy * center_fraction - portal_midpoint[1],
+                                target_origin[2] + float(getattr(target_primitive, "z", 0.0)) - portal_midpoint[2],
+                            )
+                            placement = {
+                                **placement,
+                                "target_center_fraction": float(aligned_opening.center_fraction),
+                                "opening_width": float(aligned_opening.width),
+                                "opening_height": float(aligned_opening.height),
+                                "opening_bottom": float(aligned_opening.bottom),
+                            }
+                else:
+                    # Keep the retail door-hook height but place the actual WOK
+                    # threshold exactly on the adjoining generated floor.
+                    point = (point[0], point[1], point[2] - (portal_midpoint[2] - hook_position[2]))
+
+        target_opening_name = ""
+        if bool(placement.get("target_is_authored_wall", False)):
+            target_key = normalise_resref(str(placement.get("target_room_resref") or ""))
+            target_edge = int(placement.get("target_edge_index", -1))
+            if not target_key or target_edge < 0:
+                raise ValueError("The authored-wall snap target is no longer valid.")
+            authored = set_pascal_building_opening_in_project(
+                authored,
+                room_resref=target_key,
+                edge_index=target_edge,
+                opening_kind="door",
+                center_fraction=float(placement.get("target_center_fraction", 0.5) or 0.5),
+                width=float(placement.get("opening_width", 1.8) or 1.8),
+                height=float(placement.get("opening_height", 2.4) or 2.4),
+                bottom=float(placement.get("opening_bottom", 0.0) or 0.0),
+                connection_metadata={
+                    "connected_room_resref": room_key,
+                    "connected_opening_name": source_magnet_id,
+                    "connection_state": "connected",
+                    "walkmesh_portal": True,
+                    "walkmesh_portal_inset_m": 0.0
+                    if physical_portal_aligned
+                    else self._environment_kit_wall_portal_inset(
+                        authored,
+                        target_room_resref=target_key,
+                        target_edge_index=target_edge,
+                        source_portal=source_portal,
+                        source_hook=source_hook_row,
+                    ),
+                    "walkmesh_portal_width_m": float((source_portal or {}).get("width_m", 0.0) or 0.0),
+                    "walkmesh_portal_source": "environment_kit_stock_threshold",
+                },
+            )
+            target_room_after = next(room for room in authored.rooms if room.normalised_resref() == target_key)
+            target_opening_name = next(
+                (
+                    str(opening.name or "")
+                    for opening in tuple(getattr(target_room_after.primitive, "openings", ()) or ())
+                    if str(dict(opening.metadata or {}).get("connected_room_resref") or "").strip().lower() == room_key
+                    and str(dict(opening.metadata or {}).get("connected_opening_name") or "").strip().lower()
+                    == source_magnet_id.strip().lower()
+                ),
+                "",
+            )
+            connected_rooms: list[AuthoredRoomSpec] = []
+            for current in authored.rooms:
+                if current.normalised_resref() != target_key:
+                    connected_rooms.append(current)
+                    continue
+                connections = list(dict(current.metadata or {}).get("environment_kit_connections") or ())
+                connections.append(
+                    {
+                        "room_resref": room_key,
+                        "piece_id": piece.piece_id,
+                        "edge_index": target_edge,
+                        "center_fraction": float(placement.get("target_center_fraction", 0.5) or 0.5),
+                        "source_magnet_id": str(placement.get("source_magnet_id") or ""),
+                    }
+                )
+                connected_rooms.append(
+                    replace(
+                        current,
+                        metadata={
+                            **dict(current.metadata or {}),
+                            "environment_kit_connections": connections,
+                        },
+                    )
+                )
+            authored = replace(authored, rooms=tuple(connected_rooms))
 
         all_rooms = tuple(room.normalised_resref() for room in authored.rooms) + (room_key,)
         existing = tuple(
@@ -3776,6 +4442,9 @@ class ModuleEditorController:
                 "environment_kit_collection_id": piece.collection_id,
                 "environment_kit_label": piece.label,
                 "environment_kit_class_id": piece.class_id,
+                "environment_kit_role": piece.role,
+                "environment_kit_anchor_mode": piece.anchor_mode,
+                "environment_kit_wall_aligned": wall_aligned,
                 "environment_kit_source_game": piece.game,
                 "environment_kit_source_module": piece.module_resref,
                 "environment_kit_source_room": piece.room_resref,
@@ -3788,16 +4457,138 @@ class ModuleEditorController:
                 "environment_kit_target_room_resref": normalise_resref(
                     str(placement.get("target_room_resref") or target_room_resref)
                 ),
+                "environment_kit_target_is_authored_wall": bool(placement.get("target_is_authored_wall", False)),
+                "environment_kit_target_edge_index": int(placement.get("target_edge_index", -1)),
+                "environment_kit_target_center_fraction": float(
+                    placement.get("target_center_fraction", 0.5) or 0.5
+                ),
+                "environment_kit_opening_width": float(placement.get("opening_width", 0.0) or 0.0),
+                "environment_kit_opening_height": float(placement.get("opening_height", 0.0) or 0.0),
                 "environment_kit_surface_target_room_resref": normalise_resref(target_room_resref),
                 "connection_points": connection_points,
                 "surface_snapped": True,
             },
         )
         before = self._capture_map_studio_command_state()
-        self._store_authored_project(replace(authored, rooms=existing + (room,)))
+        updated_project = replace(authored, rooms=existing + (room,))
+        target_connection_room = normalise_resref(str(placement.get("target_room_resref") or ""))
+        target_connection_hook = (
+            target_opening_name
+            if bool(placement.get("target_is_authored_wall", False))
+            else str(placement.get("target_magnet_id") or "")
+        )
+        if bool(placement.get("magnet_snapped", False)) and source_magnet_id and target_connection_room and target_connection_hook:
+            from .authored_module_walkmesh import (
+                compile_authored_room_connection_walkmeshes,
+                upsert_authored_walkmesh_room_connection,
+            )
+
+            updated_project = upsert_authored_walkmesh_room_connection(
+                updated_project,
+                source_room_resref=room_key,
+                source_hook_name=source_magnet_id,
+                target_room_resref=target_connection_room,
+                target_hook_name=target_connection_hook,
+                connection_source="map_studio_environment_kit_drop",
+            )
+            walkmesh_build = compile_authored_room_connection_walkmeshes(updated_project)
+            if not walkmesh_build.ready:
+                raise ValueError(" ".join(walkmesh_build.blocking_issues))
+            if not bool(placement.get("target_is_authored_wall", False)):
+                target_piece = environment_kit_piece(str(placement.get("target_piece_id") or ""))
+                source_style_id = environment_kit_builder_style_id(
+                    piece.game,
+                    piece.module_resref,
+                    piece.collection_id,
+                )
+                target_style_id = (
+                    environment_kit_builder_style_id(
+                        target_piece.game,
+                        target_piece.module_resref,
+                        target_piece.collection_id,
+                    )
+                    if target_piece is not None
+                    else ""
+                )
+                source_style = next(
+                    (
+                        candidate
+                        for candidate in available_pascal_building_styles(game)
+                        if candidate.style_id.strip().lower() == source_style_id.strip().lower()
+                    ),
+                    None,
+                )
+                door_spec = (
+                    pascal_architecture_door_spec(game, source_style.architecture_profile)
+                    if source_style is not None and source_style_id == target_style_id
+                    else None
+                )
+                portal = next(
+                    (
+                        candidate
+                        for candidate in walkmesh_build.portals
+                        if {
+                            candidate.source_room_resref,
+                            candidate.target_room_resref,
+                        }
+                        == {room_key, target_connection_room}
+                    ),
+                    None,
+                )
+                if door_spec is not None and portal is not None:
+                    source_wok = walkmesh_build.room_woks[portal.source_room_resref]
+                    face = source_wok.faces[portal.source_face_index]
+                    indices = (int(face.v1), int(face.v2), int(face.v3))
+                    first_index = indices[int(portal.source_local_edge)]
+                    second_index = indices[(int(portal.source_local_edge) + 1) % 3]
+                    first = source_wok.verts[first_index]
+                    second = source_wok.verts[second_index]
+                    bearing = math.atan2(
+                        float(second[1]) - float(first[1]),
+                        float(second[0]) - float(first[0]),
+                    )
+                    midpoint = tuple(
+                        (
+                            float(portal.source_midpoint[axis])
+                            + float(portal.target_midpoint[axis])
+                        )
+                        * 0.5
+                        for axis in range(3)
+                    )
+                    door_update = add_authored_gameplay_placement(
+                        updated_project,
+                        kind="door",
+                        template_resref=str(door_spec["template_resref"]),
+                        tag=f"{room_key}_{target_connection_room}_door"[:32],
+                        position=midpoint,
+                        bearing=bearing,
+                    )
+                    updated_project = door_update.project
+            project_extra = dict(updated_project.extra or {})
+            project_extra["last_walkmesh_build"] = {
+                "operation": "place_environment_kit_room",
+                "auto_generated": True,
+                "source_room_resref": room_key,
+                "target_room_resref": target_connection_room,
+                "portal_count": len(walkmesh_build.portals),
+                "midpoint_gaps_m": [float(portal.midpoint_gap) for portal in walkmesh_build.portals],
+                "room_face_counts": {
+                    room_resref: len(tuple(wok.faces or ()))
+                    for room_resref, wok in walkmesh_build.room_woks.items()
+                },
+                "ready": True,
+            }
+            updated_project = replace(updated_project, extra=project_extra)
+        environment_update = apply_authored_environment_style_defaults(
+            updated_project,
+            environment_kit_builder_style_id(piece.game, piece.module_resref, piece.collection_id),
+        )
+        updated_project = environment_update.project
+        self._store_authored_project(updated_project)
         self.model.log(
             f"Placed environment-kit piece {piece.label} as {room_key} at "
             f"{point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f}."
+            + (f" {environment_update.summary}" if environment_update.applied else "")
         )
         self._record_map_studio_command(
             action_key="map_studio.environment_kit.place",
@@ -3811,6 +4602,15 @@ class ModuleEditorController:
                 "rotation_degrees_z": rotation_degrees_z,
                 "scale": scale,
                 "magnet_snapped": bool(placement.get("magnet_snapped", False)),
+                "target_is_authored_wall": bool(placement.get("target_is_authored_wall", False)),
+                "target_room_resref": str(placement.get("target_room_resref") or ""),
+                "target_edge_index": int(placement.get("target_edge_index", -1)),
+                "walkmesh_auto_generated": bool(
+                    placement.get("magnet_snapped", False)
+                    and source_magnet_id
+                    and target_connection_room
+                    and target_connection_hook
+                ),
             },
         )
         return room_key
@@ -3845,6 +4645,38 @@ class ModuleEditorController:
                 }
             )
         return tuple(rows)
+
+    def map_studio_building_style_context(self) -> dict[str, str]:
+        """Return the authored room style that Builder should restore on open.
+
+        KMAP persists the Pascal style on each floor-plan primitive.  Prefer the
+        currently active authored room, then the first styled room, so reopening
+        a Shadowlands or other trained kit cannot silently present the default
+        Endar Spire controls and mismatched content shelves.
+        """
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return {}
+        active_room = normalise_resref(str(getattr(self.model, "active_room_id", "") or ""))
+        rooms = tuple(authored.rooms or ())
+        ordered = tuple(
+            room for room in rooms if active_room and room.normalised_resref() == active_room
+        ) + tuple(
+            room for room in rooms if not active_room or room.normalised_resref() != active_room
+        )
+        for room in ordered:
+            primitive = getattr(room, "primitive", None)
+            metadata = dict(getattr(primitive, "metadata", {}) or {})
+            style_id = str(metadata.get("style_id") or "").strip()
+            if not style_id:
+                continue
+            return {
+                "style_id": style_id,
+                "environment_kind": str(metadata.get("building_kind") or "").strip().lower(),
+                "room_resref": room.normalised_resref(),
+            }
+        return {}
 
     def snap_authored_rooms_at_doorway(
         self,
@@ -5052,6 +5884,89 @@ class ModuleEditorController:
         )
         return update
 
+    def set_authored_room_opening_intent(
+        self,
+        *,
+        hook_id: str,
+        intent: str,
+    ) -> AuthoredRoomOpeningIntentUpdate:
+        """Persist connector/external/sealed intent as one undoable Map Studio action."""
+
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        update = set_authored_room_opening_intent_in_project(
+            authored,
+            hook_id=str(hook_id or ""),
+            intent=str(intent or ""),
+        )
+        self._store_authored_project(update.project)
+        self.model.log(update.summary)
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.set_opening_intent",
+            label=f"Set {update.opening_name} to {update.intent}",
+            before=before,
+            metadata={
+                "hook_id": update.hook_id,
+                "room_resref": update.room_resref,
+                "opening_name": update.opening_name,
+                "opening_intent": update.intent,
+                "sealed_door_placement_id": update.sealed_door_placement_id,
+            },
+        )
+        return update
+
+    def preview_authored_room_drag_snap(
+        self,
+        *,
+        source_room_resref: str,
+        world_delta: Any,
+        snap_distance: float = 2.5,
+    ) -> dict[str, object]:
+        """Resolve a disposable doorway magnet for one whole-room drag."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return {
+                "magnet_snapped": False,
+                "source_room_resref": normalise_resref(source_room_resref),
+                "reason": "Create or load an authored room first.",
+            }
+        preview = preview_authored_room_drag_snap_in_project(
+            authored,
+            source_room_resref=source_room_resref,
+            world_delta=tuple(world_delta or ()),
+            snap_distance=float(snap_distance),
+        )
+        return preview.as_payload()
+
+    def connect_authored_room_drag_snap(self, preview: Any):
+        """Commit a previewed whole-room doorway magnet as one undo step."""
+
+        values = dict(preview) if isinstance(preview, dict) else preview
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        update = connect_authored_room_drag_snap_in_project(authored, values)
+        self._store_authored_project(update.project)
+        self.model.log(
+            f"{update.summary} Whole-room doorway magnet committed with one shared KOTOR door actor."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.drag_snap_opening",
+            label=f"Snap {update.source_hook.room_resref} to {update.target_hook.room_resref}",
+            before=before,
+            metadata={
+                "source_hook_id": update.source_hook.hook_id,
+                "target_hook_id": update.target_hook.hook_id,
+                "rotation_degrees": update.rotation_degrees,
+                "translation": list(update.translation),
+                "auto_cut_source": bool(dict(values or {}).get("auto_cut_source", False)) if isinstance(values, dict) else False,
+                "shared_runtime_door": True,
+                "vis_intent_updated": True,
+                "wok_transition_proof_required": True,
+            },
+        )
+        return update
+
     def snap_authored_rooms_to_grid(self, room_resrefs, *, grid_size: float = 1.0) -> str:
         """Snap selected authored room positions to the KMAP layout grid."""
 
@@ -6221,18 +7136,25 @@ class ModuleEditorController:
         if resource_manager is None or (not rooms and not placements):
             self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
             return authored
+        template_resources = self._map_studio_template_resources()
+        template_resource_signature = tuple(
+            (resref, restype, hashlib.sha1(bytes(data)).hexdigest())
+            for resref, restype, data in template_resources
+        )
         resolver = getattr(self, "_map_studio_stock_template_resolver", None)
         if (
             resolver is None
             or getattr(resolver, "_game", "") != game
             or getattr(resolver, "_manager", None) is not resource_manager
+            or getattr(resolver, "_ghostrigger_template_resource_signature", ()) != template_resource_signature
         ):
             resolver = TemplateModelResolver(
                 resource_manager,
                 game,
-                template_resources=(self._authored_placeable_resources + self._authored_creature_resources),
+                template_resources=template_resources,
                 placeable_rows=self._authored_placeable_preview_rows,
             )
+            setattr(resolver, "_ghostrigger_template_resource_signature", template_resource_signature)
             self._map_studio_stock_template_resolver = resolver
         cache = getattr(self, "_map_studio_stock_model_cache", None)
         if cache is None:
@@ -6283,18 +7205,25 @@ class ModuleEditorController:
         entry_game = str(value("game", "") or "").strip().upper()
         if entry_game and entry_game != game:
             return None, ""
+        template_resources = self._map_studio_template_resources()
+        template_resource_signature = tuple(
+            (resref, restype, hashlib.sha1(bytes(data)).hexdigest())
+            for resref, restype, data in template_resources
+        )
         resolver = getattr(self, "_map_studio_stock_template_resolver", None)
         if (
             resolver is None
             or getattr(resolver, "_game", "") != game
             or getattr(resolver, "_manager", None) is not manager
+            or getattr(resolver, "_ghostrigger_template_resource_signature", ()) != template_resource_signature
         ):
             resolver = TemplateModelResolver(
                 manager,
                 game,
-                template_resources=(self._authored_placeable_resources + self._authored_creature_resources),
+                template_resources=template_resources,
                 placeable_rows=self._authored_placeable_preview_rows,
             )
+            setattr(resolver, "_ghostrigger_template_resource_signature", template_resource_signature)
             self._map_studio_stock_template_resolver = resolver
         model_resref = str(resolver.model_for_placement_kind(kind, template_resref) or "").strip().lower()
         if not model_resref:
@@ -9928,6 +10857,7 @@ class ModuleEditorController:
         *,
         primitive_selections: Any = (),
         placement_ids: Any = (),
+        room_resrefs: Any = (),
     ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
         """Delete a mixed viewport/Outliner selection as one undoable edit."""
 
@@ -9945,7 +10875,14 @@ class ModuleEditorController:
                 if str(value or "").strip()
             )
         )
-        if not primitives and not placements:
+        rooms = tuple(
+            dict.fromkeys(
+                normalise_resref(value)
+                for value in tuple(room_resrefs or ())
+                if str(value or "").strip()
+            )
+        )
+        if not primitives and not placements and not rooms:
             return (), ()
         for placement_id in placements:
             if placement_id != "entry_point":
@@ -9959,6 +10896,37 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         before = self._capture_map_studio_command_state()
+        removed_rooms: list[str] = []
+        if rooms:
+            retained_rooms = []
+            for room in tuple(authored.rooms or ()):
+                resref = room.normalised_resref()
+                if resref in rooms:
+                    removed_rooms.append(resref)
+                else:
+                    retained_rooms.append(room)
+            if removed_rooms:
+                removed_set = set(removed_rooms)
+                retained_rooms = [
+                    replace(
+                        room,
+                        visible_rooms=tuple(
+                            target
+                            for target in tuple(room.visible_rooms or ())
+                            if normalise_resref(target) not in removed_set
+                        ),
+                    )
+                    for room in retained_rooms
+                ]
+                updated_extra = dict(getattr(authored, "extra", {}) or {})
+                updated_extra["vis_pairs"] = [
+                    pair
+                    for pair in list(updated_extra.get("vis_pairs") or ())
+                    if len(tuple(pair or ())) >= 2
+                    and normalise_resref(tuple(pair)[0]) not in removed_set
+                    and normalise_resref(tuple(pair)[1]) not in removed_set
+                ]
+                authored = replace(authored, rooms=tuple(retained_rooms), extra=updated_extra)
         removed_primitives: list[tuple[str, str]] = []
         for room_resref, primitive_name in primitives:
             try:
@@ -9984,13 +10952,13 @@ class ModuleEditorController:
                 self.model.log(f"Map Studio placement {placement_id} could not be removed: {exc}")
                 continue
             removed_placements.append(placement_id)
-        if not removed_primitives and not removed_placements:
+        if not removed_rooms and not removed_primitives and not removed_placements:
             return (), ()
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
         self.project.name = authored.metadata.module_root
         self.project.game = authored.game
         self.project.dirty = True
-        removed_count = len(removed_primitives) + len(removed_placements)
+        removed_count = len(removed_rooms) + len(removed_primitives) + len(removed_placements)
         self._record_map_studio_command(
             action_key="map_studio.scene.remove_objects",
             label=f"Remove {removed_count} scene objects",
@@ -9998,12 +10966,15 @@ class ModuleEditorController:
             metadata={
                 "primitive_selections": tuple(removed_primitives),
                 "placement_ids": tuple(removed_placements),
+                "room_resrefs": tuple(removed_rooms),
             },
         )
         self.model.log(
             f"Removed {removed_count} mixed Map Studio scene objects; previous exports/proofs are now stale."
         )
-        return tuple(removed_primitives), tuple(removed_placements)
+        return tuple(removed_primitives), tuple(removed_placements) + tuple(
+            f"authored_room:{value}" for value in removed_rooms
+        )
 
     def separate_authored_room_primitive(
         self,
@@ -10437,6 +11408,7 @@ class ModuleEditorController:
         *,
         primitive_selections: Any = (),
         placement_ids: Any = (),
+        room_resrefs: Any = (),
         world_delta: Any = (0.0, 0.0, 0.0),
     ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
         """Move a mixed authored-object selection in one KMAP/Undo command."""
@@ -10455,8 +11427,15 @@ class ModuleEditorController:
                 if str(value or "").strip()
             )
         )
+        rooms = tuple(
+            dict.fromkeys(
+                str(value or "").strip().lower()
+                for value in tuple(room_resrefs or ())
+                if str(value or "").strip()
+            )
+        )
         delta = tuple(float(value) for value in tuple(world_delta or ())[:3])
-        if (not primitives and not placements) or len(delta) != 3:
+        if (not primitives and not placements and not rooms) or len(delta) != 3:
             return (), ()
         for placement_id in placements:
             if placement_id != "entry_point":
@@ -10469,7 +11448,40 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        if rooms:
+            owned_door_ids: list[str] = []
+            for room in tuple(authored.rooms or ()):
+                normalise = getattr(room, "normalised_resref", None)
+                resref = str(
+                    normalise() if callable(normalise) else getattr(room, "room_resref", "") or ""
+                ).strip().lower()
+                if resref not in rooms:
+                    continue
+                primitive = getattr(room, "primitive", None)
+                for opening in tuple(getattr(primitive, "openings", ()) or ()):
+                    owned_id = str(
+                        dict(getattr(opening, "metadata", {}) or {}).get("door_placement_id") or ""
+                    ).strip()
+                    if owned_id:
+                        parse_authored_gameplay_placement_id(owned_id)
+                        owned_door_ids.append(owned_id)
+            placements = tuple(dict.fromkeys((*placements, *owned_door_ids)))
         before = self._capture_map_studio_command_state()
+        moved_rooms: list[str] = []
+        if rooms:
+            updated_rooms = []
+            for room in tuple(authored.rooms or ()):
+                normalise = getattr(room, "normalised_resref", None)
+                resref = str(normalise() if callable(normalise) else getattr(room, "room_resref", "") or "").strip().lower()
+                if resref in rooms:
+                    origin = tuple(float(value) for value in tuple(getattr(room, "position", (0.0, 0.0, 0.0)))[:3])
+                    room = replace(
+                        room,
+                        position=tuple(origin[index] + delta[index] for index in range(3)),
+                    )
+                    moved_rooms.append(resref)
+                updated_rooms.append(room)
+            authored = replace(authored, rooms=tuple(updated_rooms))
         moved_primitives: tuple[tuple[str, str], ...] = ()
         if primitives:
             authored = transform_authored_room_composition_primitives(
@@ -10505,13 +11517,13 @@ class ModuleEditorController:
                 bearing=float(row.bearing),
             ).project
             moved_placements.append(placement_id)
-        if not moved_primitives and not moved_placements:
+        if not moved_rooms and not moved_primitives and not moved_placements:
             return (), ()
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
         self.project.name = authored.metadata.module_root
         self.project.game = authored.game
         self.project.dirty = True
-        moved_count = len(moved_primitives) + len(moved_placements)
+        moved_count = len(moved_rooms) + len(moved_primitives) + len(moved_placements)
         self._record_map_studio_command(
             action_key="map_studio.scene.move_objects",
             label=f"Move {moved_count} scene objects",
@@ -10519,13 +11531,14 @@ class ModuleEditorController:
             metadata={
                 "primitive_selections": moved_primitives,
                 "placement_ids": tuple(moved_placements),
+                "room_resrefs": tuple(moved_rooms),
                 "world_delta": delta,
             },
         )
         self.model.log(
             f"Moved {moved_count} mixed Map Studio scene objects together; previous exports/proofs are now stale."
         )
-        return moved_primitives, tuple(moved_placements)
+        return moved_primitives, tuple(moved_placements) + tuple(f"authored_room:{value}" for value in moved_rooms)
 
     def rename_authored_gameplay_placement(self, placement_id: str, *, tag: Any):
         """Rename one authored gameplay placement by virtual id."""

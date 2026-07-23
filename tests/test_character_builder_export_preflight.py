@@ -28,7 +28,10 @@ from src.core.characters.character_validation_report import (
     build_character_game_test_evidence,
     character_game_test_evidence_passed,
 )
-from src.core.characters.native_skeleton import native_skeleton_fingerprint
+from src.core.characters.native_skeleton import (
+    CHARACTER_BUILDER_ROOT_IDENTITY_KEY,
+    native_skeleton_fingerprint,
+)
 from src.core.geometry.model_data import (
     BoneWeight,
     KotorModel,
@@ -374,6 +377,19 @@ def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -
             scale_mode="manual",
         )
     )
+
+
+def _rename_character_resource_root(result: dict, target_root: str = "grbody01") -> None:
+    model = result["model"]
+    source_root = str(model.root_node.name)
+    model.name = target_root
+    model.root_node.name = target_root
+    model.metadata = dict(getattr(model, "metadata", {}) or {})
+    model.metadata[CHARACTER_BUILDER_ROOT_IDENTITY_KEY] = {
+        "status": "resource_root_renamed",
+        "source_root": source_root,
+        "target_root": target_root,
+    }
 
 
 def _fallback_weight_rigged_character(monkeypatch) -> dict:
@@ -1546,6 +1562,61 @@ def test_character_export_preflight_skips_recommended_socket_absent_from_native_
     )
 
     assert "character.export.recommended_socket_missing" not in _codes(preflight)
+
+
+def test_character_export_preflight_accepts_explicit_resource_root_identity() -> None:
+    result = _rigged_character()
+    _rename_character_resource_root(result)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    codes = _codes(preflight)
+    assert "character.export.node_path_changed" not in codes
+    assert "character.export.node_path_missing" not in codes
+    assert "character.export.required_socket_missing" not in codes
+    assert "character.export.non_native_skeleton_node" not in codes
+    assert "character.export.missing_native_render_replacement_evidence" not in codes
+    assert preflight.report.has_blocking is False
+
+
+def test_character_export_preflight_rejects_unrecorded_resource_root_rename() -> None:
+    result = _rigged_character()
+    result["model"].name = "grbody01"
+    result["model"].root_node.name = "grbody01"
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    codes = _codes(preflight)
+    assert "character.export.node_path_changed" in codes
+    assert "character.export.non_native_skeleton_node" in codes
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_still_rejects_child_move_with_root_identity() -> None:
+    result = _rigged_character()
+    _rename_character_resource_root(result)
+    torso_upr = result["model"].find_node("torsoUpr_g")
+    assert torso_upr is not None and torso_upr.parent is not None
+    torso_upr.parent.children.remove(torso_upr)
+    torso_upr.parent = result["model"].root_node
+    result["model"].root_node.children.append(torso_upr)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert "character.export.node_path_changed" in _codes(preflight)
+    assert preflight.report.has_blocking is True
 
 
 def test_character_export_preflight_detects_exact_node_case_changes() -> None:
@@ -2908,6 +2979,32 @@ def test_character_export_transaction_reload_verifies_without_workflow_markers(t
     assert "character.export.reload_verified" in {
         issue.code for issue in tx.export_job_result.validation_report.issues
     }
+
+
+def test_character_export_transaction_reload_verifies_resource_root_identity(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    _rename_character_resource_root(result)
+    reloaded_model = copy.deepcopy(result["model"])
+    reloaded_model.metadata.pop(CHARACTER_BUILDER_ROOT_IDENTITY_KEY, None)
+    output = tmp_path / "grbody01.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: reloaded_model,
+        )
+    )
+
+    assert tx.succeeded is True
+    assert output.exists()
+    assert output.with_suffix(".mdx").exists()
+    codes = {issue.code for issue in tx.export_job_result.validation_report.issues}
+    assert "character.export.reload_native_dag_verified" in codes
+    assert "character.export.reload_verified" in codes
 
 
 def test_character_export_transaction_blocks_reloaded_native_dag_loss(tmp_path) -> None:

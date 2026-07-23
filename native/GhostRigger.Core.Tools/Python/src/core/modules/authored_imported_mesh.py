@@ -1651,6 +1651,147 @@ def _compact_surface(surface: ImportedMeshSurface, faces: list[Face]) -> Importe
     )
 
 
+def extract_imported_mesh_room_bounds(
+    primitive: ImportedMeshRoomPrimitive,
+    *,
+    bounds: tuple[float, float, float, float, float, float],
+    room_resref: str,
+    surface_names: tuple[str, ...] = (),
+    anchor_mode: str = "floor",
+    backdrop_texture: str = "",
+    backdrop_axis: str = "",
+) -> ImportedMeshRoomPrimitive:
+    """Clip a portable static detail from a baked retail room.
+
+    Bounds and node-name filters are provenance recipes, not redistributed
+    game data. Triangles are selected by centroid, then compacted with every
+    aligned vertex channel intact. The result is centered in XY, grounded at
+    Z=0, stripped of source-room lightmaps, and given a zero-face WOK so it can
+    move as visual-only Odyssey room geometry without inventing walkability.
+    """
+
+    values = tuple(float(value) for value in tuple(bounds or ())[:6])
+    if len(values) != 6 or not all(math.isfinite(value) for value in values):
+        raise ValueError("A dressing clip requires six finite room-local bounds values.")
+    x0, y0, z0, x1, y1, z1 = values
+    if x1 <= x0 or y1 <= y0 or z1 <= z0:
+        raise ValueError("Dressing clip maximum bounds must exceed minimum bounds.")
+    wanted_names = {str(value or "").strip().lower() for value in tuple(surface_names or ()) if str(value or "").strip()}
+    clipped: list[ImportedMeshSurface] = []
+    had_lightmaps = False
+    for surface in primitive.surfaces:
+        if wanted_names and str(surface.name or "").strip().lower() not in wanted_names:
+            continue
+        faces: list[Face] = []
+        for face in surface.faces:
+            try:
+                points = tuple(surface.vertices[int(index)] for index in face[:3])
+            except (IndexError, TypeError, ValueError):
+                continue
+            centroid = tuple(sum(float(point[axis]) for point in points) / 3.0 for axis in range(3))
+            if x0 <= centroid[0] <= x1 and y0 <= centroid[1] <= y1 and z0 <= centroid[2] <= z1:
+                faces.append(tuple(int(index) for index in face[:3]))
+        if not faces:
+            continue
+        compacted = _compact_surface(surface, faces)
+        had_lightmaps = had_lightmaps or bool(compacted.lightmap)
+        clipped.append(
+            replace(
+                compacted,
+                lightmap="",
+                uvs_lm=(),
+                texture_names=((compacted.texture,) if compacted.texture else ()),
+                tex_count=1,
+                backdrop=False,
+                background_geometry=False,
+            )
+        )
+    if not clipped:
+        raise ValueError("The vanilla dressing clip no longer matches its source room; refresh or update the kit recipe.")
+
+    selected_vertices = tuple(vertex for surface in clipped for vertex in surface.vertices)
+    mins = tuple(min(float(vertex[axis]) for vertex in selected_vertices) for axis in range(3))
+    maxs = tuple(max(float(vertex[axis]) for vertex in selected_vertices) for axis in range(3))
+    wall_anchored = str(anchor_mode or "floor").strip().lower() == "wall"
+    origin = (
+        (mins[0] + maxs[0]) * 0.5,
+        (mins[1] + maxs[1]) * 0.5,
+        (mins[2] + maxs[2]) * 0.5 if wall_anchored else mins[2],
+    )
+    grounded = tuple(
+        replace(
+            surface,
+            vertices=tuple(
+                (
+                    float(vertex[0]) - origin[0],
+                    float(vertex[1]) - origin[1],
+                    float(vertex[2]) - origin[2],
+                )
+                for vertex in surface.vertices
+            ),
+            mesh_average_point=(0.0, 0.0, 0.0),
+        )
+        for surface in clipped
+    )
+    local_vertices = tuple(vertex for surface in grounded for vertex in surface.vertices)
+    local_mins = tuple(min(float(vertex[axis]) for vertex in local_vertices) for axis in range(3))
+    local_maxs = tuple(max(float(vertex[axis]) for vertex in local_vertices) for axis in range(3))
+    surfaces = list(grounded)
+    texture = str(backdrop_texture or "").strip().lower()
+    axis = str(backdrop_axis or "").strip().lower()
+    if texture and axis in {"x", "y"}:
+        pad = 0.025
+        if axis == "x":
+            plane = (
+                (local_mins[0] - pad, local_mins[1], local_mins[2]),
+                (local_mins[0] - pad, local_maxs[1], local_mins[2]),
+                (local_mins[0] - pad, local_maxs[1], local_maxs[2]),
+                (local_mins[0] - pad, local_mins[1], local_maxs[2]),
+            )
+            normals = ((1.0, 0.0, 0.0),) * 4
+        else:
+            plane = (
+                (local_mins[0], local_mins[1] - pad, local_mins[2]),
+                (local_mins[0], local_mins[1] - pad, local_maxs[2]),
+                (local_maxs[0], local_mins[1] - pad, local_maxs[2]),
+                (local_maxs[0], local_mins[1] - pad, local_mins[2]),
+            )
+            normals = ((0.0, 1.0, 0.0),) * 4
+        surfaces.append(
+            ImportedMeshSurface(
+                name=f"{str(room_resref or 'grdetail')[:16]}_space",
+                texture=texture,
+                vertices=plane,
+                faces=((0, 1, 2), (0, 2, 3)),
+                uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+                normals=normals,
+                texture_names=(texture,),
+                tex_count=1,
+                diffuse=(1.0, 1.0, 1.0),
+                ambient=(1.0, 1.0, 1.0),
+                selfillum=(1.0, 1.0, 1.0),
+                has_shadow=False,
+            )
+        )
+    key = str(room_resref or "grdetail")[:16]
+    return ImportedMeshRoomPrimitive(
+        room_resref=key,
+        surfaces=tuple(surfaces),
+        source_model=primitive.source_model,
+        game=primitive.game,
+        wok=WOKData(name=key),
+        metadata={
+            "source": "map_studio:environment_kit:dressing_clip",
+            "source_bounds_m": list(values),
+            "source_surface_names": sorted(wanted_names),
+            "anchor_mode": "wall" if wall_anchored else "floor",
+            "source_lightmaps_removed_for_relighting": had_lightmaps,
+            "visual_only": True,
+            "render_triangle_count": sum(len(surface.faces) for surface in surfaces),
+        },
+    )
+
+
 def _surface_face_materials(surface: ImportedMeshSurface) -> tuple[int, ...]:
     """Return one deterministic material slot per triangle."""
 
@@ -7408,6 +7549,7 @@ __all__ = [
     "delete_imported_mesh_vertex_faces",
     "extrude_imported_mesh_edge",
     "extrude_imported_mesh_faces",
+    "extract_imported_mesh_room_bounds",
     "flatten_imported_mesh_faces",
     "fill_imported_mesh_boundary_loop",
     "flip_imported_mesh_faces",

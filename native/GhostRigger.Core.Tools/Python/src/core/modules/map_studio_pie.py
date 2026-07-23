@@ -706,6 +706,8 @@ class MapStudioPIESession:
                 position = tuple(float(v) for v in tuple(getattr(entity, "position", ()) or ())[:3])
                 if len(position) < 3:
                     continue
+                metadata = dict(getattr(entity, "metadata", {}) or {})
+                opening_width = float(metadata.get("doorway_opening_width", 0.0) or 0.0)
                 doors.append(
                     MapStudioPIEDoorState(
                         entity_id=str(getattr(entity, "entity_id", "")),
@@ -713,7 +715,11 @@ class MapStudioPIESession:
                         position=position,  # type: ignore[arg-type]
                         facing=float(getattr(entity, "facing", 0.0) or 0.0),
                         open_radius=max(1.0, float(getattr(entity, "target_radius", 1.0) or 1.0) + self.config.door_open_radius),
-                        half_width=max(0.25, float(getattr(entity, "target_radius", 1.0) or 1.0)),
+                        half_width=max(
+                            0.25,
+                            opening_width * 0.5,
+                            float(getattr(entity, "target_radius", 1.0) or 1.0),
+                        ),
                         vertical_reach=max(
                             0.75,
                             float(getattr(entity, "target_radius", 1.0) or 1.0) * 0.5

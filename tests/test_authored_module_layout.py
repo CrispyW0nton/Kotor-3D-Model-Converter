@@ -285,6 +285,159 @@ def test_t2906_connection_audit_keeps_windows_and_external_exits_nonblocking() -
     assert audit.ready is True
 
 
+def test_t2909_stock_opening_intent_seals_with_locked_area_door_and_reopens_cleanly() -> None:
+    _install_native_payload_paths()
+
+    import math
+
+    from pykotor.resource.generics.utd import read_utd
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.core.modules.authored_module_layout import (
+        audit_authored_room_connections,
+        authored_room_connection_hooks,
+        set_authored_room_opening_intent,
+    )
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.map_studio_pascal_building import pascal_architecture_runtime_resources
+
+    room = AuthoredRoomSpec(
+        room_resref="grkit0001",
+        primitive=ImportedMeshRoomPrimitive(
+            room_resref="grkit0001",
+            surfaces=(),
+            metadata={
+                "walkmesh_portals": [
+                    {
+                        "magnet_id": "wok_portal_010",
+                        "start": [-1.0, 2.0, 0.1],
+                        "end": [3.0, 2.0, 0.1],
+                        "midpoint": [1.0, 2.0, 0.1],
+                        "width_m": 4.0,
+                    }
+                ]
+            },
+        ),
+        position=(10.0, 20.0, 0.0),
+        metadata={
+            "environment_kit_collection_id": "k1_m39aa",
+            "environment_kit_source_game": "K1",
+            "environment_kit_source_module": "m39aa",
+            "environment_kit_opening_width": 5.25,
+            "environment_kit_opening_height": 3.75,
+            "connection_points": [
+                {
+                    "door": "wok_portal_010",
+                    "kind": "doorway",
+                    "local_position": [1.0, 2.0, 0.1],
+                    "orientation": [0.0, 0.0, 0.0, 1.0],
+                }
+            ],
+        },
+    )
+    project = _project_with_rooms(room)
+    initial_hook = authored_room_connection_hooks(project)[0]
+    assert audit_authored_room_connections(project).unconnected_hook_ids == (initial_hook.hook_id,)
+
+    sealed = set_authored_room_opening_intent(project, initial_hook.hook_id, "sealed")
+    sealed_hook = authored_room_connection_hooks(sealed.project)[0]
+    assert sealed_hook.intent == "sealed"
+    assert sealed_hook.passable is False
+    assert sealed_hook.sealed_door_placement_id == sealed.sealed_door_placement_id
+    assert audit_authored_room_connections(sealed.project).ready is True
+    assert len(sealed.project.placements.doors) == 1
+    door = sealed.project.placements.doors[0]
+    assert door.template_resref == "gr_korrseal"
+    assert door.position == (11.0, 22.0, 0.1)
+    assert math.isclose(door.bearing, 0.0, abs_tol=1.0e-7)
+
+    resources = pascal_architecture_runtime_resources(sealed.project)
+    assert [(resref, restype) for resref, restype, _data in resources] == [
+        ("gr_korrseal", "utd")
+    ]
+    sealed_utd = read_utd(resources[0][2])
+    assert sealed_utd.appearance_id == 40
+    assert sealed_utd.lockable is True
+    assert sealed_utd.locked is True
+    assert sealed_utd.key_required is True
+    assert sealed_utd.not_blastable is True
+
+    reopened = set_authored_room_opening_intent(
+        sealed.project,
+        sealed_hook.hook_id,
+        "connectable",
+    )
+    reopened_hook = authored_room_connection_hooks(reopened.project)[0]
+    assert reopened_hook.intent == "connectable"
+    assert reopened_hook.passable is True
+    assert reopened.project.placements.doors == ()
+    assert audit_authored_room_connections(reopened.project).unconnected_hook_ids == (
+        reopened_hook.hook_id,
+    )
+
+    external = set_authored_room_opening_intent(
+        reopened.project,
+        reopened_hook.hook_id,
+        "external",
+    )
+    external_hook = authored_room_connection_hooks(external.project)[0]
+    assert external_hook.intent == "external"
+    assert external_hook.external is True
+    assert external.project.placements.doors == ()
+    assert audit_authored_room_connections(external.project).ready is True
+
+
+def test_t2909_explicit_colocated_link_defers_retail_facing_and_width_to_wok_gate() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_layout import audit_authored_room_connections
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
+
+    room_a = AuthoredRoomSpec(
+        room_resref="grdev01_a",
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="grdev01_a",
+            points=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+            openings=(
+                FloorPlanWallOpening(
+                    name="wide_stock_portal",
+                    edge_index=1,
+                    width=5.1,
+                    metadata={
+                        "connected_room_resref": "grdev01_b",
+                        "connected_opening_name": "narrow_lyt_hook",
+                    },
+                ),
+            ),
+        ),
+    )
+    room_b = AuthoredRoomSpec(
+        room_resref="grdev01_b",
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="grdev01_b",
+            points=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+            openings=(
+                FloorPlanWallOpening(
+                    name="narrow_lyt_hook",
+                    edge_index=1,
+                    width=1.8,
+                    metadata={
+                        "connected_room_resref": "grdev01_a",
+                        "connected_opening_name": "wide_stock_portal",
+                    },
+                ),
+            ),
+        ),
+    )
+
+    audit = audit_authored_room_connections(_project_with_rooms(room_a, room_b))
+
+    assert len(audit.connections) == 1
+    assert audit.connections[0].explicit is True
+    assert audit.unconnected_hook_ids == ()
+    assert audit.warnings == ()
+
+
 def test_t2906_controller_connects_openings_as_one_undoable_kmap_command() -> None:
     _install_native_payload_paths()
 
@@ -327,6 +480,40 @@ def test_t2906_controller_connects_openings_as_one_undoable_kmap_command() -> No
     assert abs(update.rotation_degrees) == 90.0
     assert controller.command_history.undo_label == "Connect grdev01_b to grdev01_a"
     assert controller.authored_room_connection_audit().ready is True
+    assert controller.can_undo_map_studio_command() is True
+
+
+def test_t2909_controller_records_opening_intent_as_one_undoable_command() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_module_layout import authored_room_connection_hooks
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    project = _project_with_rooms(
+        AuthoredRoomSpec(
+            room_resref="grdev01_a",
+            primitive=FloorPlanRoomPrimitive(
+                room_resref="grdev01_a",
+                points=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+                openings=(FloorPlanWallOpening(name="module_exit", edge_index=1),),
+            ),
+        )
+    )
+    hook = authored_room_connection_hooks(project)[0]
+    controller = ModuleEditorController()
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    update = controller.set_authored_room_opening_intent(
+        hook_id=hook.hook_id,
+        intent="external",
+    )
+
+    assert update.intent == "external"
+    assert controller.authored_room_connection_audit().ready is True
+    assert controller.command_history.undo_label == "Set module_exit to external"
     assert controller.can_undo_map_studio_command() is True
 
 

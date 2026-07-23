@@ -663,7 +663,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "3a4ed8440e332fdf17d14418c1a774f0f0f83be7a0f5898fa23405b5444de2d0"
+            "sha256": "1dd739cbd87b453130c786a28f4327911a48d42feff5d7564554f6e44707694a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_COMPONENT_MARKING_MENU",
@@ -675,7 +675,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_KIT_BROWSER",
             "source_path": "src/gui/panels/module_editor/environment_kit_browser.py",
             "packaged_path": "Python/src/gui/panels/module_editor/environment_kit_browser.py",
-            "sha256": "a6e8d2ab2c791ab497d2ed0a674fa50908637f419253761536beda1921d2d776"
+            "sha256": "0c75eeee79297a28bc5e0b2df9973288aa6bead4ad6496d48eaa67bd8efec88e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_TAB",
@@ -729,7 +729,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "6c12f5d2f496903290e4988b5dc2b18f0579373cc42ba6beddd89f0ce2701596"
+            "sha256": "2b2faed089fe61c55361c70ace38fab67a61f03d0b69fdeb67cd149cf5733758"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
@@ -753,13 +753,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ROOMS_TAB",
             "source_path": "src/gui/panels/module_editor/rooms_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/rooms_tab.py",
-            "sha256": "f14a69fca0679bed321b6df1a082dbcfd0f44595df6e842b739c84f8109b7345"
+            "sha256": "0aa152583646dab65ae62c5f33844c58fea2e88deb740393965d771d8d9f0b39"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TERRAIN_KIT_BROWSER",
             "source_path": "src/gui/panels/module_editor/terrain_kit_browser.py",
             "packaged_path": "Python/src/gui/panels/module_editor/terrain_kit_browser.py",
-            "sha256": "a6cf627f02a56ec46e669bdd54cf81f335fa9e8c30a950b0ae9f97814fd0f5d4"
+            "sha256": "5ec20dbe4324c6aa615372f1e2977336fedeeae6cb33f1de665aa222b01184d1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TERRAIN_SCULPT_SHELF",
@@ -1797,7 +1797,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SCENE_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/scene_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/scene_workflow.py",
-            "sha256": "e45259ed984676fd0472eff49202d7ebc4685af221fcc1f2deb89cf444ae0b0d"
+            "sha256": "13a3da595ee622297aad12cb380e0f90daec8c402b294cd633462bfc5b778b37"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SCRIPTING_STUDIO_WORKFLOW",

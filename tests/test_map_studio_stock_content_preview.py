@@ -456,6 +456,52 @@ def test_t3001_animated_door_preview_keeps_door_identity() -> None:
     assert getattr(root.children[0].children[0], "_gr_map_studio_placement_id") == placement_id
 
 
+def test_t3001_stock_flattener_preserves_zero_alpha_helper_materials() -> None:
+    """Invisible Odyssey helper meshes must not become white fallback panels."""
+
+    md = _model_data()
+    from src.core.modules.map_studio_stock_content_preview import _flattened_mesh_nodes
+    from src.core.rendering.mesh_render_data import _material_data
+
+    model = _source_model(md, name="dor_lko04")
+    source_mesh = model.root_node.children[0].children[0]
+    source_mesh.name = "trans"
+    source_mesh.texture = "null"
+    source_mesh.texture_names = ["null"]
+    source_mesh.alpha = 0.0
+    source_mesh.selfillum = (1.0, 1.0, 1.0)
+    source_mesh.transparency_hint = 0
+    group = md.ModelNode(name="door_group", flags=int(md.NodeFlags.HEADER))
+
+    flattened = _flattened_mesh_nodes(
+        md,
+        model,
+        group,
+        group_resref="authored:door:i_test",
+        role="stock_door",
+    )
+
+    assert len(flattened) == 1
+    assert flattened[0].alpha == 0.0
+    assert tuple(flattened[0].selfillum) == (1.0, 1.0, 1.0)
+    material = _material_data(flattened[0], textures={})
+    assert material.alpha_mode == "BLEND"
+    assert material.base_color_rgba[3] == 0.0
+
+
+def test_t3001_selfillum_preserves_stock_diffuse_texture_detail() -> None:
+    """High selfillum must brighten the atlas, not replace it with flat RGB."""
+
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    # reone: (lighting + selfIllum) * mainTex. KotOR.js and KotorBlender keep
+    # the same diffuse-modulated emission contract. DOR_LKO04 exercises this
+    # with near-white selfillum over a deliberately dark tomb-door atlas.
+    assert _FRAG_SRC.count("lit_color += diffuse_samp.rgb * u_selfillum;") >= 2
+    assert "lit_color += u_selfillum;" not in _FRAG_SRC
+    assert "diffuse_samp.rgb + u_selfillum" not in _FRAG_SRC
+
+
 def test_t2908_entry_point_uses_pickable_direct_player_model_at_native_scale() -> None:
     md = _model_data()
     from src.core.modules.map_studio_stock_content_preview import append_stock_content_to_preview_root

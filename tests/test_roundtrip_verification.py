@@ -360,6 +360,35 @@ def test_mdl_writer_emits_full_engine_model_header_fields():
     assert struct.unpack_from("<I", mdl_bytes, base + 0xC0)[0] == 1
 
 
+def test_t2909_mdl_writer_emits_finite_aabb_plane_for_degenerate_retail_face():
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_mdl_structure
+
+    root = ModelNode(
+        name="grdegenerate",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.AABB),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (0.5, 0.0), (1.0, 0.0)],
+        faces=[(0, 1, 2)],
+        face_mats=[4],
+        texture="NULL",
+        render=False,
+    )
+    model = KotorModel(name="grdegenerate", classification="tile", root_node=root, animations=[])
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    _fingerprint, report = inspect_raw_mdl_structure(
+        "grdegenerate",
+        mdl_bytes,
+        mdx_bytes,
+        game="K1",
+    )
+
+    assert "map.engine.mdl.aabb_face_plane_invalid" not in {issue.code for issue in report.issues}
+
+
 def test_mdl_writer_preserves_header_bit_for_mesh_nodes():
     from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
     from src.core.mdl.mdl_writer import MDLBinaryWriter

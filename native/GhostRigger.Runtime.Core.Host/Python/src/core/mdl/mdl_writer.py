@@ -565,6 +565,12 @@ class MDLBinaryWriter:
 
         self._node_index_by_name: Dict[str, int] = {}
         self._node_index_by_id: Dict[int, int] = {}
+        self._preserve_native_supernode_numbers = bool(
+            getattr(model, "preserve_native_supernode_numbers", False)
+        )
+        self._supernode_number_by_name: Dict[str, int] = {}
+        self._supernode_number_by_id: Dict[int, int] = {}
+        used_supernode_numbers: Dict[int, str] = {}
         #: Engine contract (vanilla r00_test: 21 names for 21 nodes, dupes
         #: kept): the name table has ONE ENTRY PER NODE, never deduplicated.
         #: Deduplating left name indices pointing past the table -> the
@@ -575,6 +581,30 @@ class MDLBinaryWriter:
             nm = (nd.name or '').lower()
             if nm and nm not in self._node_index_by_name:
                 self._node_index_by_name[nm] = idx
+            supernode_number = (
+                int(getattr(nd, "number", idx))
+                if self._preserve_native_supernode_numbers
+                else idx
+            )
+            if not 0 <= supernode_number <= 0xFFFF:
+                raise ValueError(
+                    f"Geometry node '{getattr(nd, 'name', '')}' has invalid "
+                    f"supernode number {supernode_number}."
+                )
+            if self._preserve_native_supernode_numbers:
+                previous = used_supernode_numbers.get(supernode_number)
+                if previous is not None:
+                    raise ValueError(
+                        "Preserved supernode number collision: "
+                        f"{previous!r} and {getattr(nd, 'name', '')!r} both use "
+                        f"{supernode_number}."
+                    )
+                used_supernode_numbers[supernode_number] = str(
+                    getattr(nd, "name", "") or ""
+                )
+            self._supernode_number_by_id[id(nd)] = supernode_number
+            if nm and nm not in self._supernode_number_by_name:
+                self._supernode_number_by_name[nm] = supernode_number
 
         # ── 2. Build name list (deduplicated, preserving DFS order) ─────────
         self._names: List[str] = []
@@ -713,12 +743,36 @@ class MDLBinaryWriter:
 
         # ── 4f. Write node tree ──────────────────────────────────────────────
         root_off = self._write_node_tree(buf, model.root_node)
+        super_root_off = root_off
+        super_root_name = str(
+            getattr(model, "super_root_node_name", "") or ""
+        ).strip()
+        if super_root_name:
+            matching_super_roots = [
+                node
+                for node in self._nodes
+                if str(getattr(node, "name", "") or "").casefold()
+                == super_root_name.casefold()
+            ]
+            if len(matching_super_roots) != 1:
+                raise ValueError(
+                    "Model super-root link must resolve to exactly one geometry "
+                    f"node; {super_root_name!r} matched "
+                    f"{len(matching_super_roots)} nodes."
+                )
+            super_root_off = self._node_off.get(
+                id(matching_super_roots[0]), 0
+            )
+            if super_root_off <= 0:
+                raise ValueError(
+                    f"Model super-root link {super_root_name!r} was not written."
+                )
         # Patch root_off in geometry header
         end = buf.tell()
         buf.seek(self._root_off_patch)
         buf.write(_wu32(root_off))
         buf.seek(self._super_root_off_patch)
-        buf.write(_wu32(root_off))
+        buf.write(_wu32(super_root_off))
         buf.seek(end)
 
         if not model.animations:
@@ -1101,6 +1155,16 @@ class MDLBinaryWriter:
                 buf, nd,
                 child_arr_patches, root_off_patches, parent_off_patches)
 
+        # Retain resource-relative node offsets for model-header links that are
+        # intentionally not the geometry root. Stock modular heads use this to
+        # point ``offset_to_super_root`` at ``neck_g`` (the community
+        # HeadFixer contract) while the geometry header continues to point at
+        # the real AuroraBase root.
+        self._node_off = {
+            node_id: absolute_offset - _BASE
+            for node_id, absolute_offset in node_abs_off.items()
+        }
+
         # Pass 2: patch root_off, parent_off, and child pointer arrays
         root_abs = node_abs_off[id(ordered[0])]
         cur_end = buf.tell()
@@ -1164,13 +1228,17 @@ class MDLBinaryWriter:
         node_flags = _node_flags_for_write(int(getattr(node, "flags", 0) or 0))
 
         # ── Node header  (80 bytes) ──────────────────────────────────────────
-        # Engine contract (KotorBlender writer, captured live crash): field 2
-        # is the NODE NUMBER (DFS index into the runtime node array), not the
-        # name index. Writing name_idx there left holes in the engine's node
-        # array -> dangling handles -> NULL deref during node-by-name search.
-        node_num = self._node_index_by_id.get(id(node), name_idx)
+        # Header +2 is the sparse supermodel-node identity. Native character
+        # rigs deliberately use values far beyond their DFS node count; retail
+        # compares this field directly when applying animation tracks and when
+        # resolving modular-head hooks. Generated generic models retain the
+        # historical dense fallback, while native-rig rebuilds opt into exact
+        # preservation through ``preserve_native_supernode_numbers``.
+        node_num = self._supernode_number_by_id.get(
+            id(node), self._node_index_by_id.get(id(node), name_idx)
+        )
         buf.write(_wu16(node_flags))
-        buf.write(_wu16(node_num))   # node number (runtime array slot)
+        buf.write(_wu16(node_num))   # sparse supermodel-node identity
         buf.write(_wu16(name_idx))   # name index
         buf.write(_wu16(0))          # pad
 
@@ -1819,8 +1887,16 @@ class MDLBinaryWriter:
                 nx = (uy * wz) - (uz * wy)
                 ny = (uz * wx) - (ux * wz)
                 nz = (ux * wy) - (uy * wx)
-                ln = (nx * nx + ny * ny + nz * nz) ** 0.5 or 1.0
-                nx, ny, nz = nx / ln, ny / ln, nz / ln
+                ln = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if ln <= 1.0e-12:
+                    # Imported retail WOKs can intentionally retain
+                    # zero-area legacy faces.  The embedded room-MDL AABB
+                    # still needs a finite unit plane for Odyssey's face
+                    # table, so preserve the face indices and use the
+                    # horizontal plane through its first vertex.
+                    nx, ny, nz = 0.0, 0.0, 1.0
+                else:
+                    nx, ny, nz = nx / ln, ny / ln, nz / ln
                 # Odyssey stores the plane in implicit form n·p + d = 0.
                 # True K2 CHITIN rooms (001ebo1/r00_test) therefore carry
                 # d = -dot(n, point).  The previous positive sign made every
@@ -3121,9 +3197,17 @@ class MDLBinaryWriter:
                     getattr(node, 'index', name_idx),
                 )
             )
+        elif getattr(self, '_preserve_native_supernode_numbers', False):
+            # Native-rig rebuilds retain the donor's sparse +2 identity. Match
+            # local animation tracks to that exact geometry identity by name.
+            node_index = int(
+                getattr(self, '_supernode_number_by_name', {}).get(
+                    node_key,
+                    getattr(node, 'number', getattr(node, 'index', name_idx)),
+                )
+            )
         else:
-            # A full rebuild renumbers static geometry in DFS order, so its
-            # animation nodes must use the same newly assigned runtime slots.
+            # Generic full rebuilds keep the historical dense fallback.
             node_index = int(
                 getattr(self, '_node_index_by_name', {}).get(
                     node_key,
@@ -3136,9 +3220,9 @@ class MDLBinaryWriter:
                 f"{node_index}."
             )
         buf.write(_wu16(anim_flags))
-        # +2 is the target geometry-node index, while +4 is the model name-table
-        # index.  Ghost preview resolves controllers by name, but retail Aurora
-        # pairs animation nodes to model nodes through this geometry index.
+        # +2 is the target geometry supernode identity, while +4 is the model
+        # name-table index. Ghost preview resolves controllers by name, but
+        # retail Aurora compares the sparse +2 identity directly.
         buf.write(_wu16(node_index))
         buf.write(_wu16(name_idx))
         buf.write(_wu16(0))

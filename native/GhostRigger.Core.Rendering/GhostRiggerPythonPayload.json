@@ -99,7 +99,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "c63b097deab74a57ac49e0b13b4634d6dbaec770c9081ec05a2db8c25b7f2656"
+            "sha256": "66d923965f1b47dadc6e49848c3b2dc4a123856e493a9cb26cf61a7a068b576e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -417,7 +417,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_SHADER_COMPLEXITY",
             "source_path": "src/core/lighting/shader_complexity.py",
             "packaged_path": "Python/src/core/lighting/shader_complexity.py",
-            "sha256": "0e1ab7c69f384ee4b5ea45de8a6b8a027c81e18ae788b96917afbaec3f734426"
+            "sha256": "cff67d4b8b908a7d87aede554b31399bfdf29cec181cbd267182c8fd1da38ee7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_UV_ATLAS_GENERATOR",
@@ -555,7 +555,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RASTERIZER",
             "source_path": "src/core/rendering/frame_core/rasterizer.py",
             "packaged_path": "Python/src/core/rendering/frame_core/rasterizer.py",
-            "sha256": "47a2cbcad83560de92af256afd47428d2b570bf0bf95038b4eaaad69bcafe2db"
+            "sha256": "f48ee6cfdb5bdf4bf9a41f8f1c8fdd610f1b71cf89983b11a73a71f5feeba16d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER",
@@ -573,7 +573,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",
             "source_path": "src/core/rendering/frame_core/renderer_meshes.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_meshes.py",
-            "sha256": "21107dc8ed653195d0955cd080dac924d38f6fe5b4bae03a008f9814c0dcdba8"
+            "sha256": "d82723b97f2e10a060fd004568e98a28082894b05feaa87eeefde5097a340067"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_OVERLAYS",
@@ -633,7 +633,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_SHADERS",
             "source_path": "src/core/rendering/gpu_shaders.py",
             "packaged_path": "Python/src/core/rendering/gpu_shaders.py",
-            "sha256": "de777e612b666ca6d9955c56cbf2b9628531bfc87e8ecf2f4f149b07f461f389"
+            "sha256": "c80aec17dbbd5ec7a43490524c0a241abfaf80908f8c0b6eac9f62598828ec27"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_VBO_LAYOUT",
@@ -657,7 +657,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "2ad95bc4be366298ada0d9cff32658e2c6e95f4e486520f5d0da68a1ccf09a3c"
+            "sha256": "221b4004860f1ab2b8ac78725a82dfa28612f1abc58b994cd30659b6874dac9b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

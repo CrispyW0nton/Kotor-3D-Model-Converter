@@ -14,6 +14,7 @@ class RoomsTab(QtWidgets.QWidget):
         "Remove Room",
         "Duplicate Room",
         "Connect Room Openings",
+        "Set Opening Intent",
         "Audit Room Connections",
         "Save Layout",
         "Focus Selected Room",
@@ -26,6 +27,7 @@ class RoomsTab(QtWidgets.QWidget):
         "Remove Room": "mapStudioRoomsRemoveRoomButton",
         "Duplicate Room": "mapStudioRoomsDuplicateRoomButton",
         "Connect Room Openings": "mapStudioRoomsConnectOpeningsButton",
+        "Set Opening Intent": "mapStudioRoomsOpeningIntentButton",
         "Audit Room Connections": "mapStudioRoomsAuditConnectionsButton",
         "Save Layout": "mapStudioRoomsSaveLayoutButton",
         "Focus Selected Room": "mapStudioRoomsFocusSelectedButton",
@@ -43,7 +45,9 @@ class RoomsTab(QtWidgets.QWidget):
             "LYT stores room models and transforms; VIS controls which rooms can see each other. "
             "Keep room resrefs stable for WOK, MDL/MDX, and placed resources.\n"
             "Use Builder for new geometry, then Rooms to place, duplicate, connect doorway openings, focus, snap, and save the layout.\n"
-            "Connected openings align room geometry and create symmetric VIS intent; WOK transitions still require export validation and a live warp test."
+            "Connected openings align room geometry and create symmetric VIS intent. "
+            "Set unused openings as available connectors, intentional module exits, or sealed authentic doors; "
+            "WOK transitions still require export validation and a live warp test."
         )
         self.workflow_label = QtWidgets.QLabel("Rooms — layout, LYT/VIS, placement")
         self.workflow_label.setObjectName("mapStudioRoomsWorkflowLabel")

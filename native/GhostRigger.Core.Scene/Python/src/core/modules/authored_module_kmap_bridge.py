@@ -1680,6 +1680,35 @@ def authored_project_from_kmap_payload(payload: Any, *, fallback_name: str = "ne
                 metadata=_dict(room_source.get("metadata")),
             )
         )
+    placements = _placement(data.get("placements"), module_root)
+    entry_area = normalise_resref(placements.entry_point.area_resref)
+    room_resrefs = {room.normalised_resref() for room in rooms}
+    extra = _dict(data.get("extra"))
+    if entry_area and entry_area != module_root and entry_area in room_resrefs:
+        # Early multi-room Map Studio builds overloaded the IFO area field
+        # with a room resref so PIE could remember which room contained the
+        # player start. Odyssey's Mod_Entry_Area must name the ARE/module
+        # resref instead. Preserve the useful room hint as editor metadata
+        # while migrating the runtime field to the module root.
+        migration = {
+            "source_area_resref": entry_area,
+            "runtime_area_resref": module_root,
+            "reason": "legacy_room_resref_in_module_entry_area",
+        }
+        placements = replace(
+            placements,
+            entry_point=replace(placements.entry_point, area_resref=module_root),
+            metadata={
+                **dict(placements.metadata),
+                "entry_room_resref": entry_area,
+                "entry_area_migration": migration,
+            },
+        )
+        extra = {
+            **extra,
+            "entry_room_resref": entry_area,
+            "entry_area_migration": migration,
+        }
     return AuthoredModuleProject(
         metadata=AuthoredModuleMetadata(
             module_root=module_root,
@@ -1691,10 +1720,10 @@ def authored_project_from_kmap_payload(payload: Any, *, fallback_name: str = "ne
             metadata=_dict(data.get("metadata")),
         ),
         rooms=tuple(rooms),
-        placements=_placement(data.get("placements"), module_root),
+        placements=placements,
         lights=_lights(data.get("lights")),
         notes=tuple(str(item) for item in data.get("notes", ()) or ()),
-        extra=_dict(data.get("extra")),
+        extra=extra,
     )
 
 

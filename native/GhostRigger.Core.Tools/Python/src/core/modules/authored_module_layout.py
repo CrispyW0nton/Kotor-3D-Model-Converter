@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
 from .authored_module_objects import normalise_resource_resref
@@ -50,13 +51,19 @@ class AuthoredRoomConnectionHook:
     height: float
     bottom: float
     opening_kind: str = "door"
+    intent: str = "connectable"
     external: bool = False
+    sealed_door_placement_id: str = ""
     connected_room_resref: str = ""
     connected_opening_name: str = ""
 
     @property
     def passable(self) -> bool:
-        return self.bottom <= 1.0e-5 and self.opening_kind not in {"window", "backdrop", "view"}
+        return (
+            self.bottom <= 1.0e-5
+            and self.intent != "sealed"
+            and self.opening_kind not in {"window", "backdrop", "view", "sealed"}
+        )
 
     @property
     def label(self) -> str:
@@ -110,6 +117,63 @@ class AuthoredRoomConnectionUpdate:
     summary: str
 
 
+@dataclass(frozen=True)
+class AuthoredRoomOpeningIntentUpdate:
+    """One durable user decision for an unconnected room-opening hook."""
+
+    project: AuthoredModuleProject
+    hook_id: str
+    room_resref: str
+    opening_name: str
+    intent: str
+    sealed_door_placement_id: str = ""
+    summary: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredRoomDragSnapPreview:
+    """Disposable doorway magnet solution for dragging one complete room."""
+
+    magnet_snapped: bool
+    source_room_resref: str
+    target_room_resref: str = ""
+    source_hook_id: str = ""
+    target_hook_id: str = ""
+    source_edge_index: int = -1
+    target_edge_index: int = -1
+    source_opening_name: str = ""
+    auto_cut_source: bool = False
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    world_delta: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation_degrees_z: float = 0.0
+    snap_distance: float = math.inf
+    opening_width: float = 0.0
+    opening_height: float = 0.0
+    target_label: str = ""
+    reason: str = ""
+
+    def as_payload(self) -> dict[str, object]:
+        return {
+            "magnet_snapped": bool(self.magnet_snapped),
+            "source_room_resref": self.source_room_resref,
+            "target_room_resref": self.target_room_resref,
+            "source_hook_id": self.source_hook_id,
+            "target_hook_id": self.target_hook_id,
+            "source_edge_index": int(self.source_edge_index),
+            "target_edge_index": int(self.target_edge_index),
+            "source_opening_name": self.source_opening_name,
+            "auto_cut_source": bool(self.auto_cut_source),
+            "position": tuple(self.position),
+            "world_delta": tuple(self.world_delta),
+            "rotation_degrees_z": float(self.rotation_degrees_z),
+            "snap_distance": float(self.snap_distance),
+            "opening_width": float(self.opening_width),
+            "opening_height": float(self.opening_height),
+            "target_label": self.target_label,
+            "reason": self.reason,
+        }
+
+
 def _floor_plan_room_primitive(room: AuthoredRoomSpec) -> FloorPlanRoomPrimitive | None:
     primitive = room.primitive
     return primitive if isinstance(primitive, FloorPlanRoomPrimitive) else None
@@ -121,6 +185,17 @@ def _opening_kind(opening: FloorPlanWallOpening) -> str:
     if kind:
         return kind
     return "window" if float(opening.bottom) > 1.0e-5 else "door"
+
+
+def _opening_intent(metadata: dict[str, Any]) -> str:
+    value = str(metadata.get("opening_intent") or metadata.get("intent") or "").strip().lower()
+    if value in {"sealed", "closed", "blocked"} or bool(metadata.get("sealed")):
+        return "sealed"
+    if value in {"external", "module_exit", "cross_module"} or bool(
+        metadata.get("external") or metadata.get("cross_module") or metadata.get("backdrop")
+    ):
+        return "external"
+    return "connectable"
 
 
 def _opening_hook(room: AuthoredRoomSpec, primitive: FloorPlanRoomPrimitive, opening: FloorPlanWallOpening) -> AuthoredRoomConnectionHook | None:
@@ -150,6 +225,7 @@ def _opening_hook(room: AuthoredRoomSpec, primitive: FloorPlanRoomPrimitive, ope
     metadata = dict(opening.metadata or {})
     room_resref = _room_name(room)
     opening_name = str(opening.name or "").strip() or f"edge_{edge_index}"
+    intent = _opening_intent(metadata)
     return AuthoredRoomConnectionHook(
         hook_id=f"{room_resref}:{edge_index}:{opening_name.lower()}",
         room_resref=room_resref,
@@ -160,25 +236,88 @@ def _opening_hook(room: AuthoredRoomSpec, primitive: FloorPlanRoomPrimitive, ope
         width=float(opening.width),
         height=float(opening.height),
         bottom=float(opening.bottom),
-        opening_kind=_opening_kind(opening),
-        external=bool(metadata.get("external") or metadata.get("cross_module") or metadata.get("backdrop")),
+        opening_kind="sealed" if intent == "sealed" else _opening_kind(opening),
+        intent=intent,
+        external=intent == "external",
+        sealed_door_placement_id=str(metadata.get("sealed_door_placement_id") or "").strip(),
         connected_room_resref=normalise_resref(metadata.get("connected_room_resref") or metadata.get("connection_room")),
         connected_opening_name=str(metadata.get("connected_opening_name") or metadata.get("connection_opening") or "").strip(),
     )
 
 
 def authored_room_connection_hooks(project: AuthoredModuleProject) -> tuple[AuthoredRoomConnectionHook, ...]:
-    """Return stable world-space snap hooks for authored floor-plan openings."""
+    """Return stable world-space hooks for floor-plan and vanilla-kit doors."""
 
     hooks: list[AuthoredRoomConnectionHook] = []
+    connection_rows = tuple(dict(project.extra or {}).get("walkmesh_room_connections") or ())
     for room in project.rooms:
         primitive = _floor_plan_room_primitive(room)
-        if primitive is None:
+        if primitive is not None:
+            for opening in primitive.openings:
+                hook = _opening_hook(room, primitive, opening)
+                if hook is not None:
+                    hooks.append(hook)
             continue
-        for opening in primitive.openings:
-            hook = _opening_hook(room, primitive, opening)
-            if hook is not None:
-                hooks.append(hook)
+
+        # Reusable vanilla room tiles keep their LYT connection points rather
+        # than synthesizing a second floor-plan opening. Promote those points
+        # into the same audit contract so a styled room -> stock room LEGO join
+        # is not incorrectly reported as an unconnected doorway.
+        room_name = _room_name(room)
+        room_metadata = dict(getattr(room, "metadata", {}) or {})
+        connection_point_rows = {
+            str(dict(row or {}).get("door") or "").strip().lower(): dict(row or {})
+            for row in tuple(room_metadata.get("connection_points") or ())
+            if str(dict(row or {}).get("door") or "").strip()
+        }
+        try:
+            from .map_studio_room_snapping import authored_room_door_hooks
+
+            imported_hooks = authored_room_door_hooks(room)
+        except Exception:
+            imported_hooks = ()
+        for imported in imported_hooks:
+            door_name = str(imported.door or "").strip()
+            if not door_name:
+                continue
+            connected_room = ""
+            connected_opening = ""
+            for raw in connection_rows:
+                row = dict(raw or {})
+                source_room = normalise_resref(row.get("source_room_resref"))
+                target_room = normalise_resref(row.get("target_room_resref"))
+                source_hook = str(row.get("source_hook_name") or "").strip()
+                target_hook = str(row.get("target_hook_name") or "").strip()
+                if source_room == room_name and source_hook.lower() == door_name.lower():
+                    connected_room, connected_opening = target_room, target_hook
+                    break
+                if target_room == room_name and target_hook.lower() == door_name.lower():
+                    connected_room, connected_opening = source_room, source_hook
+                    break
+            facing = float(imported.facing_radians)
+            point_metadata = connection_point_rows.get(door_name.lower(), {})
+            intent = _opening_intent(point_metadata)
+            hooks.append(
+                AuthoredRoomConnectionHook(
+                    hook_id=f"{room_name}:-1:{door_name.lower()}",
+                    room_resref=room_name,
+                    opening_name=door_name,
+                    edge_index=-1,
+                    position=tuple(float(value) for value in imported.world_position),
+                    outward=(math.cos(facing), math.sin(facing)),
+                    width=max(0.05, float(room_metadata.get("environment_kit_opening_width", 1.8) or 1.8)),
+                    height=max(0.05, float(room_metadata.get("environment_kit_opening_height", 2.4) or 2.4)),
+                    bottom=0.0,
+                    opening_kind="sealed" if intent == "sealed" else "door",
+                    intent=intent,
+                    external=intent == "external",
+                    sealed_door_placement_id=str(
+                        point_metadata.get("sealed_door_placement_id") or ""
+                    ).strip(),
+                    connected_room_resref=connected_room,
+                    connected_opening_name=connected_opening,
+                )
+            )
     return tuple(hooks)
 
 
@@ -237,14 +376,15 @@ def audit_authored_room_connections(
             continue
         distance = _hook_distance(hook, target)
         facing_dot = _hook_facing_dot(hook, target)
-        if not _hooks_compatible(
-            hook,
-            target,
-            distance_tolerance=distance_tolerance,
-            facing_tolerance=facing_tolerance,
-        ):
+        # Explicit authored links are later compiled against the actual WOK
+        # perimeter edges, which is the authoritative passability gate.
+        # Retail LYT hook facing and nominal doorway dimensions are often
+        # approximate (and can disagree with the WOK aperture), so rejecting a
+        # co-located explicit pair here creates false layout warnings for
+        # otherwise exact stock/authored joins.
+        if distance > float(distance_tolerance):
             warnings.append(
-                f"{hook.label} is linked to {target.label}, but the openings are no longer aligned or size-compatible."
+                f"{hook.label} is linked to {target.label}, but the opening centers are no longer aligned."
             )
             continue
         used.update((hook.hook_id, target.hook_id))
@@ -315,6 +455,9 @@ def _opening_with_connection(opening: FloorPlanWallOpening, target: AuthoredRoom
             "connected_room_resref": target.room_resref,
             "connected_opening_name": target.opening_name,
             "connection_state": "connected",
+            "walkmesh_portal": True,
+            "walkmesh_portal_inset_m": 0.0,
+            "walkmesh_portal_width_m": min(float(opening.width), float(target.width)),
         }
     )
     return replace(opening, metadata=metadata)
@@ -346,6 +489,593 @@ def _replace_room_opening(
     return replace(room, primitive=replace(primitive, openings=tuple(openings)))
 
 
+def _room_opening_for_hook(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+) -> tuple[AuthoredRoomSpec, FloorPlanWallOpening]:
+    room = next((item for item in project.rooms if _room_name(item) == hook.room_resref), None)
+    primitive = _floor_plan_room_primitive(room) if room is not None else None
+    if room is None or primitive is None:
+        raise ValueError(f"Room {hook.room_resref} is no longer an authored floor-plan room.")
+    for opening in primitive.openings:
+        opening_name = str(opening.name or "").strip() or f"edge_{int(opening.edge_index)}"
+        if int(opening.edge_index) == int(hook.edge_index) and opening_name.lower() == hook.opening_name.lower():
+            return room, opening
+    raise ValueError(f"Opening {hook.opening_name} no longer exists in room {hook.room_resref}.")
+
+
+def _replace_opening_metadata(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+    metadata: dict[str, Any],
+) -> AuthoredModuleProject:
+    rooms: list[AuthoredRoomSpec] = []
+    matched = False
+    for room in project.rooms:
+        if _room_name(room) != hook.room_resref:
+            rooms.append(room)
+            continue
+        primitive = _floor_plan_room_primitive(room)
+        if primitive is None:
+            rooms.append(room)
+            continue
+        openings: list[FloorPlanWallOpening] = []
+        for opening in primitive.openings:
+            opening_name = str(opening.name or "").strip() or f"edge_{int(opening.edge_index)}"
+            if int(opening.edge_index) == int(hook.edge_index) and opening_name.lower() == hook.opening_name.lower():
+                opening = replace(opening, metadata=dict(metadata))
+                matched = True
+            openings.append(opening)
+        rooms.append(replace(room, primitive=replace(primitive, openings=tuple(openings))))
+    if not matched:
+        raise ValueError(f"Opening {hook.opening_name} no longer exists in room {hook.room_resref}.")
+    return replace(project, rooms=tuple(rooms))
+
+
+def _stock_opening_metadata(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+) -> dict[str, Any]:
+    room = next((item for item in project.rooms if _room_name(item) == hook.room_resref), None)
+    if room is None:
+        raise ValueError(f"Room {hook.room_resref} no longer exists.")
+    for row in tuple(dict(getattr(room, "metadata", {}) or {}).get("connection_points") or ()):
+        entry = dict(row or {})
+        if str(entry.get("door") or "").strip().lower() == hook.opening_name.lower():
+            return entry
+    raise ValueError(f"Opening {hook.opening_name} no longer exists in room {hook.room_resref}.")
+
+
+def _replace_stock_opening_metadata(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+    metadata: dict[str, Any],
+) -> AuthoredModuleProject:
+    rooms: list[AuthoredRoomSpec] = []
+    matched = False
+    for room in project.rooms:
+        if _room_name(room) != hook.room_resref:
+            rooms.append(room)
+            continue
+        room_metadata = dict(getattr(room, "metadata", {}) or {})
+        connection_points: list[dict[str, Any]] = []
+        for raw in tuple(room_metadata.get("connection_points") or ()):
+            entry = dict(raw or {})
+            if str(entry.get("door") or "").strip().lower() == hook.opening_name.lower():
+                entry = dict(metadata)
+                matched = True
+            connection_points.append(entry)
+        room_metadata["connection_points"] = connection_points
+        rooms.append(replace(room, metadata=room_metadata))
+    if not matched:
+        raise ValueError(f"Opening {hook.opening_name} no longer exists in room {hook.room_resref}.")
+    return replace(project, rooms=tuple(rooms))
+
+
+def _opening_metadata_for_hook(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+) -> dict[str, Any]:
+    if hook.edge_index >= 0:
+        _room, opening = _room_opening_for_hook(project, hook)
+        return dict(opening.metadata or {})
+    return _stock_opening_metadata(project, hook)
+
+
+def _replace_hook_metadata(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+    metadata: dict[str, Any],
+) -> AuthoredModuleProject:
+    if hook.edge_index >= 0:
+        return _replace_opening_metadata(project, hook, metadata)
+    return _replace_stock_opening_metadata(project, hook, metadata)
+
+
+def _sealed_door_pose(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+) -> tuple[tuple[float, float, float], float]:
+    """Return the exact threshold midpoint and wall-tangent bearing."""
+
+    room = next((item for item in project.rooms if _room_name(item) == hook.room_resref), None)
+    if room is None:
+        raise ValueError(f"Room {hook.room_resref} no longer exists.")
+    primitive = _floor_plan_room_primitive(room)
+    if primitive is not None and 0 <= hook.edge_index < len(primitive.points):
+        start = primitive.points[hook.edge_index]
+        end = primitive.points[(hook.edge_index + 1) % len(primitive.points)]
+        bearing = math.atan2(float(end[1]) - float(start[1]), float(end[0]) - float(start[0]))
+        return hook.position, bearing
+
+    primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
+    for raw in tuple(primitive_metadata.get("walkmesh_portals") or ()):
+        portal = dict(raw or {})
+        if str(portal.get("magnet_id") or "").strip().lower() != hook.opening_name.lower():
+            continue
+        start = tuple(float(value) for value in tuple(portal.get("start") or ())[:3])
+        end = tuple(float(value) for value in tuple(portal.get("end") or ())[:3])
+        if len(start) == 3 and len(end) == 3:
+            bearing = math.atan2(end[1] - start[1], end[0] - start[0])
+            return hook.position, bearing
+    return hook.position, math.atan2(hook.outward[1], hook.outward[0]) + (math.pi * 0.5)
+
+
+def set_authored_room_opening_intent(
+    project: AuthoredModuleProject,
+    hook_id: str,
+    intent: str,
+) -> AuthoredRoomOpeningIntentUpdate:
+    """Mark an opening connectable, external, or sealed with its authentic door."""
+
+    resolved_intent = str(intent or "").strip().lower()
+    if resolved_intent not in {"connectable", "external", "sealed"}:
+        raise ValueError("Opening intent must be connectable, external, or sealed.")
+    hook = next(
+        (candidate for candidate in authored_room_connection_hooks(project) if candidate.hook_id == str(hook_id)),
+        None,
+    )
+    if hook is None:
+        raise ValueError("The selected room opening no longer exists.")
+    if hook.connected_room_resref and resolved_intent != "connectable":
+        raise ValueError("Disconnect this room opening before marking it external or sealed.")
+
+    metadata = _opening_metadata_for_hook(project, hook)
+    previous_sealed_placement = str(metadata.get("sealed_door_placement_id") or "").strip()
+    updated = project
+    if previous_sealed_placement:
+        from .authored_module_placements import remove_authored_gameplay_placement
+
+        try:
+            updated = remove_authored_gameplay_placement(updated, previous_sealed_placement).project
+        except ValueError:
+            pass
+    metadata["opening_intent"] = resolved_intent
+    metadata["external"] = resolved_intent == "external"
+    metadata["sealed"] = resolved_intent == "sealed"
+    metadata.pop("sealed_door_placement_id", None)
+    metadata.pop("sealed_door_template_resref", None)
+    updated = _replace_hook_metadata(updated, hook, metadata)
+
+    sealed_placement_id = ""
+    if resolved_intent == "sealed":
+        from .map_studio_pascal_building import add_pascal_sealed_door
+
+        position, bearing = _sealed_door_pose(updated, hook)
+        placement = add_pascal_sealed_door(
+            updated,
+            room_resref=hook.room_resref,
+            opening_name=hook.opening_name,
+            position=position,
+            bearing=bearing,
+        )
+        updated = placement.project
+        sealed_placement_id = placement.placement_id
+        metadata["sealed_door_placement_id"] = sealed_placement_id
+        metadata["sealed_door_template_resref"] = placement.template_resref
+        updated = _replace_hook_metadata(updated, hook, metadata)
+
+    summary = {
+        "connectable": f"{hook.label} is available for room snapping.",
+        "external": f"{hook.label} is an intentional module exit.",
+        "sealed": f"{hook.label} is closed by a locked area-style door.",
+    }[resolved_intent]
+    updated = replace(
+        updated,
+        extra={
+            **dict(updated.extra or {}),
+            "last_room_opening_intent": {
+                "hook_id": hook.hook_id,
+                "room_resref": hook.room_resref,
+                "opening_name": hook.opening_name,
+                "intent": resolved_intent,
+                "sealed_door_placement_id": sealed_placement_id,
+            },
+        },
+    )
+    return AuthoredRoomOpeningIntentUpdate(
+        project=updated,
+        hook_id=hook.hook_id,
+        room_resref=hook.room_resref,
+        opening_name=hook.opening_name,
+        intent=resolved_intent,
+        sealed_door_placement_id=sealed_placement_id,
+        summary=summary,
+    )
+
+
+def _append_drag_snap_opening(
+    project: AuthoredModuleProject,
+    *,
+    source_room_resref: str,
+    edge_index: int,
+    opening_name: str,
+    target: AuthoredRoomConnectionHook,
+) -> tuple[AuthoredModuleProject, AuthoredRoomConnectionHook]:
+    """Cut a matching source-side opening without spawning a duplicate door actor."""
+
+    target_room, target_opening = _room_opening_for_hook(project, target)
+    del target_room
+    rooms: list[AuthoredRoomSpec] = []
+    added = False
+    for room in project.rooms:
+        if _room_name(room) != normalise_resref(source_room_resref):
+            rooms.append(room)
+            continue
+        primitive = _floor_plan_room_primitive(room)
+        if primitive is None:
+            raise ValueError(f"Room {source_room_resref} is not an authored floor-plan room.")
+        edge = int(edge_index)
+        points = tuple(primitive.points or ())
+        if edge < 0 or edge >= len(points):
+            raise ValueError(f"Wall {edge + 1} no longer exists in room {source_room_resref}.")
+        start = points[edge]
+        end = points[(edge + 1) % len(points)]
+        edge_length = math.hypot(float(end[0]) - float(start[0]), float(end[1]) - float(start[1]))
+        if edge_length <= float(target.width) + 0.02:
+            raise ValueError(f"The matching {target.width:.2f} m doorway is wider than source wall {edge + 1}.")
+        if float(target.bottom) < 0.0 or float(target.bottom) + float(target.height) >= float(primitive.wall_height) - 0.01:
+            raise ValueError(f"The matching {target.height:.2f} m doorway does not fit below the source wall top.")
+        metadata = {
+            key: value
+            for key, value in dict(target_opening.metadata or {}).items()
+            if key
+            not in {
+                "door_placement_id",
+                "connected_room_resref",
+                "connected_opening_name",
+                "connection_room",
+                "connection_opening",
+                "connection_state",
+            }
+        }
+        target_door = str(dict(target_opening.metadata or {}).get("door_placement_id") or "").strip()
+        metadata.update(
+            {
+                "source": "map_studio:room_drag_snap",
+                "operation": "auto_cut_room_connection",
+                "opening_kind": "door",
+                "shared_connection_door": bool(target_door),
+                "shared_door_placement_id": target_door,
+            }
+        )
+        opening = FloorPlanWallOpening(
+            name=str(opening_name),
+            edge_index=edge,
+            center_fraction=0.5,
+            width=float(target.width),
+            height=float(target.height),
+            bottom=float(target.bottom),
+            metadata=metadata,
+        )
+        rooms.append(
+            replace(
+                room,
+                primitive=replace(
+                    primitive,
+                    openings=tuple(primitive.openings or ()) + (opening,),
+                    include_walls=True,
+                    metadata={
+                        **dict(primitive.metadata or {}),
+                        "last_operation": "auto_cut_room_connection",
+                        "last_opening_name": str(opening_name),
+                        "last_opening_edge_index": edge,
+                    },
+                ),
+                metadata={
+                    **dict(room.metadata or {}),
+                    "last_opening_name": str(opening_name),
+                    "last_opening_edge_index": edge,
+                },
+            )
+        )
+        added = True
+    if not added:
+        raise ValueError(f"Room {source_room_resref} no longer exists.")
+    updated = replace(project, rooms=tuple(rooms))
+    hook_id = f"{normalise_resref(source_room_resref)}:{int(edge_index)}:{str(opening_name).lower()}"
+    hook = next((item for item in authored_room_connection_hooks(updated) if item.hook_id == hook_id), None)
+    if hook is None:
+        raise ValueError("The matching source doorway could not be created.")
+    return updated, hook
+
+
+def _source_edge_snap_candidates(
+    project: AuthoredModuleProject,
+    source_room: AuthoredRoomSpec,
+    target: AuthoredRoomConnectionHook,
+) -> tuple[tuple[AuthoredModuleProject, AuthoredRoomConnectionHook, bool], ...]:
+    """Return existing openings first, then legal auto-cut wall candidates."""
+
+    source_resref = _room_name(source_room)
+    existing = tuple(
+        hook
+        for hook in authored_room_connection_hooks(project)
+        if hook.room_resref == source_resref
+        and hook.passable
+        and not hook.connected_room_resref
+        and abs(float(hook.width) - float(target.width)) <= max(0.25, min(hook.width, target.width) * 0.25)
+        and abs(float(hook.height) - float(target.height)) <= max(0.25, min(hook.height, target.height) * 0.25)
+    )
+    rows: list[tuple[AuthoredModuleProject, AuthoredRoomConnectionHook, bool]] = [
+        (project, hook, False) for hook in existing
+    ]
+    primitive = _floor_plan_room_primitive(source_room)
+    if primitive is None:
+        return tuple(rows)
+    used_edges = {int(hook.edge_index) for hook in existing}
+    for edge_index in range(len(tuple(primitive.points or ()))):
+        if edge_index in used_edges:
+            continue
+        name = f"door_snap_{edge_index}_{target.room_resref}_{target.edge_index}"
+        try:
+            candidate_project, candidate_hook = _append_drag_snap_opening(
+                project,
+                source_room_resref=source_resref,
+                edge_index=edge_index,
+                opening_name=name,
+                target=target,
+            )
+        except ValueError:
+            continue
+        rows.append((candidate_project, candidate_hook, True))
+    return tuple(rows)
+
+
+def preview_authored_room_drag_snap(
+    project: AuthoredModuleProject,
+    *,
+    source_room_resref: str,
+    world_delta: tuple[float, float, float] | list[float],
+    snap_distance: float = 2.5,
+) -> AuthoredRoomDragSnapPreview:
+    """Solve the closest exact doorway connection for a whole-room drag."""
+
+    clean_source = normalise_resref(source_room_resref)
+    source_room = next((room for room in project.rooms if _room_name(room) == clean_source), None)
+    delta_values = tuple(float(value) for value in tuple(world_delta or ())[:3])
+    if source_room is None or _floor_plan_room_primitive(source_room) is None or len(delta_values) != 3:
+        return AuthoredRoomDragSnapPreview(False, clean_source, reason="Only one authored floor-plan room can doorway-snap at a time.")
+    source_origin = tuple(float(value) for value in source_room.position)
+    proposed_origin = tuple(source_origin[index] + delta_values[index] for index in range(3))
+    target_hooks = tuple(
+        hook
+        for hook in authored_room_connection_hooks(project)
+        if hook.room_resref != clean_source and hook.passable and not hook.external and not hook.connected_room_resref
+    )
+    if not target_hooks:
+        return AuthoredRoomDragSnapPreview(
+            False,
+            clean_source,
+            position=proposed_origin,
+            world_delta=delta_values,
+            reason="Draw a doorway on the destination room to create a snap target.",
+        )
+    best: AuthoredRoomDragSnapPreview | None = None
+    for target in target_hooks:
+        for candidate_project, source_hook, auto_cut in _source_edge_snap_candidates(project, source_room, target):
+            try:
+                solution = connect_authored_room_openings(
+                    candidate_project,
+                    source_hook.hook_id,
+                    target.hook_id,
+                    align_source=True,
+                )
+            except ValueError:
+                continue
+            snapped_origin = tuple(source_origin[index] + float(solution.translation[index]) for index in range(3))
+            distance = math.sqrt(sum((snapped_origin[index] - proposed_origin[index]) ** 2 for index in range(3)))
+            preview = AuthoredRoomDragSnapPreview(
+                magnet_snapped=distance <= max(0.05, float(snap_distance)),
+                source_room_resref=clean_source,
+                target_room_resref=target.room_resref,
+                source_hook_id=source_hook.hook_id,
+                target_hook_id=target.hook_id,
+                source_edge_index=int(source_hook.edge_index),
+                target_edge_index=int(target.edge_index),
+                source_opening_name=source_hook.opening_name,
+                auto_cut_source=auto_cut,
+                position=snapped_origin,
+                world_delta=tuple(float(value) for value in solution.translation),
+                rotation_degrees_z=float(solution.rotation_degrees),
+                snap_distance=distance,
+                opening_width=float(target.width),
+                opening_height=float(target.height),
+                target_label=target.label,
+                reason=(
+                    f"Release to snap wall {source_hook.edge_index + 1} to {target.label}."
+                    if distance <= max(0.05, float(snap_distance))
+                    else "Move the room closer to a compatible doorway."
+                ),
+            )
+            if best is None or preview.snap_distance < best.snap_distance:
+                best = preview
+    if best is None:
+        return AuthoredRoomDragSnapPreview(
+            False,
+            clean_source,
+            position=proposed_origin,
+            world_delta=delta_values,
+            reason="No source wall is large enough for the destination doorway.",
+        )
+    if best.magnet_snapped:
+        return best
+    return replace(best, position=proposed_origin, world_delta=delta_values)
+
+
+def connect_authored_room_drag_snap(
+    project: AuthoredModuleProject,
+    preview: AuthoredRoomDragSnapPreview | dict[str, Any],
+) -> AuthoredRoomConnectionUpdate:
+    """Commit the exact previewed room magnet, including an automatic source cut."""
+
+    values = preview.as_payload() if isinstance(preview, AuthoredRoomDragSnapPreview) else dict(preview or {})
+    if not bool(values.get("magnet_snapped", False)):
+        raise ValueError("Move the room close enough for a doorway magnet before releasing it.")
+    working = project
+    source_hook_id = str(values.get("source_hook_id") or "")
+    target_hook_id = str(values.get("target_hook_id") or "")
+    if bool(values.get("auto_cut_source", False)):
+        hooks = {hook.hook_id: hook for hook in authored_room_connection_hooks(working)}
+        target = hooks.get(target_hook_id)
+        if target is None:
+            raise ValueError("The destination doorway changed before the room was released.")
+        working, source_hook = _append_drag_snap_opening(
+            working,
+            source_room_resref=str(values.get("source_room_resref") or ""),
+            edge_index=int(values.get("source_edge_index", -1)),
+            opening_name=str(values.get("source_opening_name") or "door_snap"),
+            target=target,
+        )
+        source_hook_id = source_hook.hook_id
+    update = connect_authored_room_openings(
+        working,
+        source_hook_id,
+        target_hook_id,
+        align_source=True,
+    )
+    from .map_studio_pascal_graph import refresh_pascal_wall_graph
+    from .authored_module_project import compile_authored_room_spec
+    from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface
+
+    connected_hooks = {
+        (hook.room_resref, hook.opening_name.lower()): hook
+        for hook in authored_room_connection_hooks(update.project)
+    }
+    source_connected = connected_hooks.get((update.source_hook.room_resref, update.source_hook.opening_name.lower()))
+    target_connected = connected_hooks.get((update.target_hook.room_resref, update.target_hook.opening_name.lower()))
+    if source_connected is None or target_connected is None:
+        raise ValueError("The snapped doorway hooks could not be regenerated after alignment.")
+    if _hook_distance(source_connected, target_connected) > 1.0e-5 or _hook_facing_dot(source_connected, target_connected) > -0.999:
+        raise ValueError("The room doorway seam did not align exactly enough for automatic walkmesh traversal.")
+    walkable_counts: dict[str, int] = {}
+    for room_resref in (source_connected.room_resref, target_connected.room_resref):
+        room = next(item for item in update.project.rooms if _room_name(item) == room_resref)
+        geometry = compile_authored_room_spec(room)
+        count = sum(
+            1
+            for face in tuple(getattr(getattr(geometry, "wok", None), "faces", ()) or ())
+            if is_walkable_walkmesh_surface(int(getattr(face, "surface", -1)))
+        )
+        if count <= 0:
+            raise ValueError(f"Room {room_resref} generated no WOK faces at the snapped doorway.")
+        walkable_counts[room_resref] = count
+    connected_project = update.project
+    connected_extra = dict(connected_project.extra or {})
+    connected_extra["last_room_connection"] = {
+        "source_room_resref": source_connected.room_resref,
+        "target_room_resref": target_connected.room_resref,
+        "source_opening_name": source_connected.opening_name,
+        "target_opening_name": target_connected.opening_name,
+        "portal_position": [float(value) for value in source_connected.position],
+        "opening_width": float(source_connected.width),
+        "opening_height": float(source_connected.height),
+        "walkmesh_auto_generated": True,
+        "walkmesh_portal_validated": True,
+        "walkable_face_counts": walkable_counts,
+        "assembly_mode": "seamless_room_lego",
+    }
+    connected_project = refresh_pascal_wall_graph(replace(connected_project, extra=connected_extra))
+    return replace(update, project=connected_project)
+
+
+def _reconcile_connected_door_placements(
+    before: AuthoredModuleProject,
+    after: AuthoredModuleProject,
+    *,
+    source: AuthoredRoomConnectionHook,
+    target: AuthoredRoomConnectionHook,
+    old_source_position: tuple[float, float, float],
+    new_source_position: tuple[float, float, float],
+    rotation_degrees: float,
+) -> AuthoredModuleProject:
+    """Keep a room-owned door with its wall and prevent doubled seam actors."""
+
+    _source_room, source_opening = _room_opening_for_hook(before, source)
+    _target_room, target_opening = _room_opening_for_hook(before, target)
+    source_metadata = dict(source_opening.metadata or {})
+    target_metadata = dict(target_opening.metadata or {})
+    source_door_id = str(source_metadata.get("door_placement_id") or "").strip()
+    target_door_id = str(target_metadata.get("door_placement_id") or "").strip()
+    updated = after
+    if target_door_id and not source_door_id:
+        _room, connected_opening = _room_opening_for_hook(updated, source)
+        metadata = dict(connected_opening.metadata or {})
+        metadata.update(
+            {
+                "shared_connection_door": True,
+                "shared_door_placement_id": target_door_id,
+            }
+        )
+        return _replace_opening_metadata(updated, source, metadata)
+    if not source_door_id:
+        return updated
+
+    from .authored_module_placements import (
+        authored_gameplay_placement_rows,
+        remove_authored_gameplay_placement,
+        update_authored_gameplay_placement_transform,
+    )
+
+    if target_door_id and target_door_id != source_door_id:
+        updated = remove_authored_gameplay_placement(updated, source_door_id).project
+        _room, connected_opening = _room_opening_for_hook(updated, source)
+        metadata = dict(connected_opening.metadata or {})
+        metadata.pop("door_placement_id", None)
+        metadata.update(
+            {
+                "shared_connection_door": True,
+                "shared_door_placement_id": target_door_id,
+                "deduplicated_source_door": source_door_id,
+            }
+        )
+        return _replace_opening_metadata(updated, source, metadata)
+
+    row = next(
+        (item for item in authored_gameplay_placement_rows(before) if item.placement_id == source_door_id),
+        None,
+    )
+    if row is None:
+        return updated
+    radians = math.radians(float(rotation_degrees))
+    cos_a = math.cos(radians)
+    sin_a = math.sin(radians)
+    local_x = float(row.position[0]) - float(old_source_position[0])
+    local_y = float(row.position[1]) - float(old_source_position[1])
+    local_z = float(row.position[2]) - float(old_source_position[2])
+    position = (
+        float(new_source_position[0]) + local_x * cos_a - local_y * sin_a,
+        float(new_source_position[1]) + local_x * sin_a + local_y * cos_a,
+        float(new_source_position[2]) + local_z,
+    )
+    return update_authored_gameplay_placement_transform(
+        updated,
+        source_door_id,
+        position=position,
+        bearing=float(row.bearing) + radians,
+    ).project
+
+
 def connect_authored_room_openings(
     project: AuthoredModuleProject,
     source_hook_id: str,
@@ -367,6 +1097,7 @@ def connect_authored_room_openings(
 
     room_by_name = {_room_name(room): room for room in project.rooms}
     source_room = room_by_name[source.room_resref]
+    source_room_before = source_room
     target_room = room_by_name[target.room_resref]
     source_primitive = _floor_plan_room_primitive(source_room)
     if source_primitive is None:
@@ -446,9 +1177,47 @@ def connect_authored_room_openings(
     updated_extra["vis_pairs"] = [list(pair) for pair in sorted(pairs)]
     updated_extra["room_connection_source"] = "map_studio_authored_openings"
     updated = replace(project, rooms=updated_rooms, extra=updated_extra)
+    updated = _reconcile_connected_door_placements(
+        project,
+        updated,
+        source=source,
+        target=target,
+        old_source_position=tuple(float(value) for value in source_room_before.position),
+        new_source_position=tuple(float(value) for value in source_room.position),
+        rotation_degrees=rotation_degrees,
+    )
+    from .authored_module_walkmesh import (
+        compile_authored_room_connection_walkmeshes,
+        upsert_authored_walkmesh_room_connection,
+    )
+
+    updated = upsert_authored_walkmesh_room_connection(
+        updated,
+        source_room_resref=source.room_resref,
+        source_hook_name=source.opening_name,
+        target_room_resref=target.room_resref,
+        target_hook_name=target.opening_name,
+        connection_source="map_studio_authored_openings",
+    )
+    walkmesh_build = compile_authored_room_connection_walkmeshes(updated)
+    if not walkmesh_build.ready:
+        raise ValueError(" ".join(walkmesh_build.blocking_issues))
+    updated_extra = dict(updated.extra or {})
+    updated_extra["last_walkmesh_build"] = {
+        "operation": "connect_authored_room_openings",
+        "auto_generated": True,
+        "portal_count": len(walkmesh_build.portals),
+        "room_face_counts": {
+            room_resref: len(tuple(wok.faces or ()))
+            for room_resref, wok in walkmesh_build.room_woks.items()
+        },
+        "midpoint_gaps_m": [float(portal.midpoint_gap) for portal in walkmesh_build.portals],
+        "ready": True,
+    }
+    updated = replace(updated, extra=updated_extra)
     summary = (
         f"Connected {source.label} to {target.label}; aligned the source room, "
-        "persisted both opening links, and added symmetric VIS intent."
+        "persisted both opening links, added symmetric VIS intent, and generated reciprocal WOK portals."
     )
     return AuthoredRoomConnectionUpdate(
         project=updated,
@@ -729,6 +1498,8 @@ __all__ = [
     "AuthoredRoomConnectionAudit",
     "AuthoredRoomConnectionHook",
     "AuthoredRoomConnectionUpdate",
+    "AuthoredRoomOpeningIntentUpdate",
+    "AuthoredRoomDragSnapPreview",
     "AuthoredModuleLayout",
     "AuthoredModuleLayoutValidation",
     "audit_authored_room_connections",
@@ -736,6 +1507,9 @@ __all__ = [
     "authored_room_connection_hooks",
     "compile_authored_module_layout",
     "connect_authored_room_openings",
+    "connect_authored_room_drag_snap",
+    "preview_authored_room_drag_snap",
+    "set_authored_room_opening_intent",
     "snap_authored_rooms_to_grid",
     "validate_authored_module_layout",
 ]

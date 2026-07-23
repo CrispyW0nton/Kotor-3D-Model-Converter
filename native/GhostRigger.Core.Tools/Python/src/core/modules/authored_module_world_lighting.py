@@ -21,6 +21,29 @@ from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProje
 
 
 WORLD_LIGHTING_PROFILES: tuple[str, ...] = ("standard", FULLBRIGHT_LIGHTING_PROFILE, "custom")
+_SHADOWLANDS_STYLE_ID = "architecture:k1_shadowlands"
+_SHADOWLANDS_STYLE_PRESET = {
+    # Measured from the retail K1 Upper and Lower Shadowlands AREs, m24aa
+    # and m25aa.  Both use the identical grass/fog contract.
+    "fog_enabled": True,
+    "fog_color": (46, 36, 33),
+    "fog_near": 0.0,
+    "fog_far": 70.0,
+    "sun_ambient": (0, 0, 0),
+    "sun_diffuse": (0, 0, 0),
+    "dynamic_ambient": (61, 48, 37),
+    "shadow_opacity": 0,
+    "sun_shadows": False,
+    "grass": {
+        "texture": "lka_grass",
+        "density": 5.0,
+        "quad_size": 0.8,
+        "prob_ll": 0.25,
+        "prob_lr": 0.25,
+        "prob_ul": 0.25,
+        "prob_ur": 0.25,
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +52,15 @@ class AuthoredWorldLightingUpdate:
 
     project: AuthoredModuleProject
     settings: dict[str, Any]
+    summary: str
+
+
+@dataclass(frozen=True)
+class AuthoredEnvironmentStyleUpdate:
+    """Result of applying a measured exterior atmosphere without overriding edits."""
+
+    project: AuthoredModuleProject
+    applied: bool
     summary: str
 
 
@@ -203,6 +235,10 @@ def update_authored_world_lighting_settings(
             "sun_shadows": 1 if sun_shadows else 0,
     }
     area = dict(module_metadata.get("area") or {})
+    # A manual Environment-tab edit deliberately takes ownership away from a
+    # kit preset.  The preset helper below restores this marker only while it
+    # applies the measured retail defaults itself.
+    area.pop("environment_style_preset", None)
     area_values = {
             "fog_color": list(fog_color),
             "fog_near": fog_near,
@@ -246,9 +282,85 @@ def update_authored_world_lighting_settings(
     )
 
 
+def apply_authored_environment_style_defaults(
+    project: AuthoredModuleProject,
+    style_id: str,
+) -> AuthoredEnvironmentStyleUpdate:
+    """Apply a measured vanilla atmosphere for a newly built exterior style.
+
+    This is intentionally conservative: selecting Shadowlands does not erase
+    a creator's existing Environment-tab lighting.  The preset is only
+    written for an untouched authored area, and it remains exact enough for a
+    generated clearing to meet an appended m24aa/m25aa room without a sudden
+    loss of K1 grass or 70 m distance fog at the seam.
+    """
+
+    normalized = str(style_id or "").strip().lower()
+    if normalized != _SHADOWLANDS_STYLE_ID:
+        return AuthoredEnvironmentStyleUpdate(project, False, "No exterior atmosphere preset is required for this kit.")
+    if str(project.game or "K1").strip().upper() != "K1":
+        return AuthoredEnvironmentStyleUpdate(project, False, "Shadowlands atmosphere is a K1-only preset.")
+
+    module_metadata = dict(project.metadata.metadata)
+    existing_area = dict(module_metadata.get("area") or {})
+    current_preset = str(existing_area.get("environment_style_preset") or "").strip().lower()
+    if current_preset == _SHADOWLANDS_STYLE_ID:
+        return AuthoredEnvironmentStyleUpdate(project, False, "Shadowlands grass and fog are already configured.")
+    # Do not overwrite a custom world configuration or an imported vanilla
+    # area that already carries grass.  Those ARE values are the authority.
+    if existing_area and (
+        str(existing_area.get("source") or "").strip().lower() == "map_studio:world_settings"
+        or bool(existing_area.get("grass"))
+        or "grass_texture" in existing_area
+        or "grass_tex_name" in existing_area
+    ):
+        return AuthoredEnvironmentStyleUpdate(
+            project,
+            False,
+            "Kept the existing world environment; Shadowlands grass/fog was not overwritten.",
+        )
+
+    lighting_update = update_authored_world_lighting_settings(
+        project,
+        {
+            "profile": "standard",
+            **{key: value for key, value in _SHADOWLANDS_STYLE_PRESET.items() if key != "grass"},
+        },
+    )
+    module_metadata = dict(lighting_update.project.metadata.metadata)
+    area = dict(module_metadata.get("area") or {})
+    area.update(
+        {
+            "environment_style_preset": _SHADOWLANDS_STYLE_ID,
+            "grass": {**dict(_SHADOWLANDS_STYLE_PRESET["grass"]), "source": "k1:m24aa/m25aa"},
+        }
+    )
+    module_metadata["area"] = area
+    updated = replace(
+        lighting_update.project,
+        metadata=replace(lighting_update.project.metadata, metadata=module_metadata),
+        extra={
+            **dict(lighting_update.project.extra),
+            "last_environment_style_update": {
+                "style_id": _SHADOWLANDS_STYLE_ID,
+                "source": "k1:m24aa/m25aa",
+                "grass_texture": "lka_grass",
+                "fog_far": 70.0,
+            },
+        },
+    )
+    return AuthoredEnvironmentStyleUpdate(
+        updated,
+        True,
+        "Applied measured K1 Shadowlands atmosphere: lka_grass and 70 m distance fog.",
+    )
+
+
 __all__ = [
+    "AuthoredEnvironmentStyleUpdate",
     "AuthoredWorldLightingUpdate",
     "WORLD_LIGHTING_PROFILES",
+    "apply_authored_environment_style_defaults",
     "authored_world_lighting_settings",
     "default_authored_world_lighting_settings",
     "update_authored_world_lighting_settings",

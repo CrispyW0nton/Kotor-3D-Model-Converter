@@ -164,6 +164,26 @@ def _wok_for_room(module_like: Any, room_id: str) -> Any:
     return _room_woks(module_like).get(_normalise_resref(room_id))
 
 
+def _wok_world_offset(module_like: Any, room: Any) -> tuple[float, float, float]:
+    """Return the translation required by this compiled room WOK.
+
+    Authored WOKs remain room-local until packaging, while stock Environment
+    Kit WOKs are rebased into module space during export.  Applying the LYT
+    position to both kinds double-translates imported collision and produces a
+    false seam-gap warning even when their reciprocal portal edges coincide.
+    """
+
+    room_id = _normalise_resref(getattr(room, "room_id", ""))
+    module = _module_from_input(module_like)
+    geometries = getattr(module, "room_geometry", {}) or {}
+    geometry = geometries.get(room_id) if isinstance(geometries, dict) else None
+    metadata = dict(getattr(geometry, "metadata", {}) or {}) if geometry is not None else {}
+    if bool(metadata.get("imported_wok")):
+        return (0.0, 0.0, 0.0)
+    values = tuple(getattr(room, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+    return tuple(float(values[index]) if index < len(values) else 0.0 for index in range(3))
+
+
 def _verts(wok: Any) -> list[tuple[float, float, float]]:
     return [tuple(v) for v in list(getattr(wok, "verts", []) or [])]
 
@@ -288,11 +308,17 @@ def _transition_count(wok: Any) -> int:
     return sum(1 for face in _faces(wok) if _face_surface(face) == 18)
 
 
-def _room_summary(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKSummary:
+def _room_summary(
+    room: Any,
+    wok: Any,
+    *,
+    winding_epsilon: float,
+    offset: tuple[float, float, float] | None = None,
+) -> RoomWOKSummary:
     room_id = _normalise_resref(getattr(room, "room_id", ""))
     if wok is None:
         return RoomWOKSummary(room_id=room_id, has_wok=False)
-    offset = tuple(getattr(room, "position", (0.0, 0.0, 0.0)))
+    offset = tuple(offset if offset is not None else getattr(room, "position", (0.0, 0.0, 0.0)))
     world = _world_vertices(wok, offset)
     known_surfaces = _surface_names()
     invalid: list[int] = []
@@ -338,11 +364,17 @@ def _edge_adjacent(face: Any, edge_index: int) -> int:
     return (int(getattr(face, "adj1", -1)), int(getattr(face, "adj2", -1)), int(getattr(face, "adj3", -1)))[edge_index]
 
 
-def _room_overlay(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKOverlay:
+def _room_overlay(
+    room: Any,
+    wok: Any,
+    *,
+    winding_epsilon: float,
+    offset: tuple[float, float, float] | None = None,
+) -> RoomWOKOverlay:
     room_id = _normalise_resref(getattr(room, "room_id", ""))
     if wok is None:
         return RoomWOKOverlay(room_id=room_id)
-    offset = tuple(getattr(room, "position", (0.0, 0.0, 0.0)))
+    offset = tuple(offset if offset is not None else getattr(room, "position", (0.0, 0.0, 0.0)))
     world = _world_vertices(wok, offset)
     known_surfaces = _surface_names()
     walkable = _walkable_ids()
@@ -404,6 +436,8 @@ def _seam_report(
     target_wok: Any,
     *,
     tolerance: float,
+    source_offset: tuple[float, float, float] | None = None,
+    target_offset: tuple[float, float, float] | None = None,
 ) -> WOKSeamReport:
     source_id = _normalise_resref(getattr(source, "room_id", ""))
     target_id = _normalise_resref(getattr(target, "room_id", ""))
@@ -415,8 +449,14 @@ def _seam_report(
             message="One or both connected rooms have no WOK loaded.",
             code="missing_wok",
         )
-    source_points = _boundary_midpoints(source_wok, tuple(getattr(source, "position", (0.0, 0.0, 0.0))))
-    target_points = _boundary_midpoints(target_wok, tuple(getattr(target, "position", (0.0, 0.0, 0.0))))
+    source_points = _boundary_midpoints(
+        source_wok,
+        tuple(source_offset if source_offset is not None else getattr(source, "position", (0.0, 0.0, 0.0))),
+    )
+    target_points = _boundary_midpoints(
+        target_wok,
+        tuple(target_offset if target_offset is not None else getattr(target, "position", (0.0, 0.0, 0.0))),
+    )
     if not source_points or not target_points:
         return WOKSeamReport(
             source_room=source_id,
@@ -445,11 +485,46 @@ def _seam_report(
     )
 
 
+def _seam_room_pairs(module_like: Any, graph: Any) -> tuple[tuple[str, str], ...]:
+    """Return physical WOK joins, falling back to legacy VIS adjacency.
+
+    VIS answers which rooms may be rendered together; it does not mean every
+    visible room shares a physical boundary. Authored modules expose the
+    reciprocal portal pairs compiled into their WOK transition edges, so seam
+    validation must prefer those pairs and avoid false gaps to merely visible
+    rooms.
+    """
+
+    module = _module_from_input(module_like)
+    explicit = tuple(getattr(module, "walkmesh_connection_pairs", ()) or ())
+    pairs: list[tuple[str, str]] = []
+    for row in explicit:
+        if isinstance(row, dict):
+            source = _normalise_resref(row.get("source_room_resref") or row.get("source"))
+            target = _normalise_resref(row.get("target_room_resref") or row.get("target"))
+        else:
+            values = tuple(row or ())
+            source = _normalise_resref(values[0] if len(values) > 0 else "")
+            target = _normalise_resref(values[1] if len(values) > 1 else "")
+        if source and target and source != target:
+            pairs.append((source, target))
+    if pairs:
+        return tuple(pairs)
+    return tuple(
+        (
+            _normalise_resref(getattr(edge, "source", "")),
+            _normalise_resref(getattr(edge, "target", "")),
+        )
+        for edge in tuple(getattr(graph, "visibility_edges", ()) or ())
+    )
+
+
 def validate_area_woks(
     module_like: Any,
     *,
     seam_tolerance: float = 0.25,
     winding_epsilon: float = 1e-6,
+    visual_only_room_resrefs: tuple[str, ...] = (),
 ) -> AreaWOKIntegrationReport:
     """Validate WOK coverage and seam readiness for a Map Builder area."""
 
@@ -469,15 +544,27 @@ def validate_area_woks(
             code="no_rooms",
         )
 
+    module_metadata = dict(getattr(module_like, "metadata", {}) or {})
+    visual_only_rooms = {
+        _normalise_resref(value)
+        for value in tuple(
+            visual_only_room_resrefs
+            or getattr(module_like, "visual_only_room_resrefs", ())
+            or module_metadata.get("visual_only_room_resrefs", ())
+            or ()
+        )
+        if _normalise_resref(value)
+    }
     room_by_id = {_normalise_resref(getattr(room, "room_id", "")): room for room in graph.rooms}
     summaries: list[RoomWOKSummary] = []
     overlays: list[RoomWOKOverlay] = []
     for room in graph.rooms:
         room_id = _normalise_resref(getattr(room, "room_id", ""))
         wok = _wok_for_room(module_like, room_id)
-        summary = _room_summary(room, wok, winding_epsilon=winding_epsilon)
+        world_offset = _wok_world_offset(module_like, room)
+        summary = _room_summary(room, wok, winding_epsilon=winding_epsilon, offset=world_offset)
         summaries.append(summary)
-        overlays.append(_room_overlay(room, wok, winding_epsilon=winding_epsilon))
+        overlays.append(_room_overlay(room, wok, winding_epsilon=winding_epsilon, offset=world_offset))
         if not summary.has_wok:
             issues.append(
                 AreaWOKIssue(
@@ -488,7 +575,7 @@ def validate_area_woks(
                 )
             )
             continue
-        if summary.walkable_face_count == 0:
+        if summary.walkable_face_count == 0 and room_id not in visual_only_rooms:
             issues.append(
                 AreaWOKIssue(
                     severity="error",
@@ -530,15 +617,15 @@ def validate_area_woks(
 
     seams: list[WOKSeamReport] = []
     seen_pairs: set[tuple[str, str]] = set()
-    for edge in list(getattr(graph, "visibility_edges", []) or []):
-        source_id = _normalise_resref(getattr(edge, "source", ""))
-        target_id = _normalise_resref(getattr(edge, "target", ""))
+    for source_id, target_id in _seam_room_pairs(module_like, graph):
         if not source_id or not target_id:
             continue
         pair = tuple(sorted((source_id, target_id)))
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
+        if source_id in visual_only_rooms or target_id in visual_only_rooms:
+            continue
         source_room = room_by_id.get(source_id)
         target_room = room_by_id.get(target_id)
         if source_room is None or target_room is None:
@@ -549,6 +636,8 @@ def validate_area_woks(
             _wok_for_room(module_like, source_id),
             _wok_for_room(module_like, target_id),
             tolerance=seam_tolerance,
+            source_offset=_wok_world_offset(module_like, source_room),
+            target_offset=_wok_world_offset(module_like, target_room),
         )
         seams.append(report)
         if report.code == "seam_gap":

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .authored_imported_mesh import authored_room_uses_unresolved_stock_geometry
+from .authored_module_metadata import authored_area_metadata
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, compile_authored_room_spec
 from .authored_module_world_lighting import authored_world_lighting_settings
 from .authored_room_geometry import PrimitiveMesh
@@ -335,8 +336,35 @@ def _world_lighting_preview_state(project: AuthoredModuleProject) -> dict[str, o
     sun_ambient = _preview_rgb(settings.get("sun_ambient"), (64, 64, 64))
     sun_diffuse = _preview_rgb(settings.get("sun_diffuse"), (255, 255, 255))
     dynamic_ambient = _preview_rgb(settings.get("dynamic_ambient"), sun_ambient)
+    area = authored_area_metadata(project.metadata, None)
     dynamic_ambient_rgb = tuple(float(channel) / 255.0 for channel in dynamic_ambient)
     diffuse_headroom = max(0.0, 1.0 - max(dynamic_ambient_rgb))
+    # Read the persisted ARE field directly as well as the normalized helper.
+    # This keeps a just-applied kit preset visible even when a caller still
+    # holds an earlier world-lighting settings cache for the project.
+    fog_enabled = bool(getattr(area, "sun_fog_on", settings.get("fog_enabled")))
+    fog_color = _preview_rgb(getattr(area, "fog_color", settings.get("fog_color")), (0, 0, 0))
+    fog_near = max(0.0, float(getattr(area, "fog_near", settings.get("fog_near", 0.0)) or 0.0))
+    fog_far = max(fog_near, float(getattr(area, "fog_far", settings.get("fog_far", 0.0)) or 0.0))
+    # A 70 m retail exterior range is appropriate in-game but almost invisible
+    # in a compact Map Studio view.  Keep the ARE values verbatim for export,
+    # while its preview lens shortens only the displayed range so artists can
+    # actually read the atmosphere before game testing.
+    fog_preview_far = max(fog_near + 0.001, min(fog_far, fog_near + (fog_far - fog_near) * 0.55))
+    fog_preview_color = tuple(float(channel) / 255.0 for channel in fog_color)
+    area_payload = dict(getattr(project.metadata, "metadata", {}) or {}).get("area") or {}
+    shadowlands_mist = str(dict(area_payload).get("environment_style_preset") or "").strip().lower() == "architecture:k1_shadowlands"
+    if shadowlands_mist:
+        # The raw Shadowlands fog color is intentionally near-black in the
+        # ARE, where it mixes over a full 70 m exterior.  A compact editor
+        # clearing needs a shorter lens and a small cool lift to read as mist
+        # rather than as unlit terrain.  This is preview-only; the ARE still
+        # serializes the measured raw color/range unchanged.
+        fog_preview_far = max(fog_near + 0.001, min(fog_far, fog_near + (fog_far - fog_near) * 0.30))
+        fog_preview_color = (0.20, 0.24, 0.27)
+    grass_texture = str(getattr(area, "grass_texture", "") or "").strip().lower()
+    grass_density = max(0.0, float(getattr(area, "grass_density", 0.0) or 0.0))
+    grass_quad_size = max(0.0, float(getattr(area, "grass_quad_size", 0.0) or 0.0))
     return {
         "schema": "ghostrigger.map_studio_world_lighting_preview.v1",
         "profile": str(settings.get("profile") or "standard"),
@@ -354,10 +382,141 @@ def _world_lighting_preview_state(project: AuthoredModuleProject) -> dict[str, o
         "sun_direction": [0.0, 0.0, -1.0],
         "preview_scope": "non_lightmapped_scene_surfaces",
         "preserves_baked_lightmaps": True,
-        "fog_previewed": False,
+        # These remain renderer-preview approximations—the ARE stays the
+        # authoritative export—but a Map Studio exterior must no longer look
+        # like bare mud until the module is launched in the game.
+        "fog_previewed": fog_enabled,
+        "fog_enabled": fog_enabled,
+        "fog_color_rgb": [round(float(channel) / 255.0, 7) for channel in fog_color],
+        "fog_preview_color_rgb": [round(float(channel), 7) for channel in fog_preview_color],
+        "fog_near": fog_near,
+        "fog_far": fog_far,
+        "fog_preview_near": fog_near,
+        "fog_preview_far": fog_preview_far,
+        "fog_preview_calibration": "shadowlands_mist_lens" if shadowlands_mist else "compact_map_studio_view",
+        "grass_previewed": bool(grass_texture and grass_density > 0.0 and grass_quad_size > 0.0),
+        "grass_texture": grass_texture,
+        "grass_density": grass_density,
+        "grass_quad_size": grass_quad_size,
         "sun_shadows_previewed": False,
         "preview_only": True,
     }
+
+
+def _preview_hash(value: int) -> float:
+    """Return a deterministic pseudo-random value without scene RNG state."""
+
+    value = (int(value) ^ 0x9E3779B9) & 0xFFFFFFFF
+    value = (value ^ (value >> 16)) * 0x85EBCA6B & 0xFFFFFFFF
+    value = (value ^ (value >> 13)) * 0xC2B2AE35 & 0xFFFFFFFF
+    return float((value ^ (value >> 16)) & 0xFFFFFFFF) / float(0xFFFFFFFF)
+
+
+def _shadowlands_grass_preview_mesh(
+    geometry: Any,
+    *,
+    room_resref: str,
+    state: dict[str, object],
+) -> PrimitiveMesh | None:
+    """Generate a lightweight, non-exporting grass-card preview over the WOK.
+
+    ``lka_grass`` is an Odyssey ARE grass field, not a regular TGA/TPC texture
+    that can be placed on an isolated model card.  Reusing it as a diffuser is
+    what produces white shards.  The editor therefore previews the ARE field
+    as sparse crossed blade clusters on walkable WOK triangles.  Export keeps
+    the retail ARE values verbatim; this mesh exists only in the live authoring
+    model and is deliberately never serialized into the module.
+    """
+
+    if not bool(state.get("grass_previewed")):
+        return None
+    wok = getattr(geometry, "wok", None)
+    vertices_source = tuple(getattr(wok, "verts", ()) or ())
+    faces_source = tuple(getattr(wok, "faces", ()) or ())
+    if len(vertices_source) < 3 or not faces_source:
+        return None
+    try:
+        from .module_format import WALKABLE_IDS
+    except ImportError:
+        from core.modules.module_format import WALKABLE_IDS  # type: ignore
+
+    vertices: list[tuple[float, float, float]] = []
+    normals: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, int, int]] = []
+    uvs: list[tuple[float, float]] = []
+    quad_size = max(0.45, min(1.20, float(state.get("grass_quad_size", 0.8) or 0.8)))
+    # Retail density is a grass-system setting, not a blades-per-square-metre
+    # value.  This bounded conversion gives a readable authoring preview while
+    # keeping sculpting/placement responsive on large WOKs.
+    density_scale = max(0.16, min(0.55, float(state.get("grass_density", 5.0) or 5.0) * 0.07))
+
+    def append_blade(x: float, y: float, z: float, angle: float, height: float, width: float) -> None:
+        dx = math.cos(angle) * width
+        dy = math.sin(angle) * width
+        # Give the tip a slight lean so every cluster has the loose, natural
+        # silhouette of the K1 grass field instead of vertical pickets.
+        tip_x = x + math.cos(angle + 0.85) * width * 0.42
+        tip_y = y + math.sin(angle + 0.85) * width * 0.42
+        start = len(vertices)
+        triangle = ((x - dx, y - dy, z), (x + dx, y + dy, z), (tip_x, tip_y, z + height))
+        vertices.extend(triangle)
+        normals.extend(((0.0, 0.0, 1.0),) * 3)
+        uvs.extend(((0.0, 0.0), (1.0, 0.0), (0.5, 1.0)))
+        # Double-sided blade cards: Map Studio retains back-face culling for
+        # KOTOR winding, so grass needs both windings to read from any camera.
+        faces.extend(((start, start + 1, start + 2), (start + 2, start + 1, start)))
+
+    room_seed = sum((index + 1) * ord(character) for index, character in enumerate(room_resref))
+    for face_index, face in enumerate(faces_source):
+        if int(getattr(face, "surface", 0) or 0) not in WALKABLE_IDS:
+            continue
+        try:
+            a = tuple(float(value) for value in vertices_source[int(face.v1)][:3])
+            b = tuple(float(value) for value in vertices_source[int(face.v2)][:3])
+            c = tuple(float(value) for value in vertices_source[int(face.v3)][:3])
+        except (AttributeError, IndexError, TypeError, ValueError):
+            continue
+        area = abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])) * 0.5
+        cluster_count = max(1, min(72, int(math.ceil(area * density_scale))))
+        for cluster_index in range(cluster_count):
+            seed = room_seed + face_index * 4099 + cluster_index * 37
+            root_u = math.sqrt(_preview_hash(seed))
+            root_v = _preview_hash(seed + 1)
+            wa = 1.0 - root_u
+            wb = root_u * (1.0 - root_v)
+            wc = root_u * root_v
+            x = a[0] * wa + b[0] * wb + c[0] * wc
+            y = a[1] * wa + b[1] * wb + c[1] * wc
+            z = a[2] * wa + b[2] * wb + c[2] * wc + 0.018
+            for blade_index in range(3):
+                variance = _preview_hash(seed + 7 + blade_index * 5)
+                append_blade(
+                    x,
+                    y,
+                    z,
+                    angle=(variance + blade_index / 3.0) * math.tau,
+                    height=quad_size * (0.58 + _preview_hash(seed + 13 + blade_index) * 0.58),
+                    width=quad_size * (0.032 + _preview_hash(seed + 17 + blade_index) * 0.026),
+                )
+    if not faces:
+        return None
+    return PrimitiveMesh(
+        name=f"{room_resref}_shadowlands_grass_preview",
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+        normals=tuple(normals),
+        uvs=tuple(uvs),
+        diffuse=(0.12, 0.18, 0.095),
+        ambient=(0.32, 0.38, 0.22),
+        metadata={
+            "primitive": "map_studio_shadowlands_grass_preview",
+            "editor_preview_only": True,
+            "source_are_grass_texture": str(state.get("grass_texture") or "lka_grass"),
+            "source_are_grass_density": float(state.get("grass_density", 0.0) or 0.0),
+            "blade_cluster_count": len(faces) // 6,
+            "selfillum": (0.055, 0.075, 0.035),
+        },
+    )
 
 
 def _world_lighting_preview_nodes(md: Any, root: Any, state: dict[str, object]) -> tuple[Any, Any]:
@@ -477,6 +636,23 @@ def build_authored_module_preview_model(
             setattr(mesh_node, "_gr_map_studio_backdrop", surface_backdrop)
             room_node.children.append(mesh_node)
             mesh_count += 1
+        grass_preview = _shadowlands_grass_preview_mesh(
+            geometry,
+            room_resref=compiled_resref,
+            state=world_lighting_preview,
+        )
+        if grass_preview is not None:
+            grass_node = _mesh_node(
+                md,
+                grass_preview,
+                room_node,
+                room_resref=compiled_resref,
+                role="shadowlands_grass_preview",
+            )
+            grass_node.selfillum = tuple(grass_preview.metadata["selfillum"])
+            setattr(grass_node, "_gr_map_studio_editor_preview_only", True)
+            room_node.children.append(grass_node)
+            mesh_count += 1
         for light_index, light_row in enumerate(_source_room_light_rows(room)):
             try:
                 room_node.children.append(
@@ -532,7 +708,7 @@ def build_authored_module_preview_model(
         model_type=int(md.ModelClassification.EFFECT),
         root_node=root,
     )
-    model.disable_fog = True
+    model.disable_fog = not bool(world_lighting_preview.get("fog_previewed"))
     try:
         model.compute_all_tangents()
     except Exception:

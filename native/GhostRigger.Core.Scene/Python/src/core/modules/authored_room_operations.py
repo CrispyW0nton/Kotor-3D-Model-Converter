@@ -4497,6 +4497,75 @@ def _bridge_floor_plan_points(
     raise ValueError(f"Bridge edges do not form one valid convex connector room.{detail}")
 
 
+def _bridge_opening_on_edge(
+    primitive: FloorPlanRoomPrimitive,
+    edge_index: int,
+) -> FloorPlanWallOpening | None:
+    """Return the first authored door aperture on one bridge edge."""
+
+    edge = int(edge_index)
+    for opening in tuple(primitive.openings or ()):
+        if int(opening.edge_index) != edge:
+            continue
+        metadata = dict(opening.metadata or {})
+        kind = str(metadata.get("opening_kind") or metadata.get("pascal_graph_node") or "").strip().lower()
+        if kind == "door" or str(opening.name or "").strip().lower().startswith("door_"):
+            return opening
+    return None
+
+
+def _centered_bridge_edge(
+    edge: tuple[tuple[float, float], tuple[float, float]],
+    *,
+    center_fraction: float,
+    width: float,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return the wall-local span occupied by one styled connector."""
+
+    start, end = edge
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = math.hypot(dx, dy)
+    if length <= 1.0e-8:
+        raise ValueError("Floor-plan bridge cannot use a zero-length room edge.")
+    span = min(max(0.10, float(width)), max(0.10, length - 0.04))
+    center = max(span * 0.5 / length, min(1.0 - span * 0.5 / length, float(center_fraction)))
+    cx, cy = start[0] + dx * center, start[1] + dy * center
+    tx, ty = dx / length, dy / length
+    half = span * 0.5
+    return ((cx - tx * half, cy - ty * half), (cx + tx * half, cy + ty * half))
+
+
+def _matching_bridge_edge_index(
+    points: tuple[tuple[float, float], ...],
+    target: tuple[tuple[float, float], tuple[float, float]],
+) -> int:
+    """Find the connector edge coincident with one source-room threshold."""
+
+    best: tuple[float, int] | None = None
+    for index, start in enumerate(points):
+        end = points[(index + 1) % len(points)]
+        direct = math.dist(start, target[0]) + math.dist(end, target[1])
+        reverse = math.dist(start, target[1]) + math.dist(end, target[0])
+        score = min(direct, reverse)
+        if best is None or score < best[0]:
+            best = (score, index)
+    if best is None or best[0] > 0.02:
+        raise ValueError("The generated bridge could not recover its room-facing threshold edge.")
+    return best[1]
+
+
+def _floor_plan_opening_named(
+    project: AuthoredModuleProject,
+    room_resref: str,
+    edge_index: int,
+) -> FloorPlanWallOpening | None:
+    target = normalise_resref(room_resref)
+    room = next((row for row in project.rooms if row.normalised_resref() == target), None)
+    if room is None:
+        return None
+    return _bridge_opening_on_edge(_floor_plan_for_room(room), int(edge_index))
+
+
 def bridge_authored_floor_plan_edges(
     project: AuthoredModuleProject,
     *,
@@ -4519,6 +4588,31 @@ def bridge_authored_floor_plan_edges(
     world_z = _require_bridge_compatible_floor_plans(first_room, first_primitive, second_room, second_primitive)
     first_edge = _world_floor_plan_edge(first_room, first_primitive, int(first_edge_index))
     second_edge = _world_floor_plan_edge(second_room, second_primitive, int(second_edge_index))
+    first_profile = str(dict(first_primitive.metadata or {}).get("architecture_profile") or "").strip().lower()
+    second_profile = str(dict(second_primitive.metadata or {}).get("architecture_profile") or "").strip().lower()
+    if first_profile or second_profile:
+        if first_profile != second_profile:
+            raise ValueError("Styled floor-plan bridges require the same architecture kit on both rooms.")
+    door_spec: dict[str, Any] | None = None
+    if first_profile:
+        from .map_studio_pascal_building import pascal_architecture_door_spec
+
+        door_spec = pascal_architecture_door_spec(project.game, first_profile)
+    first_existing = _bridge_opening_on_edge(first_primitive, int(first_edge_index))
+    second_existing = _bridge_opening_on_edge(second_primitive, int(second_edge_index))
+    if door_spec is not None:
+        aperture_width = float(door_spec["opening_width_m"])
+        frame_width = max(aperture_width + 0.30, float(door_spec.get("frame_width_m", aperture_width + 0.30)))
+        first_edge = _centered_bridge_edge(
+            first_edge,
+            center_fraction=float(first_existing.center_fraction) if first_existing is not None else 0.5,
+            width=frame_width,
+        )
+        second_edge = _centered_bridge_edge(
+            second_edge,
+            center_fraction=float(second_existing.center_fraction) if second_existing is not None else 0.5,
+            width=frame_width,
+        )
     points, bridge_result = _bridge_floor_plan_points(first_edge, second_edge)
     audit = audit_component_edit_result(bridge_result, component_kind="floor_plan_edge", affects_walkmesh=True)
     target_resref = _unique_bridge_resref(project, first_room.room_resref, second_room.room_resref, result_room_resref)
@@ -4562,7 +4656,121 @@ def bridge_authored_floor_plan_edges(
     rooms = tuple(project.rooms or ()) + (connector_room,)
     visible = _all_room_names(rooms)
     rooms = tuple(replace(room, visible_rooms=visible) for room in rooms)
-    return _replace_rooms(project, rooms, operation="bridge_edges")
+    updated = _replace_rooms(project, rooms, operation="bridge_edges")
+
+    if door_spec is not None:
+        # The authored rooms own the two physical DOR_LKO04 placements.  The
+        # bridge owns matching wall apertures but deliberately does not spawn
+        # duplicate doors at the same thresholds.
+        from .authored_module_walkmesh import (
+            compile_authored_room_connection_walkmeshes,
+            upsert_authored_walkmesh_room_connection,
+        )
+        from .map_studio_pascal_building import set_pascal_building_opening
+
+        opening_width = float(door_spec["opening_width_m"])
+        opening_height = float(door_spec["opening_height_m"])
+        if first_existing is None:
+            updated = set_pascal_building_opening(
+                updated,
+                room_resref=first_room.room_resref,
+                edge_index=int(first_edge_index),
+                opening_kind="door",
+                center_fraction=0.5,
+                width=opening_width,
+                height=opening_height,
+                bottom=0.0,
+                connection_metadata={"bridge_room_resref": target_resref, "bridge_end": "first"},
+            )
+        if second_existing is None:
+            updated = set_pascal_building_opening(
+                updated,
+                room_resref=second_room.room_resref,
+                edge_index=int(second_edge_index),
+                opening_kind="door",
+                center_fraction=0.5,
+                width=opening_width,
+                height=opening_height,
+                bottom=0.0,
+                connection_metadata={"bridge_room_resref": target_resref, "bridge_end": "second"},
+            )
+
+        first_opening = _floor_plan_opening_named(updated, first_room.room_resref, int(first_edge_index))
+        second_opening = _floor_plan_opening_named(updated, second_room.room_resref, int(second_edge_index))
+        if first_opening is None or second_opening is None:
+            raise ValueError("The styled bridge could not create both physical room doors.")
+
+        first_connector_edge = _matching_bridge_edge_index(points, first_edge)
+        second_connector_edge = _matching_bridge_edge_index(points, second_edge)
+        updated = set_authored_floor_plan_wall_opening(
+            updated,
+            room_resref=target_resref,
+            name="bridge_door_first",
+            edge_index=first_connector_edge,
+            center_fraction=0.5,
+            width=opening_width,
+            height=opening_height,
+            bottom=0.0,
+            metadata={
+                "opening_kind": "door",
+                "pascal_graph_node": "door",
+                "bridge_room_resref": target_resref,
+                "bridge_end": "first",
+                "door_template_resref": str(door_spec["template_resref"]),
+                "door_model_resref": str(door_spec["model_resref"]),
+                "door_appearance_id": int(door_spec["appearance_id"]),
+                "door_owned_by_adjacent_room": True,
+            },
+        )
+        updated = set_authored_floor_plan_wall_opening(
+            updated,
+            room_resref=target_resref,
+            name="bridge_door_second",
+            edge_index=second_connector_edge,
+            center_fraction=0.5,
+            width=opening_width,
+            height=opening_height,
+            bottom=0.0,
+            metadata={
+                "opening_kind": "door",
+                "pascal_graph_node": "door",
+                "bridge_room_resref": target_resref,
+                "bridge_end": "second",
+                "door_template_resref": str(door_spec["template_resref"]),
+                "door_model_resref": str(door_spec["model_resref"]),
+                "door_appearance_id": int(door_spec["appearance_id"]),
+                "door_owned_by_adjacent_room": True,
+            },
+        )
+        updated = upsert_authored_walkmesh_room_connection(
+            updated,
+            source_room_resref=first_room.room_resref,
+            source_hook_name=str(first_opening.name),
+            target_room_resref=target_resref,
+            target_hook_name="bridge_door_first",
+            connection_source="map_studio_floor_plan_bridge",
+        )
+        updated = upsert_authored_walkmesh_room_connection(
+            updated,
+            source_room_resref=target_resref,
+            source_hook_name="bridge_door_second",
+            target_room_resref=second_room.room_resref,
+            target_hook_name=str(second_opening.name),
+            connection_source="map_studio_floor_plan_bridge",
+        )
+        build = compile_authored_room_connection_walkmeshes(updated)
+        if not build.ready:
+            raise ValueError(" ".join(build.blocking_issues))
+        extra = dict(updated.extra or {})
+        extra["last_walkmesh_build"] = {
+            "operation": "bridge_authored_floor_plan_edges",
+            "auto_generated": True,
+            "portal_count": len(build.portals),
+            "midpoint_gaps_m": [float(portal.midpoint_gap) for portal in build.portals],
+            "ready": True,
+        }
+        updated = replace(updated, extra=extra)
+    return updated
 
 
 def set_authored_floor_plan_extrusion_settings(
@@ -4954,6 +5162,7 @@ def set_authored_floor_plan_wall_opening(
     width: float = 1.5,
     height: float = 2.1,
     bottom: float = 0.0,
+    metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleProject:
     """Add or replace one wall opening on a floor-plan room edge."""
 
@@ -4981,6 +5190,7 @@ def set_authored_floor_plan_wall_opening(
         metadata={
             "source": "map_studio:wall_opening",
             "operation": "set_wall_opening",
+            **dict(metadata or {}),
         },
     )
     # Opening identity is name-based. Multiple non-overlapping doors/windows

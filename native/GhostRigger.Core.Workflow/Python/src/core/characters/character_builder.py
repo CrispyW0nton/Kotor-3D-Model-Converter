@@ -539,6 +539,8 @@ def _ensure_template_rig_root_model(
         "radius",
         "mdl_path",
         "mdx_path",
+        "super_root_node_name",
+        "preserve_native_supernode_numbers",
     ):
         if hasattr(result_model, attr):
             try:

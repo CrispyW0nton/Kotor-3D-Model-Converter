@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.modules.map_studio_environment_kits import (
     ENVIRONMENT_KIT_MIME_TYPE,
+    environment_kit_builder_style_label,
     environment_kit_drag_payload,
 )
 from src.gui.panels.module_editor.placement_tab import (
@@ -96,8 +97,9 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         root.setSpacing(5)
 
         guide = QtWidgets.QLabel(
-            "Vanilla Environment Kits — choose a module style, then drag a corridor, corner, junction, "
-            "chamber, or exterior tile into the viewport. Compatible door sockets magnet-snap before release.",
+            "Vanilla Rooms & Connectors — the shelf follows the Building Style above. Drag a complete stock "
+            "room, corridor, corner, junction, or dressing piece into the viewport. Doorway sockets magnet-snap; "
+            "wall controls, lights, and observation ports align to the nearest authored wall.",
             self,
         )
         guide.setObjectName("mapStudioEnvironmentKitGuideLabel")
@@ -128,7 +130,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self.search_edit = QtWidgets.QLineEdit(self)
         self.search_edit.setObjectName("mapStudioEnvironmentKitSearchLineEdit")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.setPlaceholderText("Search corridor, corner, junction, chamber, module…")
+        self.search_edit.setPlaceholderText("Search corridor, console, wall light, observation port, module…")
         second_filters.addWidget(self.class_combo)
         second_filters.addWidget(self.search_edit, 1)
         root.addLayout(second_filters)
@@ -142,7 +144,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self.asset_list.setObjectName("mapStudioEnvironmentKitAssetListView")
         self.asset_list.setAccessibleName("Vanilla environment kit browser")
         self.asset_list.setAccessibleDescription(
-            "Search KOTOR room tiles and drag a thumbnail into the viewport to surface-place or doorway-snap it."
+            "Search KOTOR room tiles and dressing assets, then drag a thumbnail into the viewport to place or snap it."
         )
         self.asset_list.setModel(self._proxy)
         self.asset_list.setMinimumHeight(210)
@@ -245,6 +247,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
 
         wanted_kind = str(self.kind_combo.currentData() or "").lower()
         collections: dict[str, str] = {}
+        styles: set[str] = set()
         for entry in self._entries:
             kind = str(_value(entry, "environment_kind") or "interior").lower()
             if wanted_kind and kind != wanted_kind:
@@ -252,12 +255,23 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             collection_id = str(_value(entry, "collection_id") or "")
             if collection_id:
                 collections[collection_id] = str(_value(entry, "collection_label") or collection_id)
+            style_id = str(_value(entry, "building_style_id") or "").strip().lower()
+            if style_id.startswith("architecture:"):
+                styles.add(style_id)
+        previous = str(self.collection_combo.currentData() or "")
         blocked = self.collection_combo.blockSignals(True)
         self.collection_combo.clear()
-        self.collection_combo.addItem("Choose a module style…", "")
+        self.collection_combo.addItem("Choose a building style…", "")
+        for style_id in sorted(styles, key=environment_kit_builder_style_label):
+            self.collection_combo.addItem(environment_kit_builder_style_label(style_id), f"style:{style_id}")
+        if styles:
+            self.collection_combo.insertSeparator(self.collection_combo.count())
         for key, label in sorted(collections.items(), key=lambda item: item[1].lower()):
             self.collection_combo.addItem(label, key)
-        self.collection_combo.setCurrentIndex(1 if self.collection_combo.count() > 1 else 0)
+        restored = self.collection_combo.findData(previous)
+        self.collection_combo.setCurrentIndex(
+            restored if previous and restored >= 0 else (1 if self.collection_combo.count() > 1 else 0)
+        )
         self.collection_combo.blockSignals(blocked)
         self._collection_changed(self.collection_combo.currentIndex())
 
@@ -266,6 +280,29 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self._rebuild_asset_model(collection_id)
         if collection_id:
             self.collectionStyleChanged.emit(collection_id, str(self.kind_combo.currentData() or ""))
+
+    def select_building_style(self, style_id: str, environment_kind: str = "") -> bool:
+        """Follow the Pascal builder style while retaining per-module narrowing."""
+
+        wanted = str(style_id or "").strip().lower()
+        if wanted.startswith("kit:"):
+            return self.select_collection(wanted[4:], environment_kind)
+        if not wanted.startswith("architecture:"):
+            return False
+        kind = str(environment_kind or "").strip().lower()
+        if kind:
+            kind_index = self.kind_combo.findData(kind)
+            if kind_index >= 0 and kind_index != self.kind_combo.currentIndex():
+                self.kind_combo.blockSignals(True)
+                self.kind_combo.setCurrentIndex(kind_index)
+                self.kind_combo.blockSignals(False)
+                self._populate_collection_choices()
+        target = f"style:{wanted}"
+        index = self.collection_combo.findData(target)
+        if index < 0:
+            return False
+        self.collection_combo.setCurrentIndex(index)
+        return True
 
     def select_collection(self, collection_id: str, environment_kind: str = "") -> bool:
         wanted = str(collection_id or "").strip().lower()
@@ -290,33 +327,52 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
 
         self._model.clear()
         classes: set[str] = set()
+        style_id = collection_id[6:] if str(collection_id).startswith("style:") else ""
         for entry in self._entries:
-            if not collection_id or str(_value(entry, "collection_id") or "") != collection_id:
+            entry_collection = str(_value(entry, "collection_id") or "")
+            entry_style = str(_value(entry, "building_style_id") or "").strip().lower()
+            if style_id:
+                if entry_style != style_id:
+                    continue
+            elif not collection_id or entry_collection != collection_id:
                 continue
             piece_id = str(_value(entry, "piece_id") or "")
-            label = str(_value(entry, "label") or piece_id or "Environment piece")
-            collection_id = str(_value(entry, "collection_id") or "")
-            collection_label = str(_value(entry, "collection_label") or collection_id)
+            raw_label = str(_value(entry, "label") or piece_id or "Environment piece")
+            room_resref = str(_value(entry, "room_resref") or "")
             class_id = str(_value(entry, "class_id") or "room_tile:chamber")
+            piece_type = class_id.split(":")[-1].replace("_", " ").title()
+            label = (
+                f"{piece_type} · {room_resref}"
+                if str(_value(entry, "role") or "") in {"room_tile", "exterior_tile"}
+                else raw_label
+            )
+            entry_collection = str(_value(entry, "collection_id") or "")
+            collection_label = str(_value(entry, "collection_label") or entry_collection)
             kind = str(_value(entry, "environment_kind") or "interior").lower()
             classes.add(class_id)
             tags = " ".join(str(value) for value in tuple(_value(entry, "tags", ()) or ()))
             item = QtGui.QStandardItem(label)
             item.setEditable(False)
             item.setData(entry, _PLACEMENT_ENTRY_ROLE)
-            item.setData(collection_id, _ENV_COLLECTION_ROLE)
+            item.setData(entry_collection, _ENV_COLLECTION_ROLE)
             item.setData(class_id, _ENV_CLASS_ROLE)
             item.setData(kind, _ENV_KIND_ROLE)
             item.setData(
-                " ".join((label, collection_label, class_id, tags, str(_value(entry, "room_resref")))).lower(),
+                " ".join((label, raw_label, collection_label, class_id, tags, room_resref)).lower(),
                 _ENV_SEARCH_ROLE,
             )
             item.setData("placeholder", _PLACEMENT_THUMBNAIL_STATE_ROLE)
             item.setIcon(self._placeholder(class_id))
             magnet_count = int(_value(entry, "magnet_count", 0) or 0)
+            anchor_mode = str(_value(entry, "anchor_mode", "floor") or "floor").lower()
+            placement_hint = (
+                "Drop on a room wall; it aligns to the nearest wall edge."
+                if anchor_mode == "wall"
+                else "Drag onto a visible surface; green means a compatible magnet snap."
+            )
             item.setToolTip(
                 f"{collection_label}\n{class_id.replace('_', ' ')} · {magnet_count} doorway magnet(s)\n"
-                "Drag onto a visible surface; green means a compatible magnet snap."
+                + placement_hint
             )
             self._model.appendRow(item)
 
@@ -326,14 +382,14 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         for class_id in sorted(classes):
             self.class_combo.addItem(class_id.split(":")[-1].replace("_", " ").title(), class_id)
         self.class_combo.blockSignals(blocked)
-        self._proxy.set_collection(collection_id)
+        self._proxy.set_collection("" if style_id else collection_id)
         self._proxy.set_piece_class("")
         if not collection_id:
             self.detail_label.setText("Choose one module style to load its typed construction pieces.")
         else:
             self.detail_label.setText(
-                f"{self.collection_combo.currentText()} · {self._model.rowCount():,} typed pieces. "
-                "Drag a card into the viewport."
+                f"{self.collection_combo.currentText()} · {self._model.rowCount():,} authentic room and dressing pieces. "
+                "Drag a card into the viewport; complete rooms keep their vanilla contours, textures, and door sockets."
             )
         self._queue_visible_thumbnails()
 
@@ -344,8 +400,12 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self.detail_label.setText(
             f"{_value(entry, 'collection_label')} · "
             f"{str(_value(entry, 'class_id')).split(':')[-1].replace('_', ' ').title()} · "
-            f"{int(_value(entry, 'magnet_count', 0) or 0)} doorway magnet(s) · "
-            f"source {_value(entry, 'game')}:{_value(entry, 'module_resref')}/{_value(entry, 'room_resref')}. "
+            + (
+                "wall aligned · "
+                if str(_value(entry, "anchor_mode", "floor") or "floor").lower() == "wall"
+                else f"{int(_value(entry, 'magnet_count', 0) or 0)} doorway magnet(s) · "
+            )
+            + f"source {_value(entry, 'game')}:{_value(entry, 'module_resref')}/{_value(entry, 'room_resref')}. "
             "Drag the card into the viewport."
         )
         self.statusChanged.emit(self.detail_label.text())

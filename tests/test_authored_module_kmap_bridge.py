@@ -93,6 +93,26 @@ def test_t2640_kmap_bridge_builds_previewable_readiness_from_extra_section() -> 
     assert ("grdev01_room01", "mdl") in result.readiness.missing_runtime_resources
 
 
+def test_t2909_kmap_bridge_migrates_legacy_room_entry_to_module_area() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+
+    payload = _authored_payload()
+    payload["placements"]["entry_point"]["area_resref"] = "grdev01_room01"
+
+    project = authored_project_from_kmap_payload(payload)
+
+    assert project.placements.entry_point.area_resref == "grdev01"
+    assert project.placements.metadata["entry_room_resref"] == "grdev01_room01"
+    assert project.extra["entry_room_resref"] == "grdev01_room01"
+    assert project.extra["entry_area_migration"] == {
+        "source_area_resref": "grdev01_room01",
+        "runtime_area_resref": "grdev01",
+        "reason": "legacy_room_resref_in_module_entry_area",
+    }
+
+
 def test_t2640_kmap_bridge_promotes_complete_runtime_resources_to_export_candidate() -> None:
     _install_native_payload_paths()
 

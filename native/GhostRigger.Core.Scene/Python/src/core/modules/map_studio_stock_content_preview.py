@@ -740,6 +740,7 @@ def _flattened_mesh_nodes(
                 texture_names[0] = texture_override
             else:
                 texture_names = [texture_override]
+        source_alpha = getattr(node, "alpha", None)
         mesh_node = md.ModelNode(
             name=str(getattr(node, "name", "") or f"{group_resref}_{role}"),
             flags=int(md.NodeFlags.MESH),
@@ -755,8 +756,35 @@ def _flattened_mesh_nodes(
             has_lightmap=bool(getattr(node, "has_lightmap", False)),
             diffuse=tuple(float(v) for v in tuple(getattr(node, "diffuse", (0.8, 0.8, 0.8)))[:3]),
             ambient=tuple(float(v) for v in tuple(getattr(node, "ambient", (0.2, 0.2, 0.2)))[:3]),
-            alpha=float(getattr(node, "alpha", 1.0) or 1.0),
+            # Alpha 0 is meaningful Odyssey state, not a missing value. Door
+            # models such as DOR_LKO04 carry an untextured ``trans`` helper at
+            # alpha 0; coercing it through ``or 1.0`` turns that invisible
+            # helper into a large white fallback-texture panel.
+            alpha=float(1.0 if source_alpha is None else source_alpha),
         )
+        # Flattening changes only geometry space. Preserve the source material
+        # contract so doors, foliage, glass, glows, and other stock assets keep
+        # the same render classification as their original MDL nodes.
+        for material_attr in (
+            "specular",
+            "shininess",
+            "selfillum",
+            "transparency_hint",
+            "beaming",
+            "background_geometry",
+            "rotate_texture",
+            "animate_uv",
+            "uv_dir_x",
+            "uv_dir_y",
+            "uv_jitter",
+            "uv_jitter_speed",
+            "dirt_enabled",
+            "dirt_texture",
+            "dirt_coord_space",
+            "hide_in_holograms",
+        ):
+            if hasattr(node, material_attr):
+                setattr(mesh_node, material_attr, getattr(node, material_attr))
         uvs_lm = [tuple(float(v) for v in uv[:2]) for uv in tuple(getattr(node, "uvs_lm", ()) or ())]
         if len(uvs_lm) == len(baked_vertices):
             mesh_node.uvs_lm = uvs_lm

@@ -121,6 +121,60 @@ def _request(tmp_path: Path, target_mdl: Path, *, replace_existing: bool = True)
     )
 
 
+def test_full_writer_preserves_sparse_native_supernode_numbers() -> None:
+    """Character rebuilds must not collapse node-header +2 to DFS order."""
+
+    root = ModelNode(name="root", number=0)
+    headhook = ModelNode(name="headhook", number=27, parent=root)
+    root.children = [headhook]
+    anim_root = ModelNode(name="root", number=0)
+    anim_headhook = ModelNode(name="headhook", number=27, parent=anim_root)
+    anim_root.children = [anim_headhook]
+    model = KotorModel(
+        name="sparse_supernode_probe",
+        root_node=root,
+        animations=[
+            Animation(
+                name="pause1",
+                length=1.0,
+                anim_root="root",
+                nodes=[anim_root, anim_headhook],
+            )
+        ],
+        game_version=GameVersion.K2,
+    )
+    model.preserve_native_supernode_numbers = True
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    geometry_root_rel = struct.unpack_from("<I", mdl_bytes, base + 40)[0]
+    geometry_root_abs = base + geometry_root_rel
+    geometry_children_rel = struct.unpack_from(
+        "<I", mdl_bytes, geometry_root_abs + 44
+    )[0]
+    geometry_child_rel = struct.unpack_from(
+        "<I", mdl_bytes, base + geometry_children_rel
+    )[0]
+    geometry_child_abs = base + geometry_child_rel
+
+    animation_table_rel = struct.unpack_from("<I", mdl_bytes, base + 88)[0]
+    animation_rel = struct.unpack_from("<I", mdl_bytes, base + animation_table_rel)[0]
+    animation_abs = base + animation_rel
+    animation_root_rel = struct.unpack_from("<I", mdl_bytes, animation_abs + 40)[0]
+    animation_root_abs = base + animation_root_rel
+    animation_children_rel = struct.unpack_from(
+        "<I", mdl_bytes, animation_root_abs + 44
+    )[0]
+    animation_child_rel = struct.unpack_from(
+        "<I", mdl_bytes, base + animation_children_rel
+    )[0]
+    animation_child_abs = base + animation_child_rel
+
+    assert struct.unpack_from("<H", mdl_bytes, geometry_child_abs + 2)[0] == 27
+    assert struct.unpack_from("<H", mdl_bytes, animation_child_abs + 2)[0] == 27
+    assert headhook.clone_shallow().number == 27
+
+
 def _inject_with_animation(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

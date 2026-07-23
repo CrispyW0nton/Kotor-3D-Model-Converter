@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, replace
+import math
+from typing import Any, Mapping
 
 from .authored_imported_mesh import authored_room_uses_unresolved_stock_geometry
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec
 from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface
 from .module_format import WOKData, WOKFace
+
+
+_ROOM_CONNECTIONS_KEY = "walkmesh_room_connections"
 
 
 @dataclass(frozen=True)
@@ -31,6 +35,200 @@ class AuthoredWalkmeshSnapResult:
     surface_id: int = -1
     horizontal_distance: float = 0.0
     inside_face: bool = False
+
+
+@dataclass(frozen=True)
+class AuthoredWalkmeshPortal:
+    """One reciprocal room transition written onto two WOK perimeter edges."""
+
+    source_room_resref: str
+    target_room_resref: str
+    source_hook_name: str
+    target_hook_name: str
+    source_face_index: int
+    source_local_edge: int
+    target_face_index: int
+    target_local_edge: int
+    midpoint_gap: float
+    source_midpoint: tuple[float, float, float]
+    target_midpoint: tuple[float, float, float]
+
+
+@dataclass(frozen=True)
+class AuthoredWalkmeshConnectionBuild:
+    """Automatic WOK result for the current LEGO-style room assembly."""
+
+    room_woks: dict[str, WOKData]
+    portals: tuple[AuthoredWalkmeshPortal, ...] = ()
+    warnings: tuple[str, ...] = ()
+    blocking_issues: tuple[str, ...] = ()
+
+    @property
+    def ready(self) -> bool:
+        return not self.blocking_issues
+
+
+def upsert_authored_walkmesh_room_connection(
+    project: AuthoredModuleProject,
+    *,
+    source_room_resref: str,
+    source_hook_name: str,
+    target_room_resref: str,
+    target_hook_name: str,
+    connection_source: str = "map_studio_room_snap",
+) -> AuthoredModuleProject:
+    """Persist one unordered room seam without baking fragile LYT indices.
+
+    WOK transition values are LYT-room indices, so they are compiled from this
+    stable resref/hook record every time the project is previewed or exported.
+    """
+
+    from .authored_module_project import normalise_resref
+
+    source_room = normalise_resref(source_room_resref)
+    target_room = normalise_resref(target_room_resref)
+    source_hook = str(source_hook_name or "").strip()
+    target_hook = str(target_hook_name or "").strip()
+    if not source_room or not target_room or source_room == target_room:
+        raise ValueError("Walkmesh room connections require two different existing room resrefs.")
+    if not source_hook or not target_hook:
+        raise ValueError("Walkmesh room connections require a doorway hook on both rooms.")
+    room_names = {room.normalised_resref() for room in tuple(project.rooms or ())}
+    if source_room not in room_names or target_room not in room_names:
+        raise ValueError("Both walkmesh connection rooms must exist in the current authored module.")
+    canonical = tuple(sorted(((source_room, source_hook.lower()), (target_room, target_hook.lower()))))
+    rows: list[dict[str, Any]] = []
+    for raw in tuple(dict(project.extra or {}).get(_ROOM_CONNECTIONS_KEY) or ()):
+        row = dict(raw or {})
+        existing = tuple(
+            sorted(
+                (
+                    (str(row.get("source_room_resref") or "").strip().lower(), str(row.get("source_hook_name") or "").strip().lower()),
+                    (str(row.get("target_room_resref") or "").strip().lower(), str(row.get("target_hook_name") or "").strip().lower()),
+                )
+            )
+        )
+        if existing != canonical:
+            rows.append(row)
+    rows.append(
+        {
+            "source_room_resref": source_room,
+            "source_hook_name": source_hook,
+            "target_room_resref": target_room,
+            "target_hook_name": target_hook,
+            "connection_source": str(connection_source or "map_studio_room_snap"),
+            "auto_generate_walkmesh": True,
+        }
+    )
+    extra = dict(project.extra or {})
+    extra[_ROOM_CONNECTIONS_KEY] = rows
+    extra["walkmesh_generation_mode"] = "automatic_room_assembly"
+    return replace(project, extra=extra)
+
+
+def _clear_wok_transitions(wok: WOKData) -> WOKData:
+    faces = [
+        replace(face, trans1=-1, trans2=-1, trans3=-1)
+        for face in tuple(getattr(wok, "faces", ()) or ())
+    ]
+    return replace(wok, faces=faces, raw=None)
+
+
+def prepare_environment_kit_room_walkmesh(
+    primitive: Any,
+    *,
+    source_room_position: tuple[float, float, float],
+    magnets: tuple[Any, ...],
+) -> Any:
+    """Rebase a retail module-space WOK into reusable room-local kit space.
+
+    Original transition indices point into the source module's LYT and are
+    therefore invalid after reuse.  Their exact boundary edges are retained as
+    typed portal hints, then the indices are cleared so the current module can
+    compile fresh reciprocal transitions from stable room connections.
+    """
+
+    wok = getattr(primitive, "wok", None)
+    if wok is None:
+        return primitive
+    origin = tuple(float(value) for value in tuple(source_room_position or (0.0, 0.0, 0.0))[:3])
+    if len(origin) != 3 or not all(math.isfinite(value) for value in origin):
+        raise ValueError("Environment-kit source room position must be a finite XYZ value.")
+    local_wok = offset_wok_data(wok, (-origin[0], -origin[1], -origin[2]))
+    candidates: list[dict[str, Any]] = []
+    source_transition_count = 0
+    for face_index, face in enumerate(tuple(getattr(local_wok, "faces", ()) or ())):
+        if not is_walkable_walkmesh_surface(int(getattr(face, "surface", -1))):
+            continue
+        indices = (int(face.v1), int(face.v2), int(face.v3))
+        adjacency = (int(face.adj1), int(face.adj2), int(face.adj3))
+        transitions = (int(face.trans1), int(face.trans2), int(face.trans3))
+        for local_edge in range(3):
+            if adjacency[local_edge] >= 0:
+                continue
+            if transitions[local_edge] >= 0:
+                source_transition_count += 1
+            start = tuple(float(value) for value in local_wok.verts[indices[local_edge]][:3])
+            end = tuple(float(value) for value in local_wok.verts[indices[(local_edge + 1) % 3]][:3])
+            candidates.append(
+                {
+                    "face_index": face_index,
+                    "local_edge": local_edge,
+                    "start": start,
+                    "end": end,
+                    "midpoint": tuple((start[axis] + end[axis]) * 0.5 for axis in range(3)),
+                    "source_transition_target": transitions[local_edge],
+                }
+            )
+    portals: list[dict[str, Any]] = []
+    used: set[int] = set()
+    for magnet in tuple(magnets or ()):
+        magnet_id = str(getattr(magnet, "magnet_id", "") or "").strip()
+        hook = tuple(float(value) for value in tuple(getattr(magnet, "local_position", ()))[:3])
+        if not magnet_id or len(hook) != 3:
+            continue
+        choices = [
+            (math.dist(tuple(row["midpoint"]), hook), index, row)
+            for index, row in enumerate(candidates)
+            if index not in used
+        ]
+        if not choices:
+            continue
+        distance, index, row = min(choices, key=lambda item: (item[0], item[1]))
+        # Some retail exterior rooms expose a real LYT doorway hook but leave
+        # the corresponding WOK perimeter edge untagged (notably m24aa).  The
+        # nearest walkable boundary is still the physical threshold we need to
+        # reuse.  A boundary on the opposite side of a large room is not.
+        if distance > 3.0:
+            continue
+        used.add(index)
+        portals.append(
+            {
+                "magnet_id": magnet_id,
+                "start": list(row["start"]),
+                "end": list(row["end"]),
+                "midpoint": list(row["midpoint"]),
+                "hook_position": list(hook),
+                "hook_to_portal_offset": [float(row["midpoint"][axis]) - hook[axis] for axis in range(3)],
+                "width_m": math.dist(tuple(row["start"]), tuple(row["end"])),
+                "source_transition_target": int(row["source_transition_target"]),
+                "source_face_index": int(row["face_index"]),
+                "source_local_edge": int(row["local_edge"]),
+            }
+        )
+    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    metadata.update(
+        {
+            "wok_coordinate_space": "room_local",
+            "environment_kit_source_room_position": list(origin),
+            "walkmesh_portals": portals,
+            "source_walkmesh_transition_count": source_transition_count,
+            "source_walkmesh_boundary_count": len(candidates),
+            "reusable_walkmesh_portal_count": len(portals),
+            "source_transition_indices_cleared": True,
+        }
+    )
+    return replace(primitive, wok=_clear_wok_transitions(local_wok), metadata=metadata)
 
 
 def _room_offset(room: Any) -> tuple[float, float, float]:
@@ -178,6 +376,287 @@ def offset_wok_data(wok: Any, offset: tuple[float, float, float]) -> Any:
     )
 
 
+def _room_connection_hook_position(project: AuthoredModuleProject, room: Any, hook_name: str) -> tuple[float, float, float] | None:
+    """Resolve a floor-plan opening or imported LYT hook in module space."""
+
+    wanted = str(hook_name or "").strip().lower()
+    try:
+        from .authored_module_layout import authored_room_connection_hooks
+
+        for hook in authored_room_connection_hooks(project):
+            if hook.room_resref == room.normalised_resref() and hook.opening_name.strip().lower() == wanted:
+                return tuple(float(value) for value in hook.position)
+    except Exception:
+        pass
+    try:
+        from .map_studio_room_snapping import authored_room_door_hooks
+
+        for hook in authored_room_door_hooks(room):
+            if hook.door.strip().lower() == wanted:
+                return tuple(float(value) for value in hook.world_position)
+    except Exception:
+        pass
+    return None
+
+
+def _room_portal_hint(
+    project: AuthoredModuleProject,
+    room: Any,
+    hook_name: str,
+    fallback: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], float]:
+    """Return the intended module-space WOK edge midpoint and portal width."""
+
+    wanted = str(hook_name or "").strip().lower()
+    primitive = getattr(room, "primitive", None)
+    metadata = {
+        **dict(getattr(primitive, "metadata", {}) or {}),
+        **dict(getattr(room, "metadata", {}) or {}),
+    }
+    room_offset = _room_offset(room)
+    for raw in tuple(metadata.get("walkmesh_portals") or ()):
+        row = dict(raw or {})
+        if str(row.get("magnet_id") or "").strip().lower() != wanted:
+            continue
+        midpoint = tuple(float(value) for value in tuple(row.get("midpoint") or ())[:3])
+        if len(midpoint) == 3:
+            return (
+                tuple(midpoint[axis] + room_offset[axis] for axis in range(3)),
+                max(0.0, float(row.get("width_m", 0.0) or 0.0)),
+            )
+
+    # Floor-plan portals may be recessed into the generated WOK so their
+    # perimeter edge exactly matches a stock threshold edge while the visible
+    # door frame remains hosted on the wall plane.
+    points = tuple(getattr(primitive, "points", ()) or ())
+    for opening in tuple(getattr(primitive, "openings", ()) or ()):
+        if str(getattr(opening, "name", "") or "").strip().lower() != wanted:
+            continue
+        opening_metadata = dict(getattr(opening, "metadata", {}) or {})
+        edge_index = int(getattr(opening, "edge_index", -1))
+        if edge_index < 0 or edge_index >= len(points):
+            break
+        start = points[edge_index]
+        end = points[(edge_index + 1) % len(points)]
+        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+        edge_length = math.hypot(dx, dy)
+        if edge_length <= 1.0e-8:
+            break
+        try:
+            from .authored_room_floorplan import polygon_signed_area
+
+            ccw = polygon_signed_area(tuple((float(point[0]), float(point[1])) for point in points)) > 0.0
+        except Exception:
+            ccw = True
+        inward = (-dy / edge_length, dx / edge_length) if ccw else (dy / edge_length, -dx / edge_length)
+        inset = max(0.0, float(opening_metadata.get("walkmesh_portal_inset_m", 0.0) or 0.0))
+        return (
+            (
+                float(fallback[0]) + inward[0] * inset,
+                float(fallback[1]) + inward[1] * inset,
+                float(fallback[2]),
+            ),
+            max(0.0, float(opening_metadata.get("walkmesh_portal_width_m", opening.width) or opening.width)),
+        )
+    return fallback, 0.0
+
+
+def _walkable_boundary_edges(
+    wok: WOKData,
+    *,
+    module_offset: tuple[float, float, float],
+) -> tuple[dict[str, Any], ...]:
+    rows: list[dict[str, Any]] = []
+    verts = tuple(getattr(wok, "verts", ()) or ())
+    for face_index, face in enumerate(tuple(getattr(wok, "faces", ()) or ())):
+        if not is_walkable_walkmesh_surface(int(getattr(face, "surface", -1))):
+            continue
+        indices = (int(face.v1), int(face.v2), int(face.v3))
+        adjacency = (int(face.adj1), int(face.adj2), int(face.adj3))
+        for local_edge in range(3):
+            if adjacency[local_edge] >= 0:
+                continue
+            try:
+                start = _offset_vertex(verts[indices[local_edge]], module_offset)
+                end = _offset_vertex(verts[indices[(local_edge + 1) % 3]], module_offset)
+            except (IndexError, TypeError, ValueError):
+                continue
+            rows.append(
+                {
+                    "face_index": face_index,
+                    "local_edge": local_edge,
+                    "start": start,
+                    "end": end,
+                    "midpoint": tuple((start[axis] + end[axis]) * 0.5 for axis in range(3)),
+                    "width": math.dist(start, end),
+                }
+            )
+    return tuple(rows)
+
+
+def _assign_transition(wok: WOKData, face_index: int, local_edge: int, target_room_index: int) -> WOKData:
+    faces = list(tuple(getattr(wok, "faces", ()) or ()))
+    face = faces[int(face_index)]
+    key = ("trans1", "trans2", "trans3")[int(local_edge)]
+    faces[int(face_index)] = replace(face, **{key: int(target_room_index)})
+    return replace(wok, faces=faces, raw=None)
+
+
+def compile_authored_room_connection_walkmeshes(
+    project: AuthoredModuleProject,
+    room_woks: Mapping[str, WOKData] | None = None,
+    *,
+    woks_are_module_space: bool = False,
+    module_space_room_resrefs: set[str] | frozenset[str] | tuple[str, ...] = (),
+    midpoint_tolerance: float = 0.075,
+) -> AuthoredWalkmeshConnectionBuild:
+    """Generate and validate reciprocal current-module WOK portals.
+
+    This is the shared atomic seam compiler for authored/authored,
+    stock/stock, and mixed stock/authored room joins. It never trusts copied
+    source-module transition indices and never fabricates a connection between
+    boundary edges whose module-space midpoints do not actually coincide.
+    """
+
+    supplied = dict(room_woks or {})
+    explicit_module_space = {str(value or "").strip().lower() for value in module_space_room_resrefs}
+    compiled: dict[str, WOKData] = {}
+    blocking: list[str] = []
+    warnings: list[str] = []
+    rooms = tuple(project.rooms or ())
+    room_by_name = {room.normalised_resref(): room for room in rooms}
+    for room in rooms:
+        room_resref = room.normalised_resref()
+        wok = supplied.get(room_resref)
+        if wok is None:
+            try:
+                wok = compile_authored_room_spec(room).wok
+            except Exception as exc:
+                blocking.append(f"Room {room_resref} WOK could not be generated: {exc}")
+                continue
+        # Reused kit rooms must never retain transition indices into the
+        # source game's original LYT. Their current connections are rebuilt
+        # below from stable room/hook records.
+        metadata = {
+            **dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {}),
+            **dict(getattr(room, "metadata", {}) or {}),
+        }
+        compiled[room_resref] = (
+            _clear_wok_transitions(wok)
+            if metadata.get("environment_kit_piece_id") or metadata.get("source_transition_indices_cleared")
+            else replace(wok, faces=list(tuple(getattr(wok, "faces", ()) or ())), raw=None)
+        )
+
+    order = {room.normalised_resref(): index for index, room in enumerate(rooms)}
+    claimed: set[tuple[str, int, int]] = set()
+    portals: list[AuthoredWalkmeshPortal] = []
+    for raw in tuple(dict(project.extra or {}).get(_ROOM_CONNECTIONS_KEY) or ()):
+        row = dict(raw or {})
+        source_name = str(row.get("source_room_resref") or "").strip().lower()
+        target_name = str(row.get("target_room_resref") or "").strip().lower()
+        source_hook_name = str(row.get("source_hook_name") or "").strip()
+        target_hook_name = str(row.get("target_hook_name") or "").strip()
+        source_room = room_by_name.get(source_name)
+        target_room = room_by_name.get(target_name)
+        if source_room is None or target_room is None:
+            blocking.append(f"Walkmesh room connection {source_name or '?'} -> {target_name or '?'} references a missing room.")
+            continue
+        source_hook = _room_connection_hook_position(project, source_room, source_hook_name)
+        target_hook = _room_connection_hook_position(project, target_room, target_hook_name)
+        if source_hook is None or target_hook is None:
+            blocking.append(
+                f"Walkmesh room connection {source_name}/{source_hook_name} -> {target_name}/{target_hook_name} "
+                "references a missing doorway hook."
+            )
+            continue
+        source_hint, source_width = _room_portal_hint(project, source_room, source_hook_name, source_hook)
+        target_hint, target_width = _room_portal_hint(project, target_room, target_hook_name, target_hook)
+        source_wok = compiled.get(source_name)
+        target_wok = compiled.get(target_name)
+        if source_wok is None or target_wok is None:
+            continue
+        source_offset = (
+            (0.0, 0.0, 0.0)
+            if woks_are_module_space or source_name in explicit_module_space
+            else resolve_room_wok_module_offset(source_room, source_wok)[0]
+        )
+        target_offset = (
+            (0.0, 0.0, 0.0)
+            if woks_are_module_space or target_name in explicit_module_space
+            else resolve_room_wok_module_offset(target_room, target_wok)[0]
+        )
+        source_edges = [
+            edge
+            for edge in _walkable_boundary_edges(source_wok, module_offset=source_offset)
+            if (source_name, int(edge["face_index"]), int(edge["local_edge"])) not in claimed
+        ]
+        target_edges = [
+            edge
+            for edge in _walkable_boundary_edges(target_wok, module_offset=target_offset)
+            if (target_name, int(edge["face_index"]), int(edge["local_edge"])) not in claimed
+        ]
+        if not source_edges or not target_edges:
+            blocking.append(f"Rooms {source_name} and {target_name} do not expose unclaimed walkable WOK perimeter edges.")
+            continue
+
+        def edge_score(edge: dict[str, Any], hint: tuple[float, float, float], expected_width: float) -> tuple[float, float]:
+            return (
+                math.dist(tuple(edge["midpoint"]), hint),
+                abs(float(edge["width"]) - expected_width) if expected_width > 0.0 else 0.0,
+            )
+
+        source_edge = min(source_edges, key=lambda edge: edge_score(edge, source_hint, source_width))
+        target_edge = min(target_edges, key=lambda edge: edge_score(edge, target_hint, target_width))
+        source_hint_gap = math.dist(tuple(source_edge["midpoint"]), source_hint)
+        target_hint_gap = math.dist(tuple(target_edge["midpoint"]), target_hint)
+        midpoint_gap = math.dist(tuple(source_edge["midpoint"]), tuple(target_edge["midpoint"]))
+        if source_hint_gap > max(0.25, source_width * 0.25) or target_hint_gap > max(0.25, target_width * 0.25):
+            blocking.append(
+                f"Rooms {source_name} and {target_name} have no WOK boundary edge at their doorway hooks "
+                f"(source gap {source_hint_gap:.3f} m, target gap {target_hint_gap:.3f} m)."
+            )
+            continue
+        if midpoint_gap > float(midpoint_tolerance):
+            blocking.append(
+                f"Rooms {source_name} and {target_name} doorway WOK edges are {midpoint_gap:.3f} m apart; "
+                "the LEGO join was rejected instead of exporting a cracked walkmesh."
+            )
+            continue
+        source_face = int(source_edge["face_index"])
+        source_local_edge = int(source_edge["local_edge"])
+        target_face = int(target_edge["face_index"])
+        target_local_edge = int(target_edge["local_edge"])
+        compiled[source_name] = _assign_transition(compiled[source_name], source_face, source_local_edge, order[target_name])
+        compiled[target_name] = _assign_transition(compiled[target_name], target_face, target_local_edge, order[source_name])
+        claimed.update(
+            {
+                (source_name, source_face, source_local_edge),
+                (target_name, target_face, target_local_edge),
+            }
+        )
+        portals.append(
+            AuthoredWalkmeshPortal(
+                source_room_resref=source_name,
+                target_room_resref=target_name,
+                source_hook_name=source_hook_name,
+                target_hook_name=target_hook_name,
+                source_face_index=source_face,
+                source_local_edge=source_local_edge,
+                target_face_index=target_face,
+                target_local_edge=target_local_edge,
+                midpoint_gap=midpoint_gap,
+                source_midpoint=tuple(source_edge["midpoint"]),
+                target_midpoint=tuple(target_edge["midpoint"]),
+            )
+        )
+    return AuthoredWalkmeshConnectionBuild(
+        room_woks=compiled,
+        portals=tuple(portals),
+        warnings=tuple(warnings),
+        blocking_issues=tuple(blocking),
+    )
+
+
 def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> AuthoredModuleWalkmesh:
     """Compile all authored room WOKs into module-coordinate space."""
 
@@ -185,6 +664,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
     source_rooms: list[str] = []
     warnings: list[str] = []
     blocking: list[str] = []
+    raw_woks: dict[str, WOKData] = {}
     for room in tuple(project.rooms or ()):
         room_resref = room.normalised_resref()
         room_metadata = dict(getattr(room, "metadata", {}) or {})
@@ -196,11 +676,17 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
             )
             continue
         try:
-            geometry = compile_authored_room_spec(room)
+            raw_woks[room_resref] = compile_authored_room_spec(room).wok
         except Exception as exc:
             blocking.append(f"Room {room_resref or '(unnamed)'} could not compile for module walkmesh: {exc}")
+    connection_build = compile_authored_room_connection_walkmeshes(project, raw_woks)
+    warnings.extend(connection_build.warnings)
+    blocking.extend(connection_build.blocking_issues)
+    for room in tuple(project.rooms or ()):
+        room_resref = room.normalised_resref()
+        source_wok = connection_build.room_woks.get(room_resref)
+        if source_wok is None:
             continue
-        source_wok = geometry.wok
         vertex_offset = len(combined.verts)
         face_offset = len(combined.faces)
         wok_coordinate_space = _room_wok_coordinate_space(room)
@@ -337,9 +823,14 @@ def snap_position_to_authored_walkmesh(
 
 __all__ = [
     "AuthoredModuleWalkmesh",
+    "AuthoredWalkmeshConnectionBuild",
+    "AuthoredWalkmeshPortal",
     "AuthoredWalkmeshSnapResult",
     "combine_authored_module_walkmesh",
+    "compile_authored_room_connection_walkmeshes",
     "offset_wok_data",
+    "prepare_environment_kit_room_walkmesh",
     "resolve_room_wok_module_offset",
     "snap_position_to_authored_walkmesh",
+    "upsert_authored_walkmesh_room_connection",
 ]

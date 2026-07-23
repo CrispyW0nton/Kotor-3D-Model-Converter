@@ -118,6 +118,7 @@ def test_environment_kit_browser_exposes_typed_thumbnail_drag_cards() -> None:
         environment_kit_piece_rows,
     )
     from src.gui.panels.module_editor.environment_kit_browser import EnvironmentKitBrowser
+    from src.gui.panels.module_editor.placement_tab import _PLACEMENT_ENTRY_ROLE
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     browser = EnvironmentKitBrowser()
@@ -139,7 +140,106 @@ def test_environment_kit_browser_exposes_typed_thumbnail_drag_cards() -> None:
         assert mime is not None and mime.hasFormat(ENVIRONMENT_KIT_MIME_TYPE)
         payload = json.loads(bytes(mime.data(ENVIRONMENT_KIT_MIME_TYPE)).decode("utf-8"))
         assert payload["piece_id"] in {row["piece_id"] for row in rows}
-        assert payload["snap_to_magnets"] is True
+        assert payload["snap_to_magnets"] is bool(
+            next(row for row in rows if row["piece_id"] == payload["piece_id"])["magnet_count"]
+        )
+        assert browser.select_building_style("architecture:k1_endar_spire", "interior") is True
+        visible = [
+            browser._model.index(row, 0).data(_PLACEMENT_ENTRY_ROLE)
+            for row in range(browser._model.rowCount())
+        ]
+        assert {entry["module_resref"] for entry in visible} >= {"m01aa", "m01ab"}
+        assert any(entry["role"] == "dressing" for entry in visible)
+
+        assert browser.select_building_style("architecture:k1_korriban_tombs", "interior") is True
+        korriban = [
+            browser._model.index(row, 0).data(_PLACEMENT_ENTRY_ROLE)
+            for row in range(browser._model.rowCount())
+        ]
+        assert {entry["module_resref"] for entry in korriban} >= {"m37aa", "m38aa", "m38ab", "m39aa"}
+        dressing = tuple(entry for entry in korriban if entry["role"] == "dressing")
+        assert len(dressing) >= 12
+        assert {
+            "dressing:tomb_sarcophagus",
+            "dressing:tomb_offerings",
+            "dressing:tomb_floor_dais",
+            "dressing:tomb_vault_pier",
+            "dressing:tomb_vault_ring",
+            "dressing:tomb_ritual_dais",
+            "dressing:tomb_monument_pylon",
+            "dressing:tomb_monument_rock",
+        } <= {entry["class_id"] for entry in dressing}
+        available_classes = {
+            str(browser.class_combo.itemData(index) or "")
+            for index in range(browser.class_combo.count())
+        }
+        assert {entry["class_id"] for entry in dressing} <= available_classes
+
+        assert browser.select_building_style("architecture:k1_shadowlands", "exterior") is True
+        shadowlands = [
+            browser._model.index(row, 0).data(_PLACEMENT_ENTRY_ROLE)
+            for row in range(browser._model.rowCount())
+        ]
+        assert {entry["module_resref"] for entry in shadowlands} == {"m24aa", "m25aa"}
+        assert {entry["role"] for entry in shadowlands} <= {"room_tile", "exterior_tile"}
+        assert len(shadowlands) >= 30
+    finally:
+        browser.close()
+        browser.deleteLater()
+        app.processEvents()
+
+
+def test_shadowlands_terrain_browser_combines_upper_and_lower_organic_assets() -> None:
+    _configure_native_python_roots()
+    from PySide6 import QtWidgets
+    from src.core.modules.map_studio_terrain_kit import (
+        TERRAIN_KIT_MIME_TYPE,
+        terrain_kit_asset_rows,
+    )
+    from src.gui.panels.module_editor.placement_tab import _PLACEMENT_ENTRY_ROLE
+    from src.gui.panels.module_editor.terrain_kit_browser import TerrainKitBrowser
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    browser = TerrainKitBrowser()
+    rows = terrain_kit_asset_rows(game="K1")
+    selected_styles: list[tuple[str, str]] = []
+    browser.collectionStyleChanged.connect(
+        lambda style_id, environment_kind: selected_styles.append((style_id, environment_kind))
+    )
+    try:
+        browser.set_assets(rows)
+        browser.resize(760, 720)
+        browser.show()
+        app.processEvents()
+
+        assert browser.select_building_style("architecture:k1_shadowlands", "exterior") is True
+        app.processEvents()
+        visible = [
+            browser._proxy.index(row, 0).data(_PLACEMENT_ENTRY_ROLE)
+            for row in range(browser._proxy.rowCount())
+        ]
+        assert len(visible) >= 130
+        assert {entry["module_resref"] for entry in visible} == {"m24aa", "m25aa"}
+        assert {entry["category"] for entry in visible} >= {
+            "Terrain Forms",
+            "Roots & Tree Trunks",
+            "Canopy & Foliage",
+        }
+        assert selected_styles[-1] == ("architecture:k1_shadowlands", "exterior")
+
+        root_row = next(
+            row
+            for row in range(browser._proxy.rowCount())
+            if browser._proxy.index(row, 0).data(_PLACEMENT_ENTRY_ROLE)["category"] == "Roots & Tree Trunks"
+        )
+        index = browser._proxy.index(root_row, 0)
+        browser.asset_list.setCurrentIndex(index)
+        app.processEvents()
+        selected = index.data(_PLACEMENT_ENTRY_ROLE)
+        assert abs(browser.scale_spin.value() - float(selected["suggested_scale"])) <= 1.0e-6
+        assert "native root / tree-trunk" in browser.detail_label.text().lower()
+        mime = browser.asset_list.placement_mime_data(index)
+        assert mime is not None and mime.hasFormat(TERRAIN_KIT_MIME_TYPE)
     finally:
         browser.close()
         browser.deleteLater()
@@ -485,6 +585,10 @@ def test_environment_kit_drag_routes_live_magnet_preview_and_commit() -> None:
                 "position": (12.0, 4.0, 0.0),
                 "rotation_degrees_z": 180.0,
                 "target_room_resref": "grkit0001",
+                "target_is_authored_wall": True,
+                "target_edge_index": 2,
+                "opening_width": 6.16,
+                "opening_height": 3.01,
             }
         )
 
@@ -498,6 +602,8 @@ def test_environment_kit_drag_routes_live_magnet_preview_and_commit() -> None:
         assert panel._handle_map_placement_drop_event(move, watched) is True
         assert move.accepted is True
         assert previews and previews[-1]["piece_id"] == "k1_test_room"
+        assert "grkit0001 wall 3" in panel.marker_summary_label.text()
+        assert "6.16 x 3.01 m doorway" in panel.marker_summary_label.text()
 
         drop = DropEvent(QtCore.QEvent.Drop, local_point)
         assert panel._handle_map_placement_drop_event(drop, watched) is True
@@ -638,6 +744,130 @@ def test_maya_shift_and_alt_click_share_selection_between_kit_piece_and_player_s
         assert panel._begin_marker_drag("entry_point", _Click(QtCore.Qt.AltModifier)) is True
         assert emitted[-1] == (primitive_id,)
         assert panel.map_studio_scene_selection_ids() == [primitive_id]
+    finally:
+        panel.close()
+        panel.deleteLater()
+        app.processEvents()
+
+
+def test_complete_room_shift_add_alt_remove_and_group_drag_share_scene_selection() -> None:
+    _configure_native_python_roots()
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    class _Click:
+        def __init__(self, x=10.0, y=10.0, modifier=QtCore.Qt.NoModifier):
+            self._position = QtCore.QPointF(x, y)
+            self._modifier = modifier
+
+        def modifiers(self):
+            return self._modifier
+
+        def position(self):
+            return self._position
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = ModuleEditorViewportPanel()
+    first = SimpleNamespace(
+        _gr_map_studio_room_resref="room01",
+        _gr_map_studio_authored_room=True,
+        position=(0.0, 0.0, 0.0),
+        children=[],
+    )
+    second = SimpleNamespace(
+        _gr_map_studio_room_resref="room02",
+        _gr_map_studio_authored_room=True,
+        position=(4.0, 0.0, 0.0),
+        children=[],
+    )
+    panel._room_preview_model = SimpleNamespace(root_node=SimpleNamespace(children=[first, second]))
+    emitted: list[tuple[str, ...]] = []
+    translated: list[dict] = []
+    panel.itemsSelected.connect(lambda values: emitted.append(tuple(values)))
+    panel.sceneObjectsTranslated.connect(lambda values: translated.append(dict(values)))
+    try:
+        panel.set_map_studio_scene_selection_ids(("authored_room:room01",))
+        assert panel._begin_authored_room_drag(
+            "room02", _Click(modifier=QtCore.Qt.ShiftModifier)
+        ) is True
+        assert emitted[-1] == ("authored_room:room01", "authored_room:room02")
+
+        assert panel._begin_authored_room_drag("room01", _Click()) is True
+        assert panel._update_authored_room_drag(_Click(30.0, 10.0)) is True
+        assert first.position[0] != 0.0
+        assert second.position[0] != 4.0
+        assert panel._finish_authored_room_drag() is True
+        assert translated[-1]["room_resrefs"] == ("room01", "room02")
+
+        assert panel._begin_authored_room_drag(
+            "room02", _Click(modifier=QtCore.Qt.AltModifier)
+        ) is True
+        assert emitted[-1] == ("authored_room:room01",)
+    finally:
+        panel.close()
+        panel.deleteLater()
+        app.processEvents()
+
+
+def test_complete_room_drag_previews_and_commits_exact_doorway_magnet() -> None:
+    _configure_native_python_roots()
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    class _Click:
+        def __init__(self, x=10.0, y=10.0):
+            self._position = QtCore.QPointF(x, y)
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+        def position(self):
+            return self._position
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = ModuleEditorViewportPanel()
+    room = SimpleNamespace(
+        _gr_map_studio_room_resref="room02",
+        _gr_map_studio_authored_room=True,
+        position=(4.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        children=[],
+    )
+    panel._room_preview_model = SimpleNamespace(root_node=SimpleNamespace(children=[room]))
+    translated: list[dict] = []
+    preview_requests: list[dict] = []
+
+    def _resolve_preview(values):
+        preview_requests.append(dict(values))
+        panel.set_authored_room_snap_preview(
+            {
+                "magnet_snapped": True,
+                "source_room_resref": "room02",
+                "target_room_resref": "room01",
+                "target_label": "room01 — door edge 3",
+                "source_hook_id": "room02:0:auto",
+                "target_hook_id": "room01:2:door",
+                "source_edge_index": 0,
+                "auto_cut_source": True,
+                "world_delta": (2.0, 3.0, 0.0),
+                "rotation_degrees_z": 90.0,
+            }
+        )
+
+    panel.authoredRoomSnapPreviewRequested.connect(_resolve_preview)
+    panel.sceneObjectsTranslated.connect(lambda values: translated.append(dict(values)))
+    try:
+        panel.set_map_studio_scene_selection_ids(("authored_room:room02",))
+        assert panel._begin_authored_room_drag("room02", _Click()) is True
+        assert panel._update_authored_room_drag(_Click(40.0, 10.0)) is True
+        assert preview_requests[-1]["source_room_resref"] == "room02"
+        assert room.position == (6.0, 3.0, 0.0)
+        assert math.isclose(room.rotation[2], math.sqrt(0.5), abs_tol=1.0e-7)
+        assert "matching opening will be cut automatically" in panel.marker_summary_label.text().lower()
+
+        assert panel._finish_authored_room_drag() is True
+        assert translated[-1]["room_opening_snap"]["target_room_resref"] == "room01"
+        assert translated[-1]["world_delta"] == (2.0, 3.0, 0.0)
     finally:
         panel.close()
         panel.deleteLater()

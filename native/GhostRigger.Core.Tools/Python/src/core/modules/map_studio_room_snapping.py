@@ -160,10 +160,35 @@ def snap_authored_room_to_room(
     opposed = abs(delta - 180.0) <= 20.0
     warnings: list[str] = []
     if not opposed:
-        warnings.append(
-            f"Door hooks meet at the same point but face {delta:.0f} deg apart (KOTOR rooms cannot be rotated); "
-            "the doorways may not line up visually. Pick hooks that face each other."
+        raise ValueError(
+            f"Door hooks are {delta:.0f} deg apart. KOTOR rooms cannot rotate at runtime, so choose two hooks "
+            "that face each other before creating a LEGO join."
         )
+    from .authored_module_walkmesh import (
+        compile_authored_room_connection_walkmeshes,
+        upsert_authored_walkmesh_room_connection,
+    )
+
+    updated_project = upsert_authored_walkmesh_room_connection(
+        updated_project,
+        source_room_resref=source_hook.room_resref,
+        source_hook_name=source_hook.door,
+        target_room_resref=target_hook.room_resref,
+        target_hook_name=target_hook.door,
+        connection_source="map_studio_imported_room_snap",
+    )
+    walkmesh_build = compile_authored_room_connection_walkmeshes(updated_project)
+    if not walkmesh_build.ready:
+        raise ValueError(" ".join(walkmesh_build.blocking_issues))
+    extra = dict(getattr(updated_project, "extra", {}) or {})
+    extra["last_walkmesh_build"] = {
+        "operation": "snap_imported_rooms_at_doorway",
+        "auto_generated": True,
+        "portal_count": len(walkmesh_build.portals),
+        "midpoint_gaps_m": [float(portal.midpoint_gap) for portal in walkmesh_build.portals],
+        "ready": True,
+    }
+    updated_project = replace(updated_project, extra=extra)
     return RoomSnapResult(
         project=updated_project,
         translation=translation,

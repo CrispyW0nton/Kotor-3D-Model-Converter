@@ -1,9 +1,9 @@
 """Modular maps Phase 3: snap rooms together at their doorways.
 
 Rooms added from the catalog carry their LYT door hooks (room-local position
-+ orientation). Snapping translates one room so a chosen hook coincides
-exactly with a chosen hook on another room, so the entrances meet. KOTOR
-rooms cannot rotate, so the result flags hooks that do not face each other.
++ orientation) and reusable room-local WOK portal hints. Snapping translates
+one room so a chosen hook and floor portal coincide exactly. KOTOR rooms
+cannot rotate, so hooks that do not face each other are rejected.
 """
 
 from __future__ import annotations
@@ -28,12 +28,49 @@ def _configure_native_python_roots() -> None:
 def _room(resref, position, hooks):
     from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
     from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.module_format import WOKData, WOKFace
 
     surface = ImportedMeshSurface(
         name=f"{resref}_floor", texture="tex",
         vertices=((0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (0.0, 4.0, 0.0)), faces=((0, 1, 2),),
     )
-    primitive = ImportedMeshRoomPrimitive(room_resref=resref, surfaces=(surface,), source_model=resref)
+    portals = []
+    for hook in hooks:
+        hook_position = tuple(float(value) for value in hook["local_position"])
+        if hook_position[0] >= 0.0:
+            start, end = (2.0, -2.0, 0.0), (2.0, 2.0, 0.0)
+        else:
+            start, end = (-2.0, 2.0, 0.0), (-2.0, -2.0, 0.0)
+        portals.append(
+            {
+                "magnet_id": hook["door"],
+                "start": start,
+                "end": end,
+                "midpoint": hook_position,
+                "width_m": 4.0,
+            }
+        )
+    wok = WOKData(
+        name=resref,
+        verts=[(-2.0, -2.0, 0.0), (2.0, -2.0, 0.0), (2.0, 2.0, 0.0), (-2.0, 2.0, 0.0)],
+        faces=[
+            WOKFace(0, 1, 2, 4, -1, -1, 1),
+            WOKFace(0, 2, 3, 4, 0, -1, -1),
+        ],
+        adjacency_domain_count=2,
+    )
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref=resref,
+        surfaces=(surface,),
+        source_model=resref,
+        wok=wok,
+        metadata={
+            "environment_kit_piece_id": f"test_{resref}",
+            "source_transition_indices_cleared": True,
+            "wok_coordinate_space": "room_local",
+            "walkmesh_portals": portals,
+        },
+    )
     return AuthoredRoomSpec(
         room_resref=resref, primitive=primitive, position=position,
         metadata={"source": "stock_room_conversion", "connection_points": hooks},
@@ -90,19 +127,20 @@ def test_snap_translates_source_so_hooks_coincide() -> None:
     assert not result.warnings
 
 
-def test_snap_warns_when_hooks_do_not_oppose() -> None:
+def test_snap_rejects_when_hooks_do_not_oppose() -> None:
     _configure_native_python_roots()
+    import pytest
+
     from src.core.modules.map_studio_room_snapping import snap_authored_room_to_room
 
     target = _room("target", (0.0, 0.0, 0.0), [{"door": "east", "local_position": [2.0, 0.0, 0.0], "orientation": _FACE_POS_X}])
     source = _room("source", (50.0, 0.0, 0.0), [{"door": "also_east", "local_position": [-2.0, 0.0, 0.0], "orientation": _FACE_POS_X}])
-    result = snap_authored_room_to_room(
-        _project([target, source]),
-        source_room_resref="source", source_door="also_east",
-        target_room_resref="target", target_door="east",
-    )
-    assert result.opposed is False
-    assert result.warnings and "face" in result.warnings[0]
+    with pytest.raises(ValueError, match="face each other"):
+        snap_authored_room_to_room(
+            _project([target, source]),
+            source_room_resref="source", source_door="also_east",
+            target_room_resref="target", target_door="east",
+        )
 
 
 def test_snap_rejects_same_room_and_missing_hooks() -> None:

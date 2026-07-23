@@ -1100,6 +1100,7 @@ def verify_dev_test_module_package(
     expected_module_root: str = "grdev01",
     expected_room_resref: str = "grdev01_room01",
     expected_room_resrefs: Iterable[str] | None = None,
+    visual_only_room_resrefs: Iterable[str] | None = None,
     game: str = "K1",
     stock_ifo_preserved: bool = False,
 ) -> DevModulePackageVerification:
@@ -1115,6 +1116,11 @@ def verify_dev_test_module_package(
             if _normalise_resref(value)
         )
     ) or (room,)
+    visual_only_rooms = {
+        _normalise_resref(value)
+        for value in tuple(visual_only_room_resrefs or ())
+        if _normalise_resref(value)
+    }
     try:
         payloads = _read_mod_archive_payloads(module_path)
     except Exception as exc:
@@ -1192,7 +1198,12 @@ def verify_dev_test_module_package(
                     for face in faces
                     if getattr(getattr(face, "material", None), "walkable", lambda: False)()
                 )
-                if not faces:
+                if not faces and room_resref in visual_only_rooms:
+                    parsed_wok.append(f"{room_resref}.wok")
+                    warnings.append(
+                        f"{room_resref}.wok preserves an intentional visual-only empty walkmesh."
+                    )
+                elif not faces:
                     blocking.append(f"{room_resref}.wok parsed without walkmesh faces.")
                 elif walkable_count < 1:
                     blocking.append(f"{room_resref}.wok parsed but contains no walkable faces.")

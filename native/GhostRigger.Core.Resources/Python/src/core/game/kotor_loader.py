@@ -145,6 +145,8 @@ def load_model_from_bytes(
     try:
         pk_mdl = pk_read_mdl(patched_bytes, source_ext=mdx_bytes if mdx_bytes else None)
         model  = _mdl_to_kotormodel(pk_mdl, detected_version)
+        _apply_raw_supernode_numbers(model, mdl_bytes)
+        _apply_raw_super_root_link(model, mdl_bytes)
         _apply_raw_mesh_header_counts(model, mdl_bytes, mdx_bytes)
         # Override classification from raw byte if known
         if raw_cls_byte is not None:
@@ -199,6 +201,8 @@ def load_model_from_file(
     try:
         pk_mdl = pk_read_mdl(p, source_ext=mdx_p)
         model  = _mdl_to_kotormodel(pk_mdl, detected_version)
+        _apply_raw_supernode_numbers(model, mdl_bytes_raw)
+        _apply_raw_super_root_link(model, mdl_bytes_raw)
         _apply_raw_mesh_header_counts(model, mdl_bytes_raw, mdx_bytes_raw)
         # Override classification from raw byte for accuracy
         if raw_cls_byte_f is not None:
@@ -213,6 +217,169 @@ def load_model_from_file(
     except Exception as exc:
         log.error("load_model_from_file: '%s' — %s", mdl_path, exc, exc_info=True)
         return None
+
+
+def _apply_raw_supernode_numbers(
+    model: Optional[KotorModel],
+    mdl_bytes: bytes,
+) -> None:
+    """Recover node-header +2 identities that PyKotor does not expose.
+
+    The field is a sparse supermodel-node identity, not a DFS array index.
+    Character animation matching and modular-head attachment compare it
+    directly. PyKotor preserves the +4 name-table index as ``node_id`` but
+    drops +2, so retain the latter in ``ModelNode.number`` for round-tripping.
+    """
+
+    if model is None or len(mdl_bytes) < 92:
+        return
+    base = 12
+    try:
+        root_rel = struct.unpack_from("<I", mdl_bytes, base + 40)[0]
+    except struct.error:
+        return
+    if root_rel <= 0:
+        return
+
+    number_by_name_index: Dict[int, int] = {}
+    queue = [int(root_rel)]
+    seen: set[int] = set()
+    while queue:
+        node_rel = queue.pop(0)
+        if node_rel in seen:
+            continue
+        seen.add(node_rel)
+        node_abs = base + node_rel
+        if node_abs < base or node_abs + 80 > len(mdl_bytes):
+            continue
+        try:
+            supernode_number = struct.unpack_from("<H", mdl_bytes, node_abs + 2)[0]
+            name_index = struct.unpack_from("<H", mdl_bytes, node_abs + 4)[0]
+            child_array_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 44)[0]
+            child_count = struct.unpack_from("<I", mdl_bytes, node_abs + 48)[0]
+        except struct.error:
+            continue
+        number_by_name_index[int(name_index)] = int(supernode_number)
+        child_array_abs = base + int(child_array_rel)
+        if (
+            child_array_rel <= 0
+            or child_count <= 0
+            or child_count > 0x10000
+            or child_array_abs + int(child_count) * 4 > len(mdl_bytes)
+        ):
+            continue
+        for child_index in range(int(child_count)):
+            child_rel = struct.unpack_from(
+                "<I", mdl_bytes, child_array_abs + child_index * 4
+            )[0]
+            if child_rel > 0:
+                queue.append(int(child_rel))
+
+    if not number_by_name_index:
+        return
+    for node in model.all_nodes():
+        name_index = int(getattr(node, "index", -1) or 0)
+        if name_index in number_by_name_index:
+            node.number = number_by_name_index[name_index]
+    for animation in list(getattr(model, "animations", []) or []):
+        for node in list(getattr(animation, "nodes", []) or []):
+            name_index = int(getattr(node, "index", -1) or 0)
+            if name_index in number_by_name_index:
+                node.number = number_by_name_index[name_index]
+    setattr(model, "_gr_native_supernode_numbers", dict(number_by_name_index))
+
+
+def _apply_raw_super_root_link(
+    model: Optional[KotorModel],
+    mdl_bytes: bytes,
+) -> None:
+    """Preserve a non-root model-header attachment link.
+
+    The geometry header and model header normally point at the same root node.
+    Stock modular player heads deliberately differ: the geometry root remains
+    the AuroraBase, while ``offset_to_super_root`` points at ``neck_g``. This is
+    the binary contract historically restored by VarsityPuppet's HeadFixer.
+    PyKotor does not expose the second pointer, so recover its target by raw
+    node offset for lossless Ghost Studio read/write behavior.
+    """
+
+    if model is None or len(mdl_bytes) < 12 + 196:
+        return
+    base = 12
+    try:
+        geometry_root_rel = int(
+            struct.unpack_from("<I", mdl_bytes, base + 40)[0]
+        )
+        super_root_rel = int(
+            struct.unpack_from("<I", mdl_bytes, base + 80 + 88)[0]
+        )
+    except struct.error:
+        return
+    if (
+        geometry_root_rel <= 0
+        or super_root_rel <= 0
+        or super_root_rel == geometry_root_rel
+    ):
+        model.super_root_node_name = ""
+        return
+
+    target_abs = base + super_root_rel
+    if target_abs < base or target_abs + 80 > len(mdl_bytes):
+        log.warning(
+            "MDL offset_to_super_root 0x%X lies outside the geometry data",
+            super_root_rel,
+        )
+        return
+    try:
+        name_index = int(struct.unpack_from("<H", mdl_bytes, target_abs + 4)[0])
+        name_table_rel = int(
+            struct.unpack_from("<I", mdl_bytes, base + 80 + 104)[0]
+        )
+        name_count = int(
+            struct.unpack_from("<I", mdl_bytes, base + 80 + 108)[0]
+        )
+        if not 0 <= name_index < name_count:
+            return
+        name_offset_rel = int(
+            struct.unpack_from(
+                "<I",
+                mdl_bytes,
+                base + name_table_rel + name_index * 4,
+            )[0]
+        )
+        name_start = base + name_offset_rel
+        name_end = mdl_bytes.find(b"\0", name_start)
+        if name_start < base or name_end < name_start:
+            return
+        target_name = mdl_bytes[name_start:name_end].decode(
+            "ascii", errors="replace"
+        )
+    except (struct.error, ValueError):
+        return
+
+    matches = [
+        node
+        for node in model.all_nodes()
+        if str(getattr(node, "name", "") or "").casefold()
+        == target_name.casefold()
+    ]
+    if len(matches) != 1:
+        log.warning(
+            "MDL offset_to_super_root target %r matched %d converted nodes",
+            target_name,
+            len(matches),
+        )
+        return
+    model.super_root_node_name = str(matches[0].name)
+    setattr(
+        model,
+        "_gr_raw_super_root_link",
+        {
+            "geometry_root_offset": geometry_root_rel,
+            "super_root_offset": super_root_rel,
+            "node": str(matches[0].name),
+        },
+    )
 
 
 def _apply_raw_mesh_header_counts(

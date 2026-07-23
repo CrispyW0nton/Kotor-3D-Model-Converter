@@ -751,6 +751,7 @@ class GpuRenderer:
             _u = {}
             for _uname in (
                 'u_mvp', 'u_model', 'u_normal_mat', 'u_cam_pos',
+                'u_map_fog_enabled', 'u_map_fog_color', 'u_map_fog_near', 'u_map_fog_far',
                 'u_light_dir', 'u_light_dir2', 'u_ambient', 'u_specular',
                 'u_shininess', 'u_alpha_test', 'u_decal', 'u_wateralpha',
                 'u_has_spec', 'u_has_bump', 'u_alpha', 'u_node_alpha', 'u_blend_mode',
@@ -1799,6 +1800,27 @@ class GpuRenderer:
             _u['u_model'].write(_mat4_tobytes(model_mat))
             _u['u_normal_mat'].write(normal_mat.T.astype(np.float32).tobytes())
             _u['u_cam_pos'].value = tuple(eye)
+            _map_world_preview = dict(getattr(self, "map_studio_world_lighting_preview", {}) or {})
+            _map_fog_enabled = bool(_map_world_preview.get("fog_previewed") and _map_world_preview.get("fog_enabled"))
+            if 'u_map_fog_enabled' in _u:
+                _u['u_map_fog_enabled'].value = 1 if _map_fog_enabled else 0
+                _fog_color = tuple(
+                    _map_world_preview.get(
+                        "fog_preview_color_rgb",
+                        _map_world_preview.get("fog_color_rgb", (0.0, 0.0, 0.0)),
+                    )
+                    or (0.0, 0.0, 0.0)
+                )
+                if len(_fog_color) < 3:
+                    _fog_color = (0.0, 0.0, 0.0)
+                _u['u_map_fog_color'].value = tuple(max(0.0, min(1.0, float(channel))) for channel in _fog_color[:3])
+                _fog_near = max(0.0, float(_map_world_preview.get("fog_preview_near", _map_world_preview.get("fog_near", 0.0)) or 0.0))
+                _fog_far = max(
+                    _fog_near + 0.001,
+                    float(_map_world_preview.get("fog_preview_far", _map_world_preview.get("fog_far", 1.0)) or 1.0),
+                )
+                _u['u_map_fog_near'].value = _fog_near
+                _u['u_map_fog_far'].value = _fog_far
 
             # Lighting uniforms — only set once per frame (values don't change per-node).
             _u['u_light_dir'].value  = (0.4839, 0.3519, 0.7918)  # pre-normalised
@@ -3220,13 +3242,15 @@ class GpuRenderer:
                 # Gated to genuinely opaque, non-decal, non-punch-through nodes so
                 # transparency/cutout alphas are never turned into reflections.
                 _env_default = False
+                _raw_env_node_alpha = getattr(node, 'alpha', None)
+                _env_node_alpha = float(1.0 if _raw_env_node_alpha is None else _raw_env_node_alpha)
                 if (not env_name
                         and _detail_texture_allowed
                         and bool(self.show_environment_map)
                         and txi_decal == 0
                         and txi_blend == 0
                         and int(getattr(node, 'transparency_hint', 0) or 0) == 0
-                        and float(getattr(node, 'alpha', 1.0) or 1.0) >= 0.999
+                        and _env_node_alpha >= 0.999
                         and _diffuse_is_reflectivity_mask(diff_img)):
                     _env_default = True
                 if _detail_texture_allowed and bool(self.show_environment_map) and (env_name or _env_default):

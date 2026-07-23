@@ -111,7 +111,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_WRITER",
             "source_path": "src/core/mdl/mdl_writer.py",
             "packaged_path": "Python/src/core/mdl/mdl_writer.py",
-            "sha256": "a42908e7bf68f3bb86af02e9ebacdad2a69910b704140b6f7c7b62aa64de5c6a"
+            "sha256": "058aeb74db99b6b53d6fd24dcc3bc5b7b756804298a574594b40411924dce195"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PLACEABLES_INIT",

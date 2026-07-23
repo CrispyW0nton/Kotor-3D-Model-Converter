@@ -485,7 +485,6 @@ class RendererMeshMixin:
                 _pn_si = _pose_node_for_transform(node, self._anim_pose)
                 if _pn_si is not None and _pn_si.selfillum is not None:
                     selfillum = _pn_si.selfillum
-            si_boost = max(selfillum)
 
             # Get single-tex image + array once per node
             if not flat_only and not _node_is_multitex and has_uvs:
@@ -706,12 +705,12 @@ class RendererMeshMixin:
                 ndotl = nx*light_dir[0] + ny*light_dir[1] + nz*light_dir[2]
                 ndotl_f = max(0.0, ndotl) + max(0.0, -ndotl) * (0.55 if is_two_sided else 0.35)
                 shade = ambient + (1.0 - ambient) * ndotl_f
-                shade = max(shade, si_boost)
 
                 dr, dg, db = diff
-                shade_r = int(_clamp(shade * (0.5 + dr*0.5) * 255, 0, 255))
-                shade_g = int(_clamp(shade * (0.5 + dg*0.5) * 255, 0, 255))
-                shade_b = int(_clamp(shade * (0.5 + db*0.5) * 255, 0, 255))
+                si_r, si_g, si_b = selfillum
+                shade_r = int(_clamp((shade + si_r) * (0.5 + dr*0.5) * 255, 0, 255))
+                shade_g = int(_clamp((shade + si_g) * (0.5 + dg*0.5) * 255, 0, 255))
+                shade_b = int(_clamp((shade + si_b) * (0.5 + db*0.5) * 255, 0, 255))
 
                 face_x0.append(int(p0[0])); face_y0.append(int(p0[1]))
                 face_x1.append(int(p1[0])); face_y1.append(int(p1[1]))
@@ -1413,10 +1412,7 @@ class RendererMeshMixin:
                 # Two-sided materials get stronger back-face lighting (cloth/glass)
                 ndotl_f = max(0.0, ndotl) + max(0.0, -ndotl) * (0.55 if is_two_sided else 0.35)
                 si_r, si_g, si_b = selfillum
-                # Self-illumination raises the minimum shade (emissive surfaces stay bright)
-                si_boost = max(si_r, si_g, si_b)
                 shade = ambient + (1.0 - ambient) * ndotl_f
-                shade = max(shade, si_boost)
 
                 # Flat fill color for untextured or fallback
                 # face_tex = per-face correct texture (multi-tex) or node tex (single)
@@ -1433,16 +1429,17 @@ class RendererMeshMixin:
                     tr, tg, tb = self.tex_cache.sample(sample_tex, uc, vc,
                                                         clamp_s=_node_txi_clamp_s,
                                                         clamp_t=_node_txi_clamp_t)
-                    # Per-channel: texture * lighting * diffuse tint + SI
+                    # Per-channel Odyssey contract:
+                    # texture * (lighting + selfillum) * diffuse tint.
                     dr, dg, db = diff
-                    r = int(_clamp(tr * shade * (0.5 + dr*0.5) + si_r * 255, 0, 255))
-                    g = int(_clamp(tg * shade * (0.5 + dg*0.5) + si_g * 255, 0, 255))
-                    b = int(_clamp(tb * shade * (0.5 + db*0.5) + si_b * 255, 0, 255))
+                    r = int(_clamp(tr * (shade + si_r) * (0.5 + dr*0.5), 0, 255))
+                    g = int(_clamp(tg * (shade + si_g) * (0.5 + dg*0.5), 0, 255))
+                    b = int(_clamp(tb * (shade + si_b) * (0.5 + db*0.5), 0, 255))
                     fill = (r, g, b)
                 else:
-                    r = int(_clamp(diff[0] * shade * 255 + si_r * 255, 0, 255))
-                    g = int(_clamp(diff[1] * shade * 255 + si_g * 255, 0, 255))
-                    b = int(_clamp(diff[2] * shade * 255 + si_b * 255, 0, 255))
+                    r = int(_clamp(diff[0] * (shade + si_r) * 255, 0, 255))
+                    g = int(_clamp(diff[1] * (shade + si_g) * 255, 0, 255))
+                    b = int(_clamp(diff[2] * (shade + si_b) * 255, 0, 255))
                     fill = (r, g, b)
 
                 # shade_color for texture modulation (applied inside _paste_textured_triangle)

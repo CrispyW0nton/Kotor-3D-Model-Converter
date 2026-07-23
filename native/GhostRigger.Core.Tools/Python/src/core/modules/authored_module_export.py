@@ -65,7 +65,11 @@ from .authored_sky_traffic import (
     read_authored_project_sky_traffic,
     validate_authored_sky_traffic_collection,
 )
-from .authored_module_walkmesh import offset_wok_data, resolve_room_wok_module_offset
+from .authored_module_walkmesh import (
+    compile_authored_room_connection_walkmeshes,
+    offset_wok_data,
+    resolve_room_wok_module_offset,
+)
 from .authored_walkmesh_audit import DOOR_TRANSITION_SURFACE_ID, AuthoredWalkmeshAudit, audit_authored_wok
 from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
@@ -258,6 +262,8 @@ class _ModuleState:
     room_woks: dict[str, WOKData]
     room_geometry: dict[str, AuthoredRoomGeometry] = field(default_factory=dict)
     placements: AuthoredGameplayPlacement | None = None
+    visual_only_room_resrefs: tuple[str, ...] = ()
+    walkmesh_connection_pairs: tuple[tuple[str, str], ...] = ()
 
 
 def _repo_root_from_here() -> Path:
@@ -2057,6 +2063,30 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         warnings.extend(audit.warnings)
         blocking.extend(audit.blocking_messages)
 
+    # Compile stable room/hook connection records into the current LYT room
+    # order only after every room WOK is available. Imported kit WOKs have
+    # already been rebased to module space above; authored floor-plan WOKs are
+    # still room-local here. This pass replaces stale source-module transition
+    # indices with reciprocal portals for this exported module and rejects a
+    # visually snapped room pair whose floor boundaries do not really meet.
+    imported_module_space = {
+        room_resref
+        for room_resref, geometry in room_geometries.items()
+        if bool(dict(getattr(geometry, "metadata", {}) or {}).get("imported_wok"))
+    }
+    connection_build = compile_authored_room_connection_walkmeshes(
+        project,
+        room_woks,
+        module_space_room_resrefs=imported_module_space,
+    )
+    warnings.extend(connection_build.warnings)
+    blocking.extend(connection_build.blocking_issues)
+    room_woks = dict(connection_build.room_woks)
+    room_geometries = {
+        room_resref: replace(geometry, wok=room_woks.get(room_resref, geometry.wok))
+        for room_resref, geometry in room_geometries.items()
+    }
+
     entry_room, entry_wok = _entry_room_wok(project, room_geometries)
     # Placements live anywhere in the module, so walkability validates
     # against every room's WOK merged — checking only the entry room flagged
@@ -2319,6 +2349,11 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         room_woks=room_woks,
         room_geometry=room_geometries,
         placements=project.placements,
+        visual_only_room_resrefs=tuple(sorted(backdrop_rooms)),
+        walkmesh_connection_pairs=tuple(
+            (portal.source_room_resref, portal.target_room_resref)
+            for portal in connection_build.portals
+        ),
     )
     walkability_metadata = _walkability_to_manifest(walkability)
     pathing_metadata = dict(pathing.metadata) if pathing is not None else {}
@@ -2604,6 +2639,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             expected_module_root=build.module_root,
             expected_room_resref=room_resrefs[0],
             expected_room_resrefs=room_resrefs,
+            visual_only_room_resrefs=tuple(build.metadata.get("visual_only_room_resrefs", ()) or ()),
             game=build.game,
             stock_ifo_preserved=bool(
                 dict(dict(build.metadata or {}).get("stock_metadata_preservation") or {}).get("ifo", False)

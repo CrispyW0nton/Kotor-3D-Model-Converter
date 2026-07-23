@@ -22,6 +22,7 @@ class ShaderComplexity:
         score += max(0, affecting_lights) * 0.05
         if bool(getattr(node, "txi_blending", 0)):
             score += 0.2
-        if float(getattr(node, "alpha", 1.0) or 1.0) < 1.0:
+        raw_alpha = getattr(node, "alpha", None)
+        if float(1.0 if raw_alpha is None else raw_alpha) < 1.0:
             score += 0.15
         return max(0.0, min(1.0, score))
