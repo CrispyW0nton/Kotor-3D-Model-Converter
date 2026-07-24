@@ -140,6 +140,7 @@ PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL RCDATA "Python/src/gui/pane
 PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS RCDATA "Python/src/gui/panels/qt_common_panels.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_CONTENT_BROWSER_PANEL RCDATA "Python/src/gui/panels/qt_content_browser_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_DIAGNOSTICS_PANEL RCDATA "Python/src/gui/panels/qt_diagnostics_panel.py"
+PYTHON_PAYLOAD_GUI_PANELS_QT_HEAD_BUILDER_WORKSPACE RCDATA "Python/src/gui/panels/qt_head_builder_workspace.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL RCDATA "Python/src/gui/panels/qt_inspector_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL RCDATA "Python/src/gui/panels/qt_library_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_LIGHTING_PANEL RCDATA "Python/src/gui/panels/qt_lighting_panel.py"

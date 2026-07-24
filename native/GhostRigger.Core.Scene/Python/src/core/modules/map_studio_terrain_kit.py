@@ -26,6 +26,7 @@ from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
 from .authored_module_preview_model import build_authored_module_preview_model
 from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
 from .authored_obj_room_import import ObjRoomAuthoringOptions, build_obj_room_primitive
+from .authored_room_geometry import PrimitiveMesh
 from .module_format import WOKData
 
 
@@ -87,6 +88,50 @@ _DANTOOINE_ASSETS = (
     TerrainKitAsset("dantooine_tree_wide", "Wide Tree", "Foliage", "SM_Dantooine_Tree_Wide_A.obj", texture_resref="lda_bark04", triangle_count=1558, dimensions_m=(8.60, 9.61, 5.78), tags=("tree", "foliage", "silhouette")),
     TerrainKitAsset("dantooine_window_vista", "Window Vista Bluff", "Rock Formations", "SM_Dantooine_WindowVista_Bluff_A.obj", triangle_count=1473, dimensions_m=(20.64, 24.71, 9.37), tags=("cliff", "vista", "wall")),
 )
+
+_CAVE_PORTAL_ASSET_ROOT = Path("assets/map_studio/terrain_kits/cave_portals")
+_CAVE_PORTAL_ASSETS = (
+    TerrainKitAsset(
+        "korriban_cave_entrance",
+        "Korriban Carved Cave Entrance",
+        "Module Transitions",
+        "KorribanCaveEntranceMirrored.obj",
+        texture_resref="gr_korrentr",
+        source_units="centimeters",
+        source_up_axis="y",
+        asset_path=str(_CAVE_PORTAL_ASSET_ROOT / "KorribanCaveEntranceMirrored.obj"),
+        triangle_count=6470,
+        dimensions_m=(0.7764, 0.8450, 0.4509),
+        tags=("korriban", "tomb", "cave", "entrance", "portal", "carved", "two-way"),
+    ),
+    TerrainKitAsset(
+        "shyrack_cave_entrance",
+        "Shyrack Cave Entrance",
+        "Module Transitions",
+        "ShyrackCaveEntranceMirrored.obj",
+        texture_resref="gr_shyrentr",
+        source_units="meters",
+        source_up_axis="y",
+        asset_path=str(_CAVE_PORTAL_ASSET_ROOT / "ShyrackCaveEntranceMirrored.obj"),
+        triangle_count=6273,
+        dimensions_m=(1.0000, 0.7586, 0.4487),
+        tags=("korriban", "shyrack", "cave", "entrance", "portal", "rock", "two-way"),
+    ),
+    TerrainKitAsset(
+        "shadowlands_module_transition",
+        "Shadowlands Tree Tunnel Transition",
+        "Module Transitions",
+        "ShadowlandsModuleTransition.obj",
+        texture_resref="gr_shadentr",
+        source_units="meters",
+        source_up_axis="y",
+        asset_path=str(_CAVE_PORTAL_ASSET_ROOT / "ShadowlandsModuleTransition.obj"),
+        triangle_count=4795,
+        dimensions_m=(0.6634, 1.0000, 0.6282),
+        tags=("shadowlands", "jungle", "trees", "forest", "tunnel", "module", "transition", "two-way"),
+    ),
+)
+_MODULE_TRANSITION_ASSET_IDS = frozenset(asset.asset_id for asset in _CAVE_PORTAL_ASSETS)
 
 _DATHOMIR_ROOT_FALLBACK = Path(
     r"C:\Users\NewAdmin\Documents\KotorMods\ModdersResourceFiles\FallenOrder\Dathomir\Converted\Models\Models"
@@ -603,7 +648,7 @@ def terrain_kit_assets(*, game: str = "") -> tuple[TerrainKitAsset | VanillaTerr
         for asset in vanilla_terrain_kit_assets()
         if not wanted_game or asset.game == wanted_game
     )
-    return _DANTOOINE_ASSETS + _dathomir_assets() + vanilla
+    return _DANTOOINE_ASSETS + _CAVE_PORTAL_ASSETS + _dathomir_assets() + vanilla
 
 
 def terrain_kit_asset(asset_id: str) -> TerrainKitAsset | VanillaTerrainKitAsset:
@@ -619,9 +664,191 @@ def terrain_kit_asset_path(asset: TerrainKitAsset | str) -> Path:
     if not isinstance(entry, TerrainKitAsset):
         raise ValueError("Vanilla Terrain Kit assets resolve from the configured game library, not a loose OBJ.")
     path = Path(entry.asset_path) if str(entry.asset_path or "").strip() else terrain_kit_asset_root() / entry.obj_name
+    if not path.is_absolute():
+        path = next(
+            (root / path for root in _candidate_roots() if (root / path).is_file()),
+            Path.cwd() / path,
+        )
     if not path.is_file():
         raise FileNotFoundError(f"Terrain kit source is missing: {path}")
     return path
+
+
+def terrain_kit_runtime_resources(project: Any) -> tuple[tuple[str, str, bytes], ...]:
+    """Return custom KOTOR TGA resources used by placed loose-OBJ kit pieces.
+
+    The KMAP stores lightweight asset provenance and the compiled room mesh.
+    Texture pixels stay in the shipped kit directory and are resolved into the
+    final MOD only when an authored room actually references that kit asset.
+    """
+
+    portal_assets = {asset.asset_id: asset for asset in _CAVE_PORTAL_ASSETS}
+    required: set[str] = set()
+    for room in tuple(getattr(project, "rooms", ()) or ()):
+        metadata = dict(getattr(room, "metadata", {}) or {})
+        primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
+        asset_id = str(
+            metadata.get("terrain_kit_asset_id")
+            or primitive_metadata.get("terrain_kit_asset_id")
+            or ""
+        ).strip().lower()
+        if asset_id in portal_assets:
+            required.add(asset_id)
+        for opening in tuple(getattr(getattr(room, "primitive", None), "openings", ()) or ()):
+            transition_asset = str(
+                dict(getattr(opening, "metadata", {}) or {}).get("module_transition_asset_id")
+                or ""
+            ).strip().lower()
+            if transition_asset in portal_assets:
+                required.add(transition_asset)
+    resources: list[tuple[str, str, bytes]] = []
+    for asset_id in sorted(required):
+        asset = portal_assets[asset_id]
+        texture_path = terrain_kit_asset_path(asset).with_name(f"{asset.texture_resref}.tga")
+        if not texture_path.is_file():
+            raise FileNotFoundError(
+                f"Cave portal texture {asset.texture_resref}.tga is missing beside {asset.obj_name}."
+            )
+        resources.append((asset.texture_resref, "tga", texture_path.read_bytes()))
+    return tuple(resources)
+
+
+def module_transition_asset_for_profiles(owner_profile: str, target_profile: str) -> str:
+    """Choose the one visual shell owned by a connected floor-plan opening."""
+
+    owner = str(owner_profile or "").strip().lower()
+    target = str(target_profile or "").strip().lower()
+    if "shadowlands" in {owner, target}:
+        return "shadowlands_module_transition"
+    cave_profiles = {"korriban_caves_k1", "korriban_caves_k2"}
+    tomb_profiles = {"korriban_tombs", "korriban_tombs_k2"}
+    if owner in tomb_profiles and target in cave_profiles:
+        return "korriban_cave_entrance"
+    if owner in cave_profiles and target in tomb_profiles:
+        return "shyrack_cave_entrance"
+    return ""
+
+
+@lru_cache(maxsize=48)
+def _module_transition_source_primitive(
+    asset_id: str,
+    room_resref: str,
+    game: str,
+    scale: float,
+) -> ImportedMeshRoomPrimitive:
+    return _build_supplied_terrain_kit_primitive(
+        asset_id,
+        room_resref,
+        game,
+        0.0,
+        float(scale),
+    )
+
+
+def build_module_transition_shell_meshes(
+    asset_id: str,
+    *,
+    room_resref: str,
+    edge_index: int,
+    opening_name: str,
+    center: tuple[float, float, float],
+    tangent: tuple[float, float],
+    inward_normal: tuple[float, float],
+    opening_width: float,
+    connected_room_resref: str,
+    game: str = "K1",
+) -> tuple[PrimitiveMesh, ...]:
+    """Fit one supplied two-way transition shell onto a shared room portal.
+
+    OBJ UV0 and normals are preserved.  Scaling is uniform, and the source
+    X/Y/Z axes become portal tangent/depth/up in room-local coordinates.  The
+    shell is visual-only; the authored reciprocal WOK portal and generated
+    floor/throat remain the collision owners.
+    """
+
+    clean_asset = str(asset_id or "").strip().lower()
+    if clean_asset not in _MODULE_TRANSITION_ASSET_IDS:
+        return ()
+    nominal_scale = {
+        "korriban_cave_entrance": 9.50,
+        "shyrack_cave_entrance": 8.25,
+        "shadowlands_module_transition": 8.00,
+    }[clean_asset]
+    source_yaw_degrees = {
+        # The carved Korriban shell presents its authored front toward source
+        # -Y.  The Shyrack shell is authored a quarter-turn from the portal
+        # tangent and needs that correction before it is fitted.
+        "korriban_cave_entrance": 180.0,
+        "shyrack_cave_entrance": 90.0,
+        "shadowlands_module_transition": 0.0,
+    }[clean_asset]
+    uniform_scale = nominal_scale * max(0.65, min(1.65, float(opening_width) / 5.25))
+    source = _module_transition_source_primitive(
+        clean_asset,
+        str(room_resref or "grtransition")[:16],
+        str(game or "K1").upper(),
+        round(uniform_scale, 6),
+    )
+    tx, ty = (float(tangent[0]), float(tangent[1]))
+    nx, ny = (float(inward_normal[0]), float(inward_normal[1]))
+    yaw = math.radians(source_yaw_degrees)
+    yaw_cos = math.cos(yaw)
+    yaw_sin = math.sin(yaw)
+    cx, cy, cz = (float(value) for value in center)
+
+    def point(value: tuple[float, float, float]) -> tuple[float, float, float]:
+        source_x = yaw_cos * float(value[0]) - yaw_sin * float(value[1])
+        source_y = yaw_sin * float(value[0]) + yaw_cos * float(value[1])
+        return (
+            cx + tx * source_x + nx * source_y,
+            cy + ty * source_x + ny * source_y,
+            cz + float(value[2]),
+        )
+
+    def normal(value: tuple[float, float, float]) -> tuple[float, float, float]:
+        source_x = yaw_cos * float(value[0]) - yaw_sin * float(value[1])
+        source_y = yaw_sin * float(value[0]) + yaw_cos * float(value[1])
+        transformed = (
+            tx * source_x + nx * source_y,
+            ty * source_x + ny * source_y,
+            float(value[2]),
+        )
+        length = math.sqrt(sum(component * component for component in transformed)) or 1.0
+        return tuple(component / length for component in transformed)
+
+    return tuple(
+        PrimitiveMesh(
+            name=(
+                f"{str(room_resref or 'room')[:16]}_transition_e{int(edge_index) + 1:02d}_"
+                f"{clean_asset[:12]}_{surface_index + 1:02d}"
+            ),
+            vertices=tuple(point(vertex) for vertex in surface.vertices),
+            faces=tuple(tuple(int(index) for index in face) for face in surface.faces),
+            normals=tuple(normal(value) for value in surface.normals),
+            uvs=tuple(tuple(float(value) for value in uv) for uv in surface.uvs),
+            texture=str(surface.texture or ""),
+            diffuse=tuple(float(value) for value in surface.diffuse),
+            ambient=tuple(float(value) for value in surface.ambient),
+            metadata={
+                "source": "map_studio:module_transition_asset",
+                "module_transition_asset_id": clean_asset,
+                "module_transition_shell": True,
+                "mirrored_two_way_transition": True,
+                "visual_only": True,
+                "walkmesh_role": "visual_shell",
+                "transition_floor_owner": "generated_reciprocal_wok_portal",
+                "room_resref": str(room_resref or "")[:16],
+                "edge_index": int(edge_index),
+                "opening_name": str(opening_name or ""),
+                "connected_room_resref": str(connected_room_resref or "")[:16],
+                "uniform_scale": float(uniform_scale),
+                "source_yaw_degrees": float(source_yaw_degrees),
+                "uv0_preserved": bool(surface.uvs),
+                "source_surface": str(surface.name or ""),
+            },
+        )
+        for surface_index, surface in enumerate(source.surfaces)
+    )
 
 
 def _terrain_asset_is_browser_ready(asset: TerrainKitAsset | VanillaTerrainKitAsset) -> bool:
@@ -645,27 +872,77 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
     """Return presentation-neutral records for the Terrain content browser."""
 
     root = terrain_kit_asset_root()
-    supplied_assets = _DANTOOINE_ASSETS + _dathomir_assets()
+    supplied_assets = _DANTOOINE_ASSETS + _CAVE_PORTAL_ASSETS + _dathomir_assets()
+    transition_styles = {
+        "korriban_cave_entrance": (
+            "architecture:k1_korriban_tombs",
+            "Korriban Tombs — Carved Stone and Cave Connections",
+            9.50,
+        ),
+        "shyrack_cave_entrance": (
+            "architecture:k1_korriban_caves",
+            "Korriban Shyrack Caves — Organic Rock Tunnels",
+            8.25,
+        ),
+        "shadowlands_module_transition": (
+            "architecture:k1_shadowlands",
+            "Kashyyyk Shadowlands — Earthen Clearings, Roots & Foliage",
+            8.00,
+        ),
+    }
     supplied = tuple(
         {
             "asset_id": asset.asset_id,
             "label": asset.label,
             "category": asset.category,
-            "source": "Fallen Order / Dathomir" if "dathomir" in asset.tags else "Ghost Studio Terrain Kit / Dantooine",
+            "source": (
+                "Ghost Studio / Module Transitions"
+                if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
+                else "Fallen Order / Dathomir"
+                if "dathomir" in asset.tags
+                else "Ghost Studio Terrain Kit / Dantooine"
+            ),
             "asset_path": str(Path(asset.asset_path) if str(asset.asset_path or "").strip() else root / asset.obj_name),
             "texture_resref": asset.texture_resref,
             "triangle_count": int(asset.triangle_count),
             "dimensions_m": tuple(asset.dimensions_m),
             "tags": tuple(asset.tags),
-            "suggested_scale": 0.35 if "skybox" in asset.tags else 1.0,
-            "staging_role": "Dathomir environment staging" if "dathomir" in asset.tags else "Terrain kit staging",
+            "suggested_scale": (
+                transition_styles[asset.asset_id][2]
+                if asset.asset_id in transition_styles
+                else 0.35
+                if "skybox" in asset.tags
+                else 1.0
+            ),
+            "staging_role": (
+                "Two-way module transition"
+                if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
+                else "Dathomir environment staging"
+                if "dathomir" in asset.tags
+                else "Terrain kit staging"
+            ),
             "staging_hint": (
+                "Drag onto a room doorway to stage the visual shell; the snapped rooms retain walkmesh ownership."
+                if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
+                else
                 "Drag into a Dathomir map as visual world dressing; surface-snap foliage to terrain and place the planet as a distant vista."
                 if "dathomir" in asset.tags
                 else "Drag onto terrain or another visible level surface."
             ),
-            "building_style_id": "environment:dathomir" if "dathomir" in asset.tags else "",
-            "building_style_label": "Dathomir — Fallen Order Extraction" if "dathomir" in asset.tags else "",
+            "building_style_id": (
+                transition_styles[asset.asset_id][0]
+                if asset.asset_id in transition_styles
+                else "environment:dathomir"
+                if "dathomir" in asset.tags
+                else ""
+            ),
+            "building_style_label": (
+                transition_styles[asset.asset_id][1]
+                if asset.asset_id in transition_styles
+                else "Dathomir — Fallen Order Extraction"
+                if "dathomir" in asset.tags
+                else ""
+            ),
         }
         for asset in supplied_assets
     )
@@ -834,6 +1111,9 @@ def _build_supplied_terrain_kit_primitive(
             "terrain_kit_rotation_degrees_z": float(rotation_degrees_z),
             "terrain_kit_scale": float(scale),
             "terrain_kit_visual_only": True,
+            "module_transition_asset": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
+            "module_transition_floor_required": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
+            "mirrored_two_way_transition": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
             "render_triangle_count": int(report.triangle_count),
         },
     )
@@ -1001,6 +1281,9 @@ __all__ = [
     "terrain_kit_builder_style_id",
     "terrain_kit_builder_style_label",
     "terrain_kit_drag_payload",
+    "terrain_kit_runtime_resources",
+    "module_transition_asset_for_profiles",
+    "build_module_transition_shell_meshes",
     "transform_terrain_kit_primitive",
     "vanilla_terrain_catalog_path",
     "vanilla_terrain_kit_assets",

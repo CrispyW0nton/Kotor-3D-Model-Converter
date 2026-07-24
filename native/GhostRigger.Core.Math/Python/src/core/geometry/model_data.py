@@ -1434,6 +1434,14 @@ class KotorModel:
     # independent head DAG to the body's animated headhook.
     super_root_node_name: str = ""
 
+    # Raw geometry-header node declaration. For standalone models this is
+    # commonly the local geometry-node count. Some native character families
+    # store a cumulative inheritance-chain span here (retail K2 PFHA04 declares
+    # 564 while containing 38 local nodes), while other families retain a
+    # local count. Preserve the resource's explicit value rather than deriving
+    # one generic rule from the in-memory tree.
+    geometry_node_count: int = 0
+
     # Native character rigs use sparse node-header +2 identities. Generated
     # models keep the historical dense fallback unless a donor-preserving
     # workflow explicitly opts into retaining those native values.

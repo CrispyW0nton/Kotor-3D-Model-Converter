@@ -174,6 +174,89 @@ _ARCHITECTURE_STYLES = (
         ),
     ),
     PascalBuildingStyle(
+        style_id="architecture:k2_telos_citadel",
+        label="Telos Citadel Station — Architecture Kit",
+        game="K2",
+        floor_texture="tel_fl05",
+        wall_texture="tel_wl06",
+        ceiling_texture="tel_fl01",
+        source_module="203tel",
+        source_room="203telv",
+        architecture_profile="telos_citadel",
+        architecture_shell_profile="telos_citadel_residential",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="residential",
+                label="Residential gallery",
+                shell_profile="telos_citadel_residential",
+                recommended_wall_height_m=3.985,
+                recommended_floor_to_floor_m=5.095,
+                description=(
+                    "Measured 203TEL/204TEL residential contour with a recessed ceiling tray, "
+                    "broad canted wall shoulders, luminous utility belt, and framed apartment bays."
+                ),
+                evidence_rooms=("203telf", "203telv", "204tela", "204telf"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="civic",
+                label="Civic passage",
+                shell_profile="telos_citadel_civic",
+                recommended_wall_height_m=5.995,
+                recommended_floor_to_floor_m=6.739,
+                description=(
+                    "Measured Entertainment Module passage with deep portal returns, white-grey "
+                    "station panels, structural crowns, and inset turquoise light bands."
+                ),
+                evidence_rooms=("202tel02", "202tel04", "202tel08", "222tel02", "222tel04"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="concourse",
+                label="Citadel concourse",
+                shell_profile="telos_citadel_concourse",
+                recommended_wall_height_m=6.739,
+                recommended_floor_to_floor_m=10.197,
+                description=(
+                    "Large public-station shell derived from the docking, entertainment, and "
+                    "residential hub rooms, with a deeper ceiling coffer and wider structural cadence."
+                ),
+                evidence_rooms=("201tel05", "201tel06", "203tell", "204telc", "204tele"),
+            ),
+        ),
+        recommended_wall_height_m=3.985,
+        recommended_floor_to_floor_m=5.095,
+        recommended_door_width_m=3.48,
+        recommended_door_height_m=3.029,
+        accent_textures=("tel_wl03", "tel_tr04", "tel_lt02", "tel_hcl1"),
+        evidence_rooms=(
+            "201tel04",
+            "201tel05",
+            "201tel06",
+            "202tel02",
+            "202tel04",
+            "202tel08",
+            "203telf",
+            "203telv",
+            "203tell",
+            "204tela",
+            "204telc",
+            "204tele",
+            "204telf",
+            "207tel_1",
+        ),
+        tags=(
+            "k2",
+            "telos",
+            "citadel station",
+            "residential module",
+            "entertainment module",
+            "docking module",
+            "interior",
+            "architecture-kit",
+            "vanilla-derived",
+            "priority",
+        ),
+    ),
+    PascalBuildingStyle(
         style_id="architecture:k1_taris_apartments",
         label="Taris Apartments — Architecture Kit",
         game="K1",
@@ -534,6 +617,20 @@ _ARCHITECTURE_DOOR_SPECS: dict[tuple[str, str], dict[str, Any]] = {
         "label": "Taris Apartment Door",
         "opening_width_m": 4.5,
         "opening_height_m": 2.396,
+    },
+    # Citadel residential modules use K2 genericdoors.2da row 117
+    # (DOR_TEL14). Its measured model envelope is 3.480 m × 3.029 m and the
+    # generated wall reveal is built to that same contract.
+    ("K2", "telos_citadel"): {
+        "template_resref": "gr_teldoor",
+        "sealed_template_resref": "gr_telseal",
+        "model_resref": "dor_tel14",
+        "appearance_id": 117,
+        "label": "Telos Citadel Door",
+        "opening_width_m": 3.48,
+        "opening_height_m": 3.029,
+        "frame_width_m": 3.92,
+        "frame_height_m": 3.31,
     },
     # Korriban Tombs use the DOR_LKO04 family for their standard stone
     # threshold (K1 genericdoors.2da appearance 40; corroborated by the
@@ -1256,6 +1353,11 @@ def set_pascal_building_opening(
     kind = str(opening_kind or "door").strip().lower()
     if kind not in {"door", "window"}:
         raise ValueError("Building openings must be doors or windows.")
+    suppress_door_actor = bool(
+        (connection_metadata or {}).get("suppress_door_actor")
+        or (connection_metadata or {}).get("open_module_transition")
+        or (connection_metadata or {}).get("cave_archway_transition")
+    )
     preview = preview_pascal_building_opening(
         project,
         room_resref=room_resref,
@@ -1265,6 +1367,7 @@ def set_pascal_building_opening(
         width=width,
         height=height,
         bottom=bottom,
+        suppress_style_door_contract=suppress_door_actor,
     )
     if not preview.valid:
         raise ValueError(preview.reason or f"The {kind} does not fit on this wall.")
@@ -1319,7 +1422,7 @@ def set_pascal_building_opening(
                     "opening_kind": kind,
                     **dict(connection_metadata or {}),
                 }
-                if door_spec is not None:
+                if door_spec is not None and not suppress_door_actor:
                     metadata.update(
                         {
                             "door_template_resref": str(door_spec["template_resref"]),
@@ -1343,7 +1446,7 @@ def set_pascal_building_opening(
             opening_rows.append(opening)
         rooms.append(replace(room, primitive=replace(primitive, openings=tuple(opening_rows))))
     updated = replace(updated, rooms=tuple(rooms))
-    if door_spec is not None:
+    if door_spec is not None and not suppress_door_actor:
         from .authored_module_placements import add_authored_gameplay_placement
 
         position, bearing = _pascal_opening_world_pose(
@@ -1393,6 +1496,7 @@ def preview_pascal_building_opening(
     width: float,
     height: float,
     bottom: float,
+    suppress_style_door_contract: bool = False,
 ) -> PascalOpeningPreview:
     """Resolve one wall-hosted opening without mutating the authored project.
 
@@ -1417,7 +1521,11 @@ def preview_pascal_building_opening(
     architecture_profile = str(
         dict(getattr(primitive, "metadata", {}) or {}).get("architecture_profile") or ""
     ).strip().lower()
-    door_spec = pascal_architecture_door_spec(project.game, architecture_profile) if kind == "door" else None
+    door_spec = (
+        pascal_architecture_door_spec(project.game, architecture_profile)
+        if kind == "door" and not bool(suppress_style_door_contract)
+        else None
+    )
     if door_spec is not None:
         width = float(door_spec["opening_width_m"])
         height = float(door_spec["opening_height_m"])
@@ -1614,6 +1722,22 @@ _ARCHITECTURE_TRAINING_ROOMS: dict[str, tuple[tuple[str, str], ...]] = {
         ("152har", "152har36"),
         ("153har", "153harff"),
     ),
+    "telos_citadel": (
+        ("201tel", "201tel04"),
+        ("201tel", "201tel05"),
+        ("201tel", "201tel06"),
+        ("202tel", "202tel02"),
+        ("202tel", "202tel04"),
+        ("202tel", "202tel08"),
+        ("203tel", "203telf"),
+        ("203tel", "203telv"),
+        ("203tel", "203tell"),
+        ("204tel", "204tela"),
+        ("204tel", "204telc"),
+        ("204tel", "204tele"),
+        ("204tel", "204telf"),
+        ("207tel", "207tel_1"),
+    ),
     "shadowlands": (
         ("m24aa", "m24aa_02a"),
         ("m24aa", "m24aa_09a"),
@@ -1707,6 +1831,7 @@ _ARCHITECTURE_TRAINING_GAMES = {
     "endar_spire": "K1",
     "taris_apartments": "K1",
     "harbinger": "K2",
+    "telos_citadel": "K2",
     "shadowlands": "K1",
     "korriban_tombs": "K1",
     "korriban_caves_k1": "K1",

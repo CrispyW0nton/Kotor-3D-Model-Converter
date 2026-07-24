@@ -265,10 +265,16 @@ def authored_room_connection_hooks(project: AuthoredModuleProject) -> tuple[Auth
         # is not incorrectly reported as an unconnected doorway.
         room_name = _room_name(room)
         room_metadata = dict(getattr(room, "metadata", {}) or {})
+        primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
         connection_point_rows = {
             str(dict(row or {}).get("door") or "").strip().lower(): dict(row or {})
             for row in tuple(room_metadata.get("connection_points") or ())
             if str(dict(row or {}).get("door") or "").strip()
+        }
+        walkmesh_portals = {
+            str(dict(row or {}).get("magnet_id") or "").strip().lower(): dict(row or {})
+            for row in tuple(primitive_metadata.get("walkmesh_portals") or ())
+            if str(dict(row or {}).get("magnet_id") or "").strip()
         }
         try:
             from .map_studio_room_snapping import authored_room_door_hooks
@@ -296,6 +302,38 @@ def authored_room_connection_hooks(project: AuthoredModuleProject) -> tuple[Auth
                     break
             facing = float(imported.facing_radians)
             point_metadata = connection_point_rows.get(door_name.lower(), {})
+            portal_metadata = walkmesh_portals.get(door_name.lower(), {})
+            local_midpoint = tuple(portal_metadata.get("midpoint") or ())
+            if len(local_midpoint) >= 3:
+                position = tuple(
+                    float(room.position[axis]) + float(local_midpoint[axis])
+                    for axis in range(3)
+                )
+            else:
+                position = tuple(float(value) for value in imported.world_position)
+            portal_width = float(
+                portal_metadata.get("width_m")
+                or room_metadata.get("environment_kit_opening_width", 1.8)
+                or 1.8
+            )
+            # LYT door-hook orientation is only an approximate placement hint.
+            # The imported WOK portal is the authoritative seam: its ordered
+            # boundary edge gives the exact tangent and therefore the outward
+            # normal.  Using the LYT bearing here can align only the portal
+            # midpoint while leaving the two full edges crossed at an angle,
+            # producing a visible wedge and a player-radius WOK gap.
+            portal_start = tuple(portal_metadata.get("start") or ())
+            portal_end = tuple(portal_metadata.get("end") or ())
+            outward = (math.cos(facing), math.sin(facing))
+            if len(portal_start) >= 2 and len(portal_end) >= 2:
+                portal_dx = float(portal_end[0]) - float(portal_start[0])
+                portal_dy = float(portal_end[1]) - float(portal_start[1])
+                portal_length = math.hypot(portal_dx, portal_dy)
+                if portal_length > 1.0e-7:
+                    # Walkable WOK faces use upward winding, so their interior
+                    # lies to the left of an ordered boundary edge and the
+                    # right-hand normal points out of the room.
+                    outward = (portal_dy / portal_length, -portal_dx / portal_length)
             intent = _opening_intent(point_metadata)
             hooks.append(
                 AuthoredRoomConnectionHook(
@@ -303,9 +341,9 @@ def authored_room_connection_hooks(project: AuthoredModuleProject) -> tuple[Auth
                     room_resref=room_name,
                     opening_name=door_name,
                     edge_index=-1,
-                    position=tuple(float(value) for value in imported.world_position),
-                    outward=(math.cos(facing), math.sin(facing)),
-                    width=max(0.05, float(room_metadata.get("environment_kit_opening_width", 1.8) or 1.8)),
+                    position=position,
+                    outward=outward,
+                    width=max(0.05, portal_width),
                     height=max(0.05, float(room_metadata.get("environment_kit_opening_height", 2.4) or 2.4)),
                     bottom=0.0,
                     opening_kind="sealed" if intent == "sealed" else "door",
@@ -489,6 +527,38 @@ def _replace_room_opening(
     return replace(room, primitive=replace(primitive, openings=tuple(openings)))
 
 
+def _replace_stock_room_opening(
+    room: AuthoredRoomSpec,
+    *,
+    hook: AuthoredRoomConnectionHook,
+    target: AuthoredRoomConnectionHook,
+) -> AuthoredRoomSpec:
+    """Persist a floor-plan connection on one imported room magnet."""
+
+    room_metadata = dict(getattr(room, "metadata", {}) or {})
+    rows: list[dict[str, Any]] = []
+    matched = False
+    for raw in tuple(room_metadata.get("connection_points") or ()):
+        entry = dict(raw or {})
+        if str(entry.get("door") or "").strip().lower() == hook.opening_name.lower():
+            entry.update(
+                {
+                    "connected_room_resref": target.room_resref,
+                    "connected_opening_name": target.opening_name,
+                    "connection_state": "connected",
+                    "walkmesh_portal": True,
+                    "walkmesh_portal_inset_m": 0.0,
+                    "walkmesh_portal_width_m": min(float(hook.width), float(target.width)),
+                }
+            )
+            matched = True
+        rows.append(entry)
+    if not matched:
+        raise ValueError(f"Opening {hook.opening_name} no longer exists in room {_room_name(room)}.")
+    room_metadata["connection_points"] = rows
+    return replace(room, metadata=room_metadata)
+
+
 def _room_opening_for_hook(
     project: AuthoredModuleProject,
     hook: AuthoredRoomConnectionHook,
@@ -590,6 +660,59 @@ def _replace_hook_metadata(
     if hook.edge_index >= 0:
         return _replace_opening_metadata(project, hook, metadata)
     return _replace_stock_opening_metadata(project, hook, metadata)
+
+
+def _suppress_open_transition_door(
+    project: AuthoredModuleProject,
+    hook: AuthoredRoomConnectionHook,
+) -> AuthoredModuleProject:
+    """Convert one connected hook into an open visual-transition portal."""
+
+    metadata = _opening_metadata_for_hook(project, hook)
+    placement_ids = {
+        str(metadata.get("door_placement_id") or "").strip(),
+        str(metadata.get("shared_door_placement_id") or "").strip(),
+        str(metadata.get("sealed_door_placement_id") or "").strip(),
+    }
+    updated = project
+    for placement_id in sorted(value for value in placement_ids if value):
+        try:
+            from .authored_module_placements import remove_authored_gameplay_placement
+
+            updated = remove_authored_gameplay_placement(updated, placement_id).project
+        except ValueError:
+            pass
+    metadata = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        not in {
+            "door_placement_id",
+            "shared_door_placement_id",
+            "sealed_door_placement_id",
+            "sealed_door_template_resref",
+            "door_template_resref",
+            "door_model_resref",
+            "door_appearance_id",
+            "door_aperture_width_m",
+            "door_aperture_height_m",
+            "door_outer_width_m",
+            "door_outer_height_m",
+            "cross_style_transition_actor",
+            "shared_connection_door",
+        }
+    }
+    metadata.update(
+        {
+            "open_module_transition": True,
+            "cave_archway_transition": True,
+            "suppress_door_actor": True,
+            "opening_kind": "door",
+            "walkmesh_portal": True,
+            "shared_connection_door": False,
+        }
+    )
+    return _replace_hook_metadata(updated, hook, metadata)
 
 
 def _sealed_door_pose(
@@ -714,8 +837,7 @@ def _append_drag_snap_opening(
 ) -> tuple[AuthoredModuleProject, AuthoredRoomConnectionHook]:
     """Cut a matching source-side opening without spawning a duplicate door actor."""
 
-    target_room, target_opening = _room_opening_for_hook(project, target)
-    del target_room
+    target_metadata = _opening_metadata_for_hook(project, target)
     rooms: list[AuthoredRoomSpec] = []
     added = False
     for room in project.rooms:
@@ -738,7 +860,7 @@ def _append_drag_snap_opening(
             raise ValueError(f"The matching {target.height:.2f} m doorway does not fit below the source wall top.")
         metadata = {
             key: value
-            for key, value in dict(target_opening.metadata or {}).items()
+            for key, value in target_metadata.items()
             if key
             not in {
                 "door_placement_id",
@@ -747,9 +869,17 @@ def _append_drag_snap_opening(
                 "connection_room",
                 "connection_opening",
                 "connection_state",
+                "module_transition_asset_id",
+                "module_transition_target_profile",
+                "module_transition_owner",
             }
         }
-        target_door = str(dict(target_opening.metadata or {}).get("door_placement_id") or "").strip()
+        target_door = str(target_metadata.get("door_placement_id") or "").strip()
+        target_is_open_transition = bool(
+            target_metadata.get("suppress_door_actor")
+            or target_metadata.get("open_module_transition")
+            or target_metadata.get("cave_archway_transition")
+        )
         metadata.update(
             {
                 "source": "map_studio:room_drag_snap",
@@ -759,6 +889,48 @@ def _append_drag_snap_opening(
                 "shared_door_placement_id": target_door,
             }
         )
+        from .map_studio_pascal_building import (
+            pascal_architecture_door_spec,
+            pascal_architecture_profile_for_room,
+        )
+
+        source_profile = pascal_architecture_profile_for_room(project, source_room_resref)
+        target_profile = pascal_architecture_profile_for_room(project, target.room_resref)
+        source_door_spec = pascal_architecture_door_spec(project.game, source_profile)
+        target_door_spec = pascal_architecture_door_spec(project.game, target_profile)
+        door_spec = source_door_spec or target_door_spec
+        cave_profiles = {"korriban_caves_k1", "korriban_caves_k2"}
+        if source_profile in cave_profiles or target_profile in cave_profiles:
+            target_is_open_transition = True
+            metadata.update(
+                {
+                    "open_module_transition": True,
+                    "cave_archway_transition": True,
+                    "suppress_door_actor": True,
+                }
+            )
+            # The visual shell is selected once the reciprocal connection is
+            # committed.  Assigning it here and again on the destination
+            # opening stacks two full cave entrances at the same portal.
+        if door_spec is not None and not target_door and not target_is_open_transition:
+            metadata.update(
+                {
+                    "door_template_resref": str(door_spec["template_resref"]),
+                    "door_model_resref": str(door_spec["model_resref"]),
+                    "door_appearance_id": int(door_spec["appearance_id"]),
+                    "door_aperture_width_m": float(door_spec["opening_width_m"]),
+                    "door_aperture_height_m": float(door_spec["opening_height_m"]),
+                    "door_outer_width_m": float(
+                        door_spec.get("frame_width_m", door_spec["opening_width_m"])
+                    ),
+                    "door_outer_height_m": float(
+                        door_spec.get("frame_height_m", door_spec["opening_height_m"])
+                    ),
+                    "cross_style_transition": source_profile != target_profile,
+                    "cross_style_source_profile": source_profile,
+                    "cross_style_target_profile": target_profile,
+                }
+            )
         opening = FloorPlanWallOpening(
             name=str(opening_name),
             edge_index=edge,
@@ -968,6 +1140,140 @@ def connect_authored_room_drag_snap(
         raise ValueError("The snapped doorway hooks could not be regenerated after alignment.")
     if _hook_distance(source_connected, target_connected) > 1.0e-5 or _hook_facing_dot(source_connected, target_connected) > -0.999:
         raise ValueError("The room doorway seam did not align exactly enough for automatic walkmesh traversal.")
+    connected_project = update.project
+    try:
+        from .map_studio_pascal_building import pascal_architecture_profile_for_room
+        from .map_studio_terrain_kit import module_transition_asset_for_profiles
+
+        source_profile = pascal_architecture_profile_for_room(
+            connected_project,
+            source_connected.room_resref,
+        )
+        target_profile = pascal_architecture_profile_for_room(
+            connected_project,
+            target_connected.room_resref,
+        )
+        source_transition_asset = module_transition_asset_for_profiles(
+            source_profile,
+            target_profile,
+        )
+        target_transition_asset = module_transition_asset_for_profiles(
+            target_profile,
+            source_profile,
+        )
+        open_transition_asset = source_transition_asset or target_transition_asset
+    except Exception:
+        source_profile = ""
+        target_profile = ""
+        source_transition_asset = ""
+        target_transition_asset = ""
+        open_transition_asset = ""
+    if open_transition_asset and (
+        source_profile in {"korriban_caves_k1", "korriban_caves_k2"}
+        or target_profile in {"korriban_caves_k1", "korriban_caves_k2"}
+    ):
+        connected_project = _suppress_open_transition_door(connected_project, source_connected)
+        refreshed_hooks = {
+            (hook.room_resref, hook.opening_name.lower()): hook
+            for hook in authored_room_connection_hooks(connected_project)
+        }
+        source_connected = refreshed_hooks.get(
+            (source_connected.room_resref, source_connected.opening_name.lower()),
+            source_connected,
+        )
+        target_connected = refreshed_hooks.get(
+            (target_connected.room_resref, target_connected.opening_name.lower()),
+            target_connected,
+        )
+        connected_project = _suppress_open_transition_door(connected_project, target_connected)
+        transition_candidates = (
+            (
+                target_connected,
+                source_profile,
+                "authored_target_room",
+                target_transition_asset,
+            ),
+            (
+                source_connected,
+                target_profile,
+                "authored_source_room",
+                source_transition_asset,
+            ),
+        )
+        selected_transition = next(
+            (
+                candidate
+                for candidate in transition_candidates
+                if int(candidate[0].edge_index) >= 0 and candidate[3]
+            ),
+            None,
+        )
+        for hook in (source_connected, target_connected):
+            if int(hook.edge_index) < 0:
+                continue
+            _room, opening = _room_opening_for_hook(connected_project, hook)
+            metadata = dict(opening.metadata or {})
+            for key in (
+                "module_transition_asset_id",
+                "module_transition_target_profile",
+                "module_transition_owner",
+            ):
+                metadata.pop(key, None)
+            if selected_transition is not None and hook.hook_id == selected_transition[0].hook_id:
+                _selected_hook, target_profile_value, owner, transition_asset = selected_transition
+                metadata.update(
+                    {
+                        "module_transition_asset_id": transition_asset,
+                        "module_transition_target_profile": target_profile_value,
+                        "module_transition_floor_required": True,
+                        "module_transition_owner": owner,
+                    }
+                )
+            connected_project = _replace_opening_metadata(
+                connected_project,
+                hook,
+                metadata,
+            )
+        update = replace(update, project=connected_project)
+    _room, connected_source_opening = _room_opening_for_hook(connected_project, source_connected)
+    connected_source_metadata = dict(connected_source_opening.metadata or {})
+    door_template = str(connected_source_metadata.get("door_template_resref") or "").strip().lower()
+    has_connection_door = bool(
+        connected_source_metadata.get("door_placement_id")
+        or connected_source_metadata.get("shared_door_placement_id")
+    )
+    if door_template and not has_connection_door:
+        from .authored_module_placements import add_authored_gameplay_placement
+
+        door_position, door_bearing = _sealed_door_pose(connected_project, source_connected)
+        door_update = add_authored_gameplay_placement(
+            connected_project,
+            kind="door",
+            template_resref=door_template,
+            tag=f"{source_connected.room_resref}_{source_connected.opening_name}"[:32],
+            position=door_position,
+            bearing=door_bearing,
+        )
+        connected_project = door_update.project
+        _room, connected_source_opening = _room_opening_for_hook(
+            connected_project,
+            source_connected,
+        )
+        connected_source_metadata = dict(connected_source_opening.metadata or {})
+        connected_source_metadata.update(
+            {
+                "door_placement_id": door_update.placement_id,
+                "cross_style_transition_actor": bool(
+                    connected_source_metadata.get("cross_style_transition")
+                ),
+            }
+        )
+        connected_project = _replace_opening_metadata(
+            connected_project,
+            source_connected,
+            connected_source_metadata,
+        )
+        update = replace(update, project=connected_project)
     walkable_counts: dict[str, int] = {}
     for room_resref in (source_connected.room_resref, target_connected.room_resref):
         room = next(item for item in update.project.rooms if _room_name(item) == room_resref)
@@ -1011,10 +1317,8 @@ def _reconcile_connected_door_placements(
 ) -> AuthoredModuleProject:
     """Keep a room-owned door with its wall and prevent doubled seam actors."""
 
-    _source_room, source_opening = _room_opening_for_hook(before, source)
-    _target_room, target_opening = _room_opening_for_hook(before, target)
-    source_metadata = dict(source_opening.metadata or {})
-    target_metadata = dict(target_opening.metadata or {})
+    source_metadata = _opening_metadata_for_hook(before, source)
+    target_metadata = _opening_metadata_for_hook(before, target)
     source_door_id = str(source_metadata.get("door_placement_id") or "").strip()
     target_door_id = str(target_metadata.get("door_placement_id") or "").strip()
     updated = after
@@ -1150,12 +1454,19 @@ def connect_authored_room_openings(
         opening_name=source.opening_name,
         target=target,
     )
-    target_room = _replace_room_opening(
-        target_room,
-        edge_index=target.edge_index,
-        opening_name=target.opening_name,
-        target=source,
-    )
+    if target.edge_index >= 0:
+        target_room = _replace_room_opening(
+            target_room,
+            edge_index=target.edge_index,
+            opening_name=target.opening_name,
+            target=source,
+        )
+    else:
+        target_room = _replace_stock_room_opening(
+            target_room,
+            hook=target,
+            target=source,
+        )
     source_visible = tuple(dict.fromkeys((*source_room.visible_rooms, target.room_resref)))
     target_visible = tuple(dict.fromkeys((*target_room.visible_rooms, source.room_resref)))
     source_room = replace(source_room, visible_rooms=source_visible)
@@ -1186,6 +1497,37 @@ def connect_authored_room_openings(
         new_source_position=tuple(float(value) for value in source_room.position),
         rotation_degrees=rotation_degrees,
     )
+    # A module transition is owned by exactly one side of the reciprocal
+    # portal. Keeping the mirrored visual shell on the dragged/source room
+    # avoids coplanar duplicates while the two generated WOKs continue to own
+    # traversal and collision.
+    from .map_studio_pascal_building import pascal_architecture_profile_for_room
+    from .map_studio_terrain_kit import module_transition_asset_for_profiles
+
+    source_profile = pascal_architecture_profile_for_room(updated, source.room_resref)
+    target_profile = pascal_architecture_profile_for_room(updated, target.room_resref)
+    transition_asset_id = module_transition_asset_for_profiles(source_profile, target_profile)
+    if transition_asset_id:
+        _room, connected_source_opening = _room_opening_for_hook(updated, source)
+        source_metadata = dict(connected_source_opening.metadata or {})
+        source_metadata.update(
+            {
+                "module_transition_asset_id": transition_asset_id,
+                "module_transition_target_profile": target_profile,
+                "module_transition_floor_required": True,
+                "module_transition_owner": "source_room",
+            }
+        )
+        updated = _replace_opening_metadata(updated, source, source_metadata)
+        target_metadata = _opening_metadata_for_hook(updated, target)
+        for key in (
+            "module_transition_asset_id",
+            "module_transition_target_profile",
+            "module_transition_floor_required",
+            "module_transition_owner",
+        ):
+            target_metadata.pop(key, None)
+        updated = _replace_hook_metadata(updated, target, target_metadata)
     from .authored_module_walkmesh import (
         compile_authored_room_connection_walkmeshes,
         upsert_authored_walkmesh_room_connection,

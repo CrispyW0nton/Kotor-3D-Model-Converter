@@ -85,6 +85,13 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_bas_attachment_catalog.py
 !/tests/test_resource_manager_revision_concurrency.py
 !/tests/test_head_workflow.py
+!/tests/test_head_builder_project.py
+!/tests/test_head_builder_repository.py
+!/tests/test_head_donor_catalog.py
+!/tests/test_head_donor_snapshot.py
+!/tests/test_head_builder_service.py
+!/tests/test_head_game_install.py
+!/tests/test_custom_head_builder_entry.py
 !/tests/test_head_inspector.py
 !/tests/test_head_viseme_panel.py
 !/tests/test_head_phoneme_panel.py
@@ -385,6 +392,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_map_studio_placement_table_editing.py
 !/tests/test_map_studio_placement_drop_target.py
 !/tests/test_map_studio_placement_drag_source.py
+!/tests/test_getting_started_tutorial.py
 !/tests/test_placeable_builder_ui.py
 !/tests/test_map_studio_lightmap_apply_workflow.py
 !/tests/test_sith_ithorian_visual_capture_harness.py
@@ -426,7 +434,17 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_custom_rigged_character_import.py
 !/tests/test_custom_rigged_character_packaging.py
 !/tests/test_custom_rigged_character_validation.py
+!/tests/test_mdl_dangly_rest_vertices.py
 !/tests/test_particle_system.py
+!/tests/test_head_alignment.py
+!/tests/test_head_art_importer.py
+!/tests/test_head_skin_transfer.py
+!/tests/test_head_geometry_transplant.py
+!/tests/test_head_uv.py
+!/tests/test_head_texture_asset.py
+!/tests/test_head_attachment_preview.py
+!/tests/test_head_binary_export.py
+!/tests/test_head_game_records_and_package.py
 /knowledge_base/books
 /docs/architecture
 /docs
@@ -459,4 +477,6 @@ knowledge_base/test_artifacts/*.zip
 /kotornet-fork/
 /KotorDebugger/sessions/
 /KotorDebugger/*.log
+/KotorDebugger/observer_*.json
+/*.kmap
 /extract_books_output.txt

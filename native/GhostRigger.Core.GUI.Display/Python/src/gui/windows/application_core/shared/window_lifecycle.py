@@ -53,6 +53,14 @@ class WindowLifecycleMixin:
         if mode == "native_kotor_character":
             self._show_native_character_builder()
             return
+        if mode in {
+            "native_kotor_head",
+            "head_builder",
+            "custom_head",
+            "modular_head",
+        }:
+            self._show_native_character_builder("head")
+            return
         if mode == "custom_rigged_character":
             self._show_custom_rigged_character_builder()
             return
@@ -76,14 +84,16 @@ class WindowLifecycleMixin:
         selector.raise_()
         selector.activateWindow()
 
-    def _show_native_character_builder(self) -> None:
-        """Open the unchanged native-KOTOR-template Character Builder."""
+    def _show_native_character_builder(self, mode: object = "") -> None:
+        """Open or reuse the native Character Builder in an optional mode."""
 
         if self._character_builder_window is None:
             self._character_builder_window = QtCharacterBuilderWindow(self)
             self._character_builder_window.customBuilderRequested.connect(
                 self._show_custom_rigged_character_builder
             )
+        if mode:
+            self._character_builder_window.open_mode(mode)
         self._character_builder_window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         self._character_builder_window.show()
         self._character_builder_window.raise_()
@@ -146,7 +156,9 @@ class WindowLifecycleMixin:
         """Route tutorial calls to existing, production workspace entry points."""
 
         key = str(route or "").strip().lower()
-        if key == "resources":
+        if key == "settings":
+            self._open_settings_dialog()
+        elif key == "resources":
             self._show_workspace_dock("resources")
             self._show_workspace_dock("content_browser")
         elif key == "scene":
@@ -167,8 +179,16 @@ class WindowLifecycleMixin:
                 focus(key)
         elif key == "module_editor":
             self._open_stock_module_editor_window()
+        elif key == "particle_editor":
+            self._open_particle_editor_window()
+        elif key == "scripting":
+            self._open_scripting_dialogue_studio_window()
+        elif key == "gui_editor":
+            self._open_gui_editor_window()
         elif key == "character":
             self._open_qt_character_builder_window()
+        elif key in {"head_builder", "custom_head", "modular_head"}:
+            self._open_qt_character_builder_window("native_kotor_head")
         elif key == "retarget":
             self._open_animation_retarget_window()
         else:

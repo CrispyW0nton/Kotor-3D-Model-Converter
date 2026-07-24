@@ -240,6 +240,8 @@ PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_VIEWPORT_ADAPTER RCDATA "Python/src/gui/camera/
 PYTHON_PAYLOAD_GUI_CAMERA_FRAME_RENDERER RCDATA "Python/src/gui/camera/frame_renderer.py"
 PYTHON_PAYLOAD_GUI_CAMERA_RENDER_MANIFEST RCDATA "Python/src/gui/camera/render_manifest.py"
 PYTHON_PAYLOAD_GUI_CAMERA_RENDER_OUTPUT RCDATA "Python/src/gui/camera/render_output.py"
+PYTHON_PAYLOAD_GUI_CONTROLLERS_INIT RCDATA "Python/src/gui/controllers/__init__.py"
+PYTHON_PAYLOAD_GUI_CONTROLLERS_HEAD_BUILDER_CONTROLLER RCDATA "Python/src/gui/controllers/head_builder_controller.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_EXPORT_DIALOG RCDATA "Python/src/gui/dialogs/qt_export_dialog.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_FBX_ANIMATION_SELECTION_DIALOG RCDATA "Python/src/gui/dialogs/qt_fbx_animation_selection_dialog.py"
 PYTHON_PAYLOAD_GUI_LIGHTING_INIT RCDATA "Python/src/gui/lighting/__init__.py"

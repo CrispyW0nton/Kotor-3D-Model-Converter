@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 59,
+    "file_count": 63,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -123,7 +123,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MODEL_DATA",
             "source_path": "src/core/geometry/model_data.py",
             "packaged_path": "Python/src/core/geometry/model_data.py",
-            "sha256": "d704465fb6cb8aa64dac16072a59a1e435c9a4ec2e74f532de5ac2ca1e193870"
+            "sha256": "6cb0af36c09188165d2376daab5b073122443a340e31a5b1c94781f2756b3f0c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_POLYGON_MESH_OPERATIONS",
@@ -256,6 +256,30 @@
             "source_path": "src/math/gpu_math.py",
             "packaged_path": "Python/src/math/gpu_math.py",
             "sha256": "99a867d656dd9a6c8071bbf64f220ab8e8344953658aaedc7309782c5d1f3a78"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_ALIGNMENT",
+            "source_path": "src/math/head_alignment.py",
+            "packaged_path": "Python/src/math/head_alignment.py",
+            "sha256": "be52d9e58a60cd2e60b08dc0135765099abbc00bb502227e3ea986245c7edd7d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_COMPONENT_TRANSFORM",
+            "source_path": "src/math/head_component_transform.py",
+            "packaged_path": "Python/src/math/head_component_transform.py",
+            "sha256": "349f5c5662449386ca8bfb8a2dd44aca889d2fcdd569b2a9f360de3446e99cde"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_SKIN_TRANSFER",
+            "source_path": "src/math/head_skin_transfer.py",
+            "packaged_path": "Python/src/math/head_skin_transfer.py",
+            "sha256": "001879343518f38df193c48676680920b24d93bebd8537e4ba4c0176c269cbf0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_UV",
+            "source_path": "src/math/head_uv.py",
+            "packaged_path": "Python/src/math/head_uv.py",
+            "sha256": "46cd0628b4cd556eb28dba378c7d1e2174a6771dd273bf7246c701242b4f4b31"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_HEAT_DIFFUSION_SKINNING",

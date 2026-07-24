@@ -236,8 +236,16 @@ def _apply_raw_supernode_numbers(
     base = 12
     try:
         root_rel = struct.unpack_from("<I", mdl_bytes, base + 40)[0]
+        geometry_node_count = struct.unpack_from(
+            "<I", mdl_bytes, base + 44
+        )[0]
     except struct.error:
         return
+    # Preserve the raw field rather than replacing it with the number of
+    # locally traversed records. Supermodel-derived characters use a
+    # cumulative inheritance-chain span here (PFHA04: 564 declared / 38
+    # local), which retail needs when it follows a modular neck_g link.
+    model.geometry_node_count = int(geometry_node_count)
     if root_rel <= 0:
         return
 
@@ -287,6 +295,21 @@ def _apply_raw_supernode_numbers(
             if name_index in number_by_name_index:
                 node.number = number_by_name_index[name_index]
     setattr(model, "_gr_native_supernode_numbers", dict(number_by_name_index))
+    # A complete, collision-free binary identity map is safe to round-trip
+    # through the full writer.  Without this opt-in the writer intentionally
+    # falls back to dense DFS numbering, which breaks stock modular heads such
+    # as PFHA04 even though their sparse +2 identities were read correctly.
+    geometry_nodes = list(model.all_nodes())
+    geometry_numbers = [
+        int(getattr(node, "number", -1))
+        for node in geometry_nodes
+    ]
+    model.preserve_native_supernode_numbers = bool(
+        geometry_nodes
+        and len(number_by_name_index) == len(geometry_nodes)
+        and all(0 <= value <= 0xFFFF for value in geometry_numbers)
+        and len(set(geometry_numbers)) == len(geometry_numbers)
+    )
 
 
 def _apply_raw_super_root_link(
@@ -805,10 +828,16 @@ def _mdl_to_kotormodel(pk_mdl, game_version: Optional[GameVersion]) -> KotorMode
         model.classification = 'character'
         model.model_type = 4
 
+    declared_bb_min = model.bb_min
+    declared_bb_max = model.bb_max
+    declared_radius = model.radius
     try:
         model.bb_min = (float(pk_mdl.bmin.x), float(pk_mdl.bmin.y), float(pk_mdl.bmin.z))
         model.bb_max = (float(pk_mdl.bmax.x), float(pk_mdl.bmax.y), float(pk_mdl.bmax.z))
         model.radius = float(getattr(pk_mdl, 'radius', 0.0) or 0.0)
+        declared_bb_min = model.bb_min
+        declared_bb_max = model.bb_max
+        declared_radius = model.radius
     except Exception:
         pass
 
@@ -840,7 +869,19 @@ def _mdl_to_kotormodel(pk_mdl, game_version: Optional[GameVersion]) -> KotorMode
     except Exception as _vs_exc:
         log.debug("vertex_space assignment failed: %s", _vs_exc)
 
+    # Keep the binary model-header envelope source-preserving.  Retail
+    # character heads commonly declare deliberately broad culling bounds that
+    # differ from their tight rendered-geometry bounds.  The viewport still
+    # needs the latter, so compute and expose it through the established
+    # ``_gr_render_bounds`` side channel, then restore the serialized values
+    # for round-trip writing.
     model.compute_bounds()
+    setattr(model, "_gr_render_bounds", (model.bb_min, model.bb_max))
+    setattr(model, "_gr_render_radius", model.radius)
+    setattr(model, "_gr_bounds_prepared", True)
+    model.bb_min = declared_bb_min
+    model.bb_max = declared_bb_max
+    model.radius = declared_radius
     _fill_missing_normals(model)
     _apply_bind_pose(model)
     return model
@@ -1207,6 +1248,21 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     try:
         gr.bb_min = (float(mesh.bb_min.x), float(mesh.bb_min.y), float(mesh.bb_min.z))
         gr.bb_max = (float(mesh.bb_max.x), float(mesh.bb_max.y), float(mesh.bb_max.z))
+        # PyKotor exposes the complete trimesh culling envelope, but the
+        # historical conversion retained only min/max. Modular-head export
+        # freezes the donor's per-node radius too, so preserve the raw mesh
+        # values explicitly for the writer and structural reload verifier.
+        gr.mesh_bb_min = gr.bb_min
+        gr.mesh_bb_max = gr.bb_max
+        gr.radius = float(getattr(mesh, "radius", 0.0) or 0.0)
+        gr.mesh_radius = gr.radius
+        average = getattr(mesh, "average", None)
+        if average is not None:
+            gr.mesh_average_point = (
+                float(average.x),
+                float(average.y),
+                float(average.z),
+            )
     except Exception:
         pass
 

@@ -189,9 +189,11 @@ from .map_studio_terrain_sculpt_session import (
 from .map_studio_terrain_kit import (
     build_terrain_kit_preview_model,
     build_terrain_kit_primitive,
+    module_transition_asset_for_profiles,
     scan_vanilla_terrain_kit_assets,
     terrain_kit_asset,
     terrain_kit_asset_rows,
+    terrain_kit_runtime_resources,
     transform_terrain_kit_primitive,
     vanilla_terrain_kit_assets,
     write_vanilla_terrain_kit_catalog,
@@ -217,6 +219,7 @@ from .map_studio_pascal_building import (
     available_pascal_building_styles,
     pascal_building_levels as pascal_building_levels_for_project,
     pascal_architecture_door_spec,
+    pascal_architecture_profile_for_room,
     pascal_architecture_runtime_resources,
     preview_pascal_building_opening,
     scan_vanilla_pascal_building_styles,
@@ -2205,7 +2208,12 @@ class ModuleEditorController:
 
     def _authored_architecture_runtime_resources(self) -> tuple[tuple[str, str, bytes], ...]:
         authored = self._map_studio_authored_project_snapshot()
-        return () if authored is None else pascal_architecture_runtime_resources(authored)
+        if authored is None:
+            return ()
+        return (
+            tuple(pascal_architecture_runtime_resources(authored))
+            + tuple(terrain_kit_runtime_resources(authored))
+        )
 
     def _map_studio_template_resources(self) -> tuple[tuple[str, str, bytes], ...]:
         return (
@@ -4361,6 +4369,101 @@ class ModuleEditorController:
             target_edge = int(placement.get("target_edge_index", -1))
             if not target_key or target_edge < 0:
                 raise ValueError("The authored-wall snap target is no longer valid.")
+            source_style_id = environment_kit_builder_style_id(
+                piece.game,
+                piece.module_resref,
+                piece.collection_id,
+            )
+            source_style = next(
+                (
+                    candidate
+                    for candidate in available_pascal_building_styles(game)
+                    if candidate.style_id.strip().lower() == source_style_id.strip().lower()
+                ),
+                None,
+            )
+            source_profile = (
+                str(source_style.architecture_profile or "").strip().lower()
+                if source_style is not None
+                else ""
+            )
+            target_profile = pascal_architecture_profile_for_room(authored, target_key)
+            source_door_spec = pascal_architecture_door_spec(game, source_profile)
+            target_door_spec = pascal_architecture_door_spec(game, target_profile)
+            transition_asset_id = module_transition_asset_for_profiles(target_profile, source_profile)
+            cave_profiles = {"korriban_caves_k1", "korriban_caves_k2"}
+            open_cave_transition = bool(transition_asset_id) and (
+                source_profile in cave_profiles or target_profile in cave_profiles
+            )
+            # When a measured architectural stock room meets an organic cave,
+            # let the architectural side own the transition hardware.  The
+            # target cave has no door contract of its own, so without this
+            # adapter the retail DOR_LKO04 threshold would be left as a bare
+            # rectangular hole and the UTD actor would never be authored.
+            cross_style_door_spec = (
+                source_door_spec
+                if source_door_spec is not None
+                and target_door_spec is None
+                and source_profile != target_profile
+                and not open_cave_transition
+                else None
+            )
+            connection_metadata = {
+                "connected_room_resref": room_key,
+                "connected_opening_name": source_magnet_id,
+                "connection_state": "connected",
+                "walkmesh_portal": True,
+                "walkmesh_portal_inset_m": 0.0
+                if physical_portal_aligned
+                else self._environment_kit_wall_portal_inset(
+                    authored,
+                    target_room_resref=target_key,
+                    target_edge_index=target_edge,
+                    source_portal=source_portal,
+                    source_hook=source_hook_row,
+                ),
+                "walkmesh_portal_width_m": float((source_portal or {}).get("width_m", 0.0) or 0.0),
+                "walkmesh_portal_source": "environment_kit_stock_threshold",
+            }
+            if transition_asset_id:
+                connection_metadata.update(
+                    {
+                        "module_transition_asset_id": transition_asset_id,
+                        "module_transition_target_profile": source_profile,
+                        "module_transition_floor_required": True,
+                        "module_transition_owner": "authored_target_room",
+                        "module_transition_source": "environment_kit_stock_threshold",
+                        "open_module_transition": open_cave_transition,
+                        "cave_archway_transition": open_cave_transition,
+                        "suppress_door_actor": open_cave_transition,
+                    }
+                )
+            if cross_style_door_spec is not None:
+                connection_metadata.update(
+                    {
+                        "cross_style_transition": True,
+                        "cross_style_source_profile": source_profile,
+                        "cross_style_target_profile": target_profile,
+                        "door_template_resref": str(cross_style_door_spec["template_resref"]),
+                        "door_model_resref": str(cross_style_door_spec["model_resref"]),
+                        "door_appearance_id": int(cross_style_door_spec["appearance_id"]),
+                        "door_aperture_width_m": float(cross_style_door_spec["opening_width_m"]),
+                        "door_aperture_height_m": float(cross_style_door_spec["opening_height_m"]),
+                        "door_outer_width_m": float(
+                            cross_style_door_spec.get(
+                                "frame_width_m",
+                                cross_style_door_spec["opening_width_m"],
+                            )
+                        ),
+                        "door_outer_height_m": float(
+                            cross_style_door_spec.get(
+                                "frame_height_m",
+                                cross_style_door_spec["opening_height_m"],
+                            )
+                        ),
+                        "architecture_role": f"{source_profile}_to_{target_profile}_doorway",
+                    }
+                )
             authored = set_pascal_building_opening_in_project(
                 authored,
                 room_resref=target_key,
@@ -4370,23 +4473,7 @@ class ModuleEditorController:
                 width=float(placement.get("opening_width", 1.8) or 1.8),
                 height=float(placement.get("opening_height", 2.4) or 2.4),
                 bottom=float(placement.get("opening_bottom", 0.0) or 0.0),
-                connection_metadata={
-                    "connected_room_resref": room_key,
-                    "connected_opening_name": source_magnet_id,
-                    "connection_state": "connected",
-                    "walkmesh_portal": True,
-                    "walkmesh_portal_inset_m": 0.0
-                    if physical_portal_aligned
-                    else self._environment_kit_wall_portal_inset(
-                        authored,
-                        target_room_resref=target_key,
-                        target_edge_index=target_edge,
-                        source_portal=source_portal,
-                        source_hook=source_hook_row,
-                    ),
-                    "walkmesh_portal_width_m": float((source_portal or {}).get("width_m", 0.0) or 0.0),
-                    "walkmesh_portal_source": "environment_kit_stock_threshold",
-                },
+                connection_metadata=connection_metadata,
             )
             target_room_after = next(room for room in authored.rooms if room.normalised_resref() == target_key)
             target_opening_name = next(
@@ -4399,6 +4486,69 @@ class ModuleEditorController:
                 ),
                 "",
             )
+            if cross_style_door_spec is not None and target_opening_name:
+                target_primitive_after = target_room_after.primitive
+                target_points_after = tuple(getattr(target_primitive_after, "points", ()) or ())
+                target_start = target_points_after[target_edge]
+                target_end = target_points_after[(target_edge + 1) % len(target_points_after)]
+                target_origin = tuple(
+                    float(value)
+                    for value in tuple(target_room_after.position or (0.0, 0.0, 0.0))[:3]
+                )
+                center_fraction = float(placement.get("target_center_fraction", 0.5) or 0.5)
+                opening_bottom = float(placement.get("opening_bottom", 0.0) or 0.0)
+                door_position = (
+                    target_origin[0]
+                    + float(target_start[0])
+                    + (float(target_end[0]) - float(target_start[0])) * center_fraction,
+                    target_origin[1]
+                    + float(target_start[1])
+                    + (float(target_end[1]) - float(target_start[1])) * center_fraction,
+                    target_origin[2]
+                    + float(getattr(target_primitive_after, "z", 0.0) or 0.0)
+                    + opening_bottom,
+                )
+                door_bearing = math.atan2(
+                    float(target_end[1]) - float(target_start[1]),
+                    float(target_end[0]) - float(target_start[0]),
+                )
+                door_update = add_authored_gameplay_placement(
+                    authored,
+                    kind="door",
+                    template_resref=str(cross_style_door_spec["template_resref"]),
+                    tag=f"{target_key}_{target_opening_name}"[:32],
+                    position=door_position,
+                    bearing=door_bearing,
+                )
+                authored = door_update.project
+                patched_rooms: list[AuthoredRoomSpec] = []
+                for current in authored.rooms:
+                    if current.normalised_resref() != target_key:
+                        patched_rooms.append(current)
+                        continue
+                    patched_openings = tuple(
+                        replace(
+                            opening,
+                            metadata={
+                                **dict(opening.metadata or {}),
+                                "door_placement_id": door_update.placement_id,
+                                "cross_style_transition_actor": True,
+                            },
+                        )
+                        if str(opening.name or "").strip() == target_opening_name
+                        else opening
+                        for opening in tuple(getattr(current.primitive, "openings", ()) or ())
+                    )
+                    patched_rooms.append(
+                        replace(
+                            current,
+                            primitive=replace(current.primitive, openings=patched_openings),
+                        )
+                    )
+                authored = replace(authored, rooms=tuple(patched_rooms))
+                target_room_after = next(
+                    room for room in authored.rooms if room.normalised_resref() == target_key
+                )
             connected_rooms: list[AuthoredRoomSpec] = []
             for current in authored.rooms:
                 if current.normalised_resref() != target_key:

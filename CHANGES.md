@@ -11,6 +11,673 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-23
 
+### [2026-07-23] T2909 Telos kit, responsive environment shelf, and first-run tutorial audit
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal environment kits, K2 Telos room/door/walkmesh
+authoring, content-browser thumbnail scheduling, GhostStudio onboarding, native
+embedded payload delivery, and repository hygiene.
+
+Intersects: the active Korriban/Shyrack/Shadowlands Map Studio work and the
+concurrent Custom Head Builder source already present in the canonical dirty
+tree. Both feature lines and their payload metadata were preserved.
+
+Added the first K2 Telos Citadel Station construction style. The Pascal builder
+now offers measured residential, civic, and concourse room archetypes with
+canted wall panels, ceiling coffers, light belts, area-appropriate materials,
+K2 Telos door frames and working `dor_tel14` doors, and regenerated per-room
+walkmesh. The Telos shelf contains 97 classified vanilla room tiles from
+201/202/203/204/207/208/209/211/220/221/222TEL plus nine individually
+placeable signs, monitors, benches, doorway piers, terminals, and light-band
+dressing pieces. Opening a K2 KMAP now synchronizes both environment and
+terrain shelves to K2 before restoring the saved build style.
+
+Removed the last content-browser open-path stall. Hidden environment shelves
+request no thumbnails, a visible shelf auto-queues only one card, and authentic
+stock-room preview loading, texture decode, and ModernGL rendering now run on a
+single bounded worker. Qt image/pixmap publication remains on the GUI thread,
+so all cards and their descriptive placeholders are immediately draggable
+while completed previews arrive in place.
+
+Rebuilt the first-run tutorial as 16 unambiguous task guides: Start Here,
+resources/projects, scene editing, multi-component modeling, Placeable Builder,
+Map Studio, terrain, texture painting, stock-module patching, Particle Editor,
+Scripting Suite, Odyssey GUI Editor, Custom Head Builder, Character Builder,
+retargeting, and final game proof. Every guide now names the exact menu path,
+prerequisites, numbered workflow, output, and acceptance standard; Back/Next
+buttons name their destination; Alt+Left/Alt+Right navigate; accessible labels
+describe the controls; Start Here explains the one-time popup and F1 recovery;
+and all route buttons open their real production workspace.
+
+Repository cleanup ignores root-local observer sessions and disposable KMAP
+work files while retaining reusable proof scripts and source assets. Git object
+maintenance removed accumulated unreachable garbage. The Runtime.Shared copy
+of `mesh_render_data.py` was reconciled with the canonical rendering owner so
+intentional zero-alpha materials remain transparent and payload identity is
+restored.
+
+Affected areas: Core Scene and Core Tools Map Studio builder/environment-kit
+modules, Core Tools `module_editor_window.py`, both GUI Display/Core Tools
+`environment_kit_browser.py` copies, GUI Display tutorial and lifecycle
+routing, Telos and room-operation focused tests/proof scripts, Runtime.Shared
+renderer payload copy, native payload metadata, `.gitignore`, and
+`CHANGES.md`.
+
+Verification: the Telos structural proof exported and read back three separate
+rooms with two zero-gap reciprocal portals, two working Telos doors, continuous
+WOK traversal, and no unresolved door dependencies. The staged Debug
+application PIE proof produced three continuous content frames and moved the
+player 21.42 m through valid walkmesh with 20 walkable faces and 1,692
+collision triangles; proof is under
+`artifacts/telos_citadel_proof/canonical_visible_pie/`. Four focused tutorial
+tests passed, including all 16 pages across Default, Matrix, Droid, Dark,
+Light, and Classic; the focused browser tests passed; and 60 native payload,
+registry, and package-sweep checks passed. GUI Display and Core Tools rebuilt
+as Debug x64 and all 18 payload DLLs staged. In the actual staged application,
+F1 opened Start Here, its Settings route opened the real settings dialog, the
+Particle lesson opened the real Particle Editor, and the first and last pages
+were visually checked without clipping. A real 106-card Telos shelf displayed
+an authentic rendered tile immediately; after selecting another stock room
+while its preview rendered, all 20 UI responsiveness probes passed. Tutorial
+captures are under `artifacts/tutorial_audit/canonical/`.
+
+### [2026-07-23] T1701-T2205 Vanilla head component customization
+
+Owner: LordVaderCW
+
+Subsystem: Character Studio Head Builder, Core Workflow component assembly,
+Core Math mesh-space rebasing, Core IO binary validation, Core Project
+persistence, and native embedded payload delivery.
+
+Intersects: the active Custom Head Builder source and payload work in the dirty
+tree. Unrelated Map Studio, renderer, and contributor changes were preserved.
+
+Added a durable vanilla-component recipe to the Custom Head Builder. A
+compatible stock modular head remains the carrier while the builder can
+independently source its face and mouth, paired eye meshes and baked eye
+texture, eyelids/lashes, and available hair or head-tail slots from other
+compatible vanilla heads. Assembly rebases mesh channels into the carrier's
+node-local space, remaps skin weights by bone name, preserves the carrier DAG,
+node identities, palette order, bind arrays, transforms, and raw bounds, and
+clears unused hair slots without deleting hierarchy nodes.
+
+The Qt workflow exposes named source fields and highlighted-head assignment
+buttons for each component role, persists recipes in schema-v2
+`.ghosthead.json` projects, verifies source MDL/MDX hashes on reopen, and
+reconstructs the identical candidate before material and export work. Standard
+human and near-human heads are isolated from the modular-alien family.
+Twi'lek-style modular heads can use the same workflow within their family;
+full-body Rodian, Duros, Bith, Trandoshan, and similar assets are routed to a
+future extraction/retarget lane, and Ithorians are explicitly unsupported for
+player-body use.
+
+Affected areas: new
+`src/core/characters/head_component_catalog.py` and
+`src/math/head_component_transform.py`; extended Head Builder project,
+repository, service, donor-snapshot, material, binary-export, Qt workspace, and
+controller modules; synchronized Workflow, Math, IO, Project, GUI Display, and
+Core Tools payloads; focused component, project, service, binary, UI-contract,
+and payload tests; theme/layout documentation; and the Custom Head Builder
+architecture specification.
+
+Verification: 76 focused component-catalog, project, repository,
+donor-snapshot, service, binary-export, and UI-contract tests passed. The
+targeted native payload coverage and byte-identity checks passed, as did all
+seven focused binary-export tests. Debug x64 builds passed for
+GhostRigger.Core.Workflow, GhostRigger.Core.Math, GhostRigger.Core.IO,
+GhostRigger.Core.Project, GhostRigger.Core.GUI.Display, and
+GhostRigger.Core.Tools. With installed K2 assets, a PFHA04 carrier was rebuilt
+with PFHA01 face/mouth/hair, PFHA02 eyes, and PFHA03 eyelids/lashes; it retained
+38 nodes, rendered 29 meshes / 1,442 vertices / 1,004 triangles with all three
+texture families loaded, exported and reloaded with zero blocking differences,
+and reproduced payload hash
+`5294eab91dd6d3d8b17274910b30a3bfa5b310a4486f2f72c543856faa5b1cfa`.
+The saved recipe reopened in an isolated Debug GhostStudio runtime, loaded the
+assembled head visibly, and rebuilt through the actual
+`Build vanilla combination` control. The new controls and populated viewport
+were visually checked in Default, Matrix, Droid, Dark, Light, and Classic.
+Retail-game proof remains a separate user-confirmed release gate.
+
+### [2026-07-23] T2909 Open cave transitions for Korriban tomb/Shyrack chains
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio authored-room builder, module transition snapping, and PIE walkmesh traversal.
+
+Intersects: existing Map Studio Korriban/Shyrack/transition-kit work in the dirty tree; unrelated custom head-builder and payload changes were preserved.
+
+Updated Korriban tomb ↔ Shyrack cave module transitions so cave archway transition assets remain open passages instead of spawning automatic KOTOR door actors. Each reciprocal room seam now owns exactly one visual transition shell instead of stacking the Korriban and Shyrack entrances at the same portal. Existing authored-room targets retain the matching Korriban shell; source-side cave shells are used when the stock destination cannot own authored opening geometry. The Shyrack shell receives its required 90-degree authored-axis correction, the Korriban shell faces the approach, and the isolated rear insert that capped its aperture is removed while source UV/normal indices remain intact. Open cave transitions suppress style-door dimension overrides, remove stale generated door placement metadata, and preserve reciprocal walkmesh portal connectivity. Also hardened floor-plan inset handling for collinear portal-boundary splits so connected parcel rooms do not fail contour generation when a fourth room is attached.
+
+Affected areas: `native/GhostRigger.Core.Scene/Python/src/core/modules/authored_module_layout.py`, `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_terrain_kit.py`, `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_pascal_building.py`, `native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py`, mirrored `native/GhostRigger.Core.Tools/Python/src/core/modules/*` payload copies, prepared assets under `assets/map_studio/terrain_kits/cave_portals/`, `scripts/prepare_cave_portal_assets.py`, `tests/test_authored_room_operations.py`, and `scripts/build_shyrack_tomb_chain_proof.py`.
+
+Verification: Python compilation passed for both owning payload copies. Focused supplied-transition and complete tomb/cave-chain tests passed (2 tests). The proof module passed with four separate rooms, three zero-gap reciprocal portals, one Korriban shell, two Shyrack shells, no door actors, continuous WOK traversal, and export/readback of all four WOKs. Core Scene and Core Tools rebuilt in Debug x64 and all 18 manifest-owned DLLs staged successfully. In the actual staged Map Studio window, PIE was started through the visible UI and the player was physically walked from the generated tomb through the open Korriban entrance, the generated Shyrack room, the correctly facing Shyrack entrance, the vanilla `m38aa_02` tomb geometry, and into the second generated cave while remaining on valid WOK faces. Captures: `artifacts/korriban_proof/shyrack_tomb_chain/pie_single_korriban_transition.png`, `pie_inside_shyrack_room.png`, `pie_at_shyrack_transition.png`, `pie_crossed_shyrack_to_vanilla.png`, and `pie_second_portal_approach.png`.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder reopened preview load
+
+Owner: LordVaderCW
+
+Subsystem: Custom Head Builder Qt presentation, Core Tools reopen
+orchestration, Core Workflow preflight rehydration, and native embedded
+payload delivery.
+
+Intersects: existing shared Map Studio and renderer payload drift was left
+untouched. The broad native payload contract test still reports unrelated
+Core Scene manifest/hash drift, a Core Scene `map_studio_pascal_building.py`
+indentation error, and a renderer duplicate-payload mismatch.
+
+Fixed the saved-project reopen path so a completed `.ghosthead.json` restores
+runtime donor, art, alignment, texture, attachment, and binary-preflight state
+without mutating the saved workflow step or dirty flag. The controller now
+syncs the loaded game to the Character Builder selector, treats viewport
+handoff failures as command failures instead of masking them as complete, and
+logs/validates that the viewport accepted the preview model. The Head Builder
+right panel now uses the current donor/art report field names and gives long
+status text its own wrapped line so step titles do not overlap.
+
+Affected files: `src/core/characters/head_builder_service.py`,
+Core Workflow `head_builder_service.py`, Core Tools
+`head_builder_controller.py`, Core GUI Display `qt_head_builder_workspace.py`,
+native payload manifests for GUI Display/Tools/Workflow, and focused tests in
+`tests/test_head_builder_service.py` and `tests/test_custom_head_builder_entry.py`.
+
+Verification: Python compile checks passed for the touched service,
+controller, panel, and tests. Focused tests passed:
+`test_head_properties_accept_current_donor_snapshot_fields`,
+`test_character_studio_head_mode_mounts_production_workspace`, and
+`test_uv_texture_material_saves_reopens_with_matching_orientation`. The three
+touched native payload projects were regenerated and verified byte-identical
+against their root/package sources. Debug x64 builds passed for
+GhostRigger.Core.GUI.Display, GhostRigger.Core.Tools, and
+GhostRigger.Core.Workflow. In an isolated Debug GhostStudio runtime, the
+release candidate reopened at step 11 with K2 synced, 14 evidence records
+preserved, and the PFBAM/P_GHSTH1 preview model visibly loaded in the viewport.
+Default, Matrix, Droid, Dark, Light, and Classic populated-model screenshots
+were captured and visually checked for readable layout.
+
+### [2026-07-23] T2909-T2911 Authored-to-vanilla cave and forest module transitions
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal room snapping, stock-room WOK portals, module
+transition meshes, runtime resources, PIE traversal, and authored module export.
+
+Intersects: the active shared Map Studio builder work on `ghost-studio`.
+Existing unrelated builder, payload, and proof changes were retained.
+
+Added UV-preserving supplied transition assets for Korriban tomb entrances,
+Shyrack caves, and Shadowlands tree tunnels. Korriban and Shyrack styles now
+place their matching solid transition shells; Shadowlands adds its supplied
+root tunnel, sealed threshold floor, and replaceable jungle panorama cards.
+Their textures are collected as authored runtime resources for module export.
+
+Pascal rooms can now drag-snap to unused portals on imported vanilla room
+tiles. Stock hooks use the exact imported WOK midpoint, width, ordered edge,
+and outward normal rather than approximate LYT orientation, so the complete
+portal edge aligns without crossed seams. Connections remain separate rooms,
+generate reciprocal VIS/WOK links, preserve area-appropriate doors, and stitch
+validated portal adjacency into the combined PIE walkmesh.
+
+Affected files: Core Scene and Core Tools package-local copies of
+`map_studio_terrain_kit.py`, `authored_room_floorplan.py`,
+`authored_module_layout.py`, and `authored_module_walkmesh.py`; Core Tools
+`module_editor_controller.py` and `module_editor_window.py`; Core Resources,
+Core Tools, and Runtime Shared `resource_manager.py`; Rendering
+`texture_cache.py`; cave-portal assets under
+`assets/map_studio/terrain_kits/cave_portals/`; focused preparation/proof
+scripts; `tests/test_authored_room_operations.py`; and
+`tests/test_resource_manager_revision_concurrency.py`.
+
+Verification: Python compile checks passed. Six focused room-transition,
+stock-snap, architecture, UV, WOK, and PIE tests passed. Three generated proof
+modules passed export/readback: Pascal tomb to vanilla `m34aa_01a` Shyrack
+cave to Pascal tomb; Pascal tomb to concave generated Shyrack cave to vanilla
+tomb; and Pascal Shadowlands clearing to vanilla `m25aa_11a` to a second
+clearing. Portal midpoint gaps were below 0.000001 m, both Shadowlands joins
+were traversed in PIE, and each package reloaded all three separate WOK files.
+The actual staged Debug application rendered the supplied transition textures
+in both Map Studio and PIE. The Korriban motion proof travelled 14.22 m through
+the joined entrance with two working area-style door actors; the stationary
+proof rendered 29,149 triangles and the Shadowlands proof rendered 19,591
+triangles without blockers. The five affected payload projects rebuilt in
+Debug x64 and all 18 manifest-owned DLLs were staged and verified at the repo
+root.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder attachment and inherited-animation preview
+
+Owner: LordVaderCW
+
+Subsystem: Core Workflow exact-headhook preview composition, supermodel
+animation inventory, project evidence/provenance, and native embedded payload
+delivery.
+
+Intersects: the active shared MDL writer/model-data work and ShaolinGhost's
+concurrent Map Studio payload-manifest work. Scoped Workflow regeneration
+preserved those changes; no unrelated source was reverted or claimed here.
+
+Implemented the sixth headless delivery slice for the Custom Head Builder.
+Core Workflow now builds a disposable body/head preview that requires exactly
+one native `headhook`, attaches only a deep-copied head root, and never mutates
+the export candidate. Body and head must have matching non-null supermodels.
+The resolver walks the complete stock supermodel chain with cycle/missing
+resource gates, applies local-first clip override semantics, identifies
+effective clips that target facial nodes owned by the donor head, and records
+selected presets, hook path/world position, source/preview parentage, local
+animation inventories, chain members, and a stable contract fingerprint.
+Inherited or body clips are not copied into the modular head.
+
+`HeadBuilderService` fingerprints the preview body and every inherited
+supermodel MDL/MDX, stores a compact animation projection rather than repeated
+per-clip target arrays, and requires the same resources and contract hash after
+reopen. Optional hair/accessory physics is explicitly recorded as not
+requested and skipped, advancing the workflow to binary preflight.
+
+Affected files: new canonical
+`src/core/characters/head_attachment_preview.py`; extended
+`src/core/characters/head_builder_project.py` and
+`src/core/characters/head_builder_service.py`; synchronized Core Workflow
+payloads and scoped manifest/project resources; new
+`tests/test_head_attachment_preview.py`; extended project, repository,
+service, and native-payload tests; `.gitignore`; the Custom Head Builder
+architecture specification; and Slice 6 proof artifacts under
+`artifacts/custom_head_builder/`.
+
+Verification: Python compile checks passed. Forty-one focused attachment,
+animation, project, repository, service, and save/reopen tests passed. Four
+targeted native payload coverage, byte-identity, resource-name, and Visual
+Studio membership tests passed. Core Workflow built successfully in Debug
+x64.
+
+An installed K2 proof attached the transplanted stock-donor `PFHA04` head to
+stock `PFBAM` at
+`PFBAM/cutscenedummy/rootdummy/torso_g/torsoUpr_g/headhook`. Both reference
+`S_Female03`; the resolved stock chain continued through `S_Female02`,
+`S_Female01`, `S_Male02`, and `S_Male01`. The contract exposed 473 effective
+clips, including 411 facial-targeting clips; `tlknorm`, `talk`, `listen`, and
+`walk` resolved as inherited presets. Source and preview head local-animation
+inventories remained empty, preview parentage was exactly `headhook`, and the
+export candidate reported zero blocking donor differences. A fresh service
+reopen reproduced the same contract hash and all six MDL/MDX resource pairs.
+The compact 178,742-byte project contains no raw vertex or texture arrays and
+advances to `binary_preflight`. This is structural evidence only; visible
+playback, animated seam sampling, Debug-app/six-theme proof, export/package
+proof, and retail proof remain open.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder UV, material, and texture policy
+
+Owner: LordVaderCW
+
+Subsystem: Core Math UV orientation/audit, Core IO texture/TXI inspection and
+MDX writing, Core Workflow donor-safe material assignment, project evidence,
+and native embedded payload delivery.
+
+Intersects: the active shared MDL writer/model-data work and ShaolinGhost's
+concurrent Map Studio payload-manifest work. Scoped Math/IO/Workflow and
+Runtime Core Host regeneration retained those changes; no unrelated source was
+reverted or claimed here.
+
+Implemented the fifth headless delivery slice for the Custom Head Builder.
+Core Math now owns explicit source-import, serialized-MDX, and preview UV
+orientation stages plus finite/channel, range, degenerate-face, winding, and
+overlap audits. Core IO fingerprints and decodes TGA/TPC sources, preserves
+TXI provenance, validates dimensions/mips/alpha, and produces deterministic
+TGA/TPC plus sidecar/embedded-TXI output policy with KOTOR-safe ResRefs. The
+binary MDX writer accepts an explicit serialized UV transform independent of
+renderer preview state.
+
+Core Workflow assigns material only to the donor's mutable rendered `head`
+skin, blocks preview/serialized orientation disagreement, and rechecks the
+complete immutable donor contract. Project state stores source/output policy,
+compact reports, and texture/decoded/UV/material hashes rather than image,
+geometry, or UV arrays. Reopen redecodes the source and must reproduce every
+fingerprint before attachment preview.
+
+Affected files: new canonical `src/math/head_uv.py`,
+`src/io/head_texture_asset.py`, and
+`src/core/characters/head_texture_materials.py`; extended
+`src/core/mdl/mdl_writer.py` and
+`src/core/characters/head_builder_service.py`; synchronized Core Math, Core
+IO, Core Workflow, and Runtime Core Host payloads and scoped manifests/project
+resources; new `tests/test_head_uv.py` and
+`tests/test_head_texture_asset.py`; extended transplant/service/payload tests;
+`.gitignore`; the Custom Head Builder architecture specification; and Slice 5
+proof artifacts under `artifacts/custom_head_builder/`.
+
+Verification: Python compile checks passed. Forty-eight focused UV, texture,
+material, transplant-writer, service, and save/reopen tests passed. Four
+targeted native payload coverage, byte-identity, resource-name, and Visual
+Studio membership tests passed. Core Math, Core IO, Core Workflow, and Runtime
+Core Host each built successfully in Debug x64.
+
+An installed K2 proof applied a 64x64 TGA/TXI checker as `P_CDH01` to the
+PFHA04 transplant. Preview and serialized orientation matched, the donor had
+zero blocking differences, and MDL/MDX write/readback restored `p_cdh01` plus
+all eight UVs with maximum error `2.384e-8`. The reopened project reproduced
+the material payload hash and contained no raw mesh or image bytes. Its
+intentional mirrored UV layout reports two winding and fourteen overlap
+warnings, so unique-surface baking remains gated. This slice makes no visible
+UI or retail claim.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder donor-preserving geometry and skin transfer
+
+Owner: LordVaderCW
+
+Subsystem: Core Math skin transfer, Core Workflow donor-payload transplant and
+Head Builder orchestration, project evidence, and native embedded payload
+delivery.
+
+Intersects: the active shared MDL writer/model-data work and ShaolinGhost's
+concurrent Map Studio work already present in native payload manifests. Scoped
+Math/Workflow regeneration preserved those source and manifest changes; no
+unrelated source was reverted or claimed here.
+
+Implemented the headless fourth delivery slice for the Custom Head Builder.
+Core Math now performs exact nearest-triangle donor sampling with AABB
+lower-bound pruning and closest-point barycentrics, interpolates native donor
+weight rows, normalizes deterministically to at most four influences, and
+provides explicit rigid and bounded distance-fallback modes. Transfer rejects
+invalid donor triangles, palette overflow, non-finite or zero rows, and
+out-of-threshold samples. Selected neck-boundary vertices receive a configured
+minimum attachment-bone influence.
+
+Core Workflow now clones the pristine donor and replaces only the selected
+direct-root `head` skin's rendered vertices, faces, normals, UVs, and
+per-vertex weight rows. It freezes the native DAG, node identities and
+parentage, local transforms, hooks, supermodel/inherited-node declaration,
+local animation inventory, palette/target indices, qBone/tBone/bone-map
+arrays, and raw retail model/node bounds. Custom tight bounds remain preview
+metadata. Part modes are explicit surface transfer, rigid `head_g`, or
+exclusion, and neck selections require stable geometric-boundary identities.
+
+`HeadBuilderService` persists only settings, compact reports, hashes, and
+sparse manual edits. Edits are rebuilt over the deterministic transfer
+baseline, constrained to the immutable donor palette, and rejected if they
+lower a saved neck vertex below its attachment-bone floor. A reopened project
+must reproduce geometry, final-weight, and combined-payload hashes before it
+can continue to UV/material work.
+
+Affected files: new canonical `src/math/head_skin_transfer.py` and
+`src/core/characters/head_geometry_transplant.py`; extended
+`src/math/head_alignment.py` and
+`src/core/characters/head_builder_service.py`; synchronized Core
+Math/Workflow embedded payloads and scoped manifest/project resources;
+`tests/test_head_skin_transfer.py`,
+`tests/test_head_geometry_transplant.py`, extended service/alignment/payload
+tests, the Custom Head Builder architecture specification, `.gitignore`, and
+the Slice 4 proof artifacts under `artifacts/custom_head_builder/`.
+
+Verification: Python compile checks passed. Ninety-five focused Head Builder
+project, entry, repository, donor, import, alignment, transfer, transplant,
+manual-edit, and save/reopen tests passed. Four targeted native payload
+manifest, byte-identity, resource-name, and Visual Studio membership tests
+passed. Core Math and Core Workflow each built successfully in Debug x64.
+
+An installed K2 proof selected stock base/BIF `PFHA04` and preserved its
+single native `head` skin at node ordinal 37, exact 16-slot palette, immutable
+bind arrays, 38-node local DAG, inherited declaration 564, hooks, supermodel,
+and raw bounds. The eight-vertex/ten-face custom fixture replaced the donor's
+563-vertex/849-face rendered payload. All eight rows used barycentric surface
+transfer, with no distance fallback or zero weights; four neck vertices kept
+the `neck_g` floor, and one sparse `head_g`/`f_jaw_g` edit survived a fresh
+service reopen. Geometry, final-weight, and combined-payload hashes matched
+after reopen, with zero blocking contract differences. The 100,648-byte
+project contains no raw vertex or face arrays, reopened cleanly with no
+blocked steps, and advances to `uv_textures_and_materials`. This slice changes
+no visible controls; seam/weight interaction, Debug-app/six-theme proof,
+export/readback, and retail proof remain open and are not claimed.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder art import and headhook alignment
+
+Owner: LordVaderCW
+
+Subsystem: Core IO custom-art ingestion, Core Math topology/alignment, Core
+Workflow Head Builder orchestration, and native embedded payload delivery.
+
+Intersects: the active shared MDL writer/model-data work and ShaolinGhost's
+concurrent Map Studio work already present in native payload manifests. Scoped
+IO/Math/Workflow regeneration retained those source and manifest changes; no
+unrelated source was reverted or claimed here.
+
+Implemented the headless third delivery slice for the Custom Head Builder.
+Core IO now imports OBJ and Blender-backed FBX art into a deterministic,
+renderer-neutral document with source SHA-256, explicit axes and unit scale,
+stable part/imported-vertex identities, source control-point indices where
+available, material/channel/bounds facts, and non-destructive topology audits.
+The project projection deliberately excludes vertex, face, UV, normal, and
+texture blobs. It blocks non-finite or misaligned channels, invalid indices,
+degenerate faces, and non-manifold edges while treating the intended open neck
+boundary and repairable authoring gaps as explicit warnings.
+
+Core Math now owns the named transform chain from imported-art object space
+through body bind into headhook-local space. The solver supports honest
+translation-only, two-anchor minimum-rotation, and weighted Kabsch
+rigid/similarity modes; rejects degenerate anchors and singular hook matrices;
+prevents reflections; and records matrices, determinant, rank, pair/RMS/max
+errors, confidence, warnings, and a stable transform fingerprint.
+
+Core Workflow extends `HeadBuilderService` with import, safe reimport,
+rehydration, and alignment commands. Reopened art must match both saved source
+bytes and decoded structural identity. Rejected art cannot replace an accepted
+document. Alignment requires accepted art and donor contracts, a valid body
+ResRef, an exact `headhook` node path, and an explicit error tolerance before
+the workflow advances to donor-preserving geometry replacement.
+
+Affected files: new canonical `src/io/head_art_importer.py`,
+`src/math/head_alignment.py`, the namespace-aware `src/io/__init__.py`,
+extended `src/core/characters/head_builder_service.py`, synchronized Core
+IO/Math/Workflow payload copies and scoped manifest/project resources,
+`tests/test_head_art_importer.py`, `tests/test_head_alignment.py`, extended
+service/payload tests, the Custom Head Builder architecture specification, and
+`.gitignore`.
+
+Verification: Python compile checks passed. Twenty-nine focused import,
+topology, coordinate-space, Kabsch, service, save/reopen, drift, and donor
+alignment tests passed. Four targeted native payload manifest, byte-identity,
+resource-name, and Visual Studio membership tests passed. Core IO, Core Math,
+and Core Workflow each built successfully in Debug x64.
+
+An actual installed K2 service proof imported an eight-vertex/ten-face open
+neck fixture, accepted its intended four-edge boundary, selected stock base/BIF
+`PFHA04`, and derived the exact hook bind from stock base `PFBAM` at
+`PFBAM/cutscenedummy/rootdummy/torso_g/torsoUpr_g/headhook`. Three anchors
+produced a proper (`det ~= 1`) weighted Kabsch solve with RMS error
+`2.24e-16` and an imported-to-headhook matrix equal to identity within floating
+point tolerance. The 88,459-byte project saved portable paths with no raw mesh
+arrays, reopened in a fresh service with matching art/donor fingerprints, no
+blocked steps, a clean dirty state, and
+`replace_geometry_and_skin` as the next step. This slice changes no visible
+controls; interactive seam picking, viewport/Debug-app proof, a real FBX
+fixture run, and the six-theme matrix remain open and are not claimed.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder project repository and native donor contracts
+
+Owner: LordVaderCW
+
+Subsystem: Core Project persistence, Core Resources KOTOR installation/donor
+discovery, Core Workflow donor eligibility and application service, and native
+embedded payload delivery.
+
+Intersects: ShaolinGhost's concurrent Map Studio work and the active MDL
+loader/writer work in shared native payload manifests. Scoped payload
+regeneration preserved and synchronized those existing canonical changes; no
+unrelated source was reverted.
+
+Implemented the headless second delivery slice for the Custom Head Builder.
+Core Project now owns strict, versioned `.ghosthead.json` load/save with
+bounded UTF-8 JSON parsing, duplicate and non-finite value rejection,
+v0-to-v1 migration, forward-compatible unknown fields, portable
+project-relative asset paths, same-directory atomic replacement, and
+SHA-256-based external-edit/deletion conflict protection.
+
+Core Resources now provides deterministic head-donor discovery and exact
+MDL/MDX resolution for both stock-only and effective-Override views. Candidate
+rows retain addresses, layer/container provenance, priorities, shadowed
+resources, hashes, and explicit mixed-pair/Override warnings. An advanced
+search can expose nonstandard resrefs for structural inspection without
+pretending that filename hints prove eligibility. The read-only installation
+gate fingerprints the selected K1/K2 executable and `chitin.key`, validates
+the KEY signature, and reads one explicitly stock MDL/MDX pair without writing
+to the game directory.
+
+Core Workflow now exposes a Qt-free `HeadBuilderService` plus immutable donor
+snapshot, eligibility, rehydration, and diff contracts. Accepted donors freeze
+the geometry-root/attachment-link distinction, inherited supermodel and local
+clips, exact DAG preorder/parentage/transforms/types, sparse node identities,
+dense name indices, hooks, inherited node declaration, raw model/node bounds,
+palette order and target IDs, qBone/tBone/bone-map convention, and source
+hashes. Only the selected direct-root skin named `head` may replace its
+geometry, material, UV, and per-vertex weight payload; other mesh edits and all
+frozen contract changes block the unchanged-DAG proof. A saved project
+rehydrates only when both donor bytes and the decoded structural fingerprint
+still match. Failed candidate selection cannot overwrite a previously accepted
+donor.
+
+Affected files: new canonical modules under
+`src/core/project/head_builder_repository.py`,
+`src/core/resources/head_donor_catalog.py`,
+`src/core/resources/head_game_install.py`,
+`src/core/characters/head_donor_snapshot.py`, and
+`src/core/characters/head_builder_service.py`; their synchronized Core
+Project/Resources/Workflow payload copies and scoped manifests; Custom Head
+Builder architecture documentation; five focused test modules;
+`tests/test_native_python_payloads.py`; and `.gitignore`.
+
+Verification: Python compile checks passed. Sixty-five focused Head Builder
+project, repository, catalog, install, donor-snapshot, service, and direct-entry
+tests passed. Four targeted native-payload manifest, byte-identity, resource
+name, and Visual Studio membership checks passed. Explicit base/BIF probes
+through `ResourceManagerGameResourceProvider` and the new stock-only catalog
+accepted K1 `PMHC01` (33 local nodes / inherited declaration 366) and K2
+`PFHA04` (38/564), with exact 16-slot palettes, local bind rows, zero
+eligibility issues, and zero self-diff. This slice changes no visible controls;
+an actual K2 service run verified the installation, selected base/BIF PFHA04,
+saved a 69,190-byte project, opened it in a fresh service, rehydrated matching
+source bytes, and returned zero blocking or allowed differences with a clean
+dirty state. Core Project, Core Resources, and Core Workflow each built
+successfully in Debug x64. The existing staged Debug Head Builder entry proof
+remains valid, while UI binding, donor thumbnails, and six-theme workflow proof
+remain open for the workspace slice.
+
+### [2026-07-23] Correct native KOTOR dangly rest-pose serialization
+
+Owner: LordVaderCW
+
+Subsystem: Core IO MDL writer and embedded Core IO/Runtime Core Host payloads.
+
+Corrected the binary writer's KOTOR dangly-mesh contract after auditing stock
+K2 PFHA04 and the Reone reader. The dangly header's `+24` field points to a
+required mesh-local rest-position array; it is not disposable padding. The
+writer now requires one constraint per rendered vertex, writes the native
+`0..255` constraint array, writes one rest-position `vec3` per vertex, and
+patches both arrays with the normal MDL absolute-offset-minus-12 convention.
+This prevents a generated native hair mesh from simulating against a null or
+uninitialized rest pose.
+
+The Xaria regression fixture reuses PFHA04's four native `head_g` dangly nodes
+and raw-verifies matching counts, finite constraints, exact-zero static
+anchors, nonzero simulated vertices, in-range pointers, and zero error between
+the rest and rendered vertex arrays. Its guarded 589-face selection includes
+both front face-framing locks and the side/back hair while excluding the face,
+horns, scalp cap, and neck seam. Retail motion remains pending and is not
+claimed by these structural checks.
+
+Affected files: `src/core/mdl/mdl_writer.py`, its synchronized
+`GhostRigger.Core.IO` and `GhostRigger.Runtime.Core.Host` payload copies, and
+`tests/test_mdl_dangly_rest_vertices.py`.
+
+Verification: Python compile checks passed. Seven focused
+`test_mdl_dangly_rest_vertices.py` and `test_mdl_super_root_link.py` cases
+passed. The Xaria raw binary verifier finds four nodes below 768 vertices,
+matching constraint/rest counts, and zero rest-position error. No visible
+Ghost Studio UI behavior changed in this writer-only slice; the candidate
+still requires retail-game confirmation.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder architecture and project-state foundation
+
+Owner: LordVaderCW
+
+Subsystem: Character Studio Custom Head Builder architecture, Core Workflow
+project/evidence state, and embedded Workflow payload delivery.
+
+Designed the Custom Head Builder as a dedicated Character Studio mode that
+reuses the existing standalone Character Builder shell while keeping donor
+inspection, alignment, skin transfer, validation, export, packaging, and
+resource access in their canonical owners. The architecture captures the
+retail-proven Xaria invariants: exact donor-native DAG preservation, separate
+geometry-root attachment semantics, sparse and dense node identity, donor
+palette/qBone/tBone/bone-map preservation, explicit UV orientation, inherited
+supermodel animation, retail bounds policy, and user-observed retail proof.
+
+Added the versioned `.ghosthead.json` headless project contract for the eleven
+builder stages. It records source provenance, donor contracts, named-space
+alignment, skin-transfer settings, texture and physics state, export/package
+plans, validation evidence, and retail-test evidence while preserving unknown
+metadata for forward compatibility. A retail-observed passing record cannot be
+created without both a user confirmation flag and an observer-session ID.
+The new canonical Python source was regenerated into the existing
+`GhostRigger.Core.Workflow` payload; no new native DLL boundary was introduced.
+
+Affected files: `knowledge_base/reference/specs/custom_head_builder_architecture.md`,
+`src/core/characters/head_builder_project.py`,
+`native/GhostRigger.Core.Workflow/Python/src/core/characters/head_builder_project.py`,
+the scoped Workflow payload manifest/resource/project files,
+`native/GhostRigger.PythonPayloadManifest.json`,
+`tests/test_head_builder_project.py`, and `.gitignore`.
+
+Verification: canonical and packaged source SHA-256 hashes match; Python compile
+checks passed; 17 targeted tests passed across the six project/evidence
+contracts, native payload/project membership, modular-head attachment, sparse
+native node identity, and render-bounds behavior. No visible UI test was
+required for this foundation slice because it does not yet change user-facing
+behavior. Direct Head mode entry and dispatch will receive actual
+Debug-application workflow proof in the next UI slice.
+
+### [2026-07-23] T1701-T2205 Custom Head Builder direct entry and mode-correct UI bridge
+
+Owner: LordVaderCW
+
+Subsystem: Character Studio lifecycle/routing, GUI Display presentation,
+Core Tools embedded GUI consumer, and Head Workflow dispatch.
+
+Intersects: ShaolinGhost's concurrent Map Studio payload work in the shared
+Core GUI Display/Core Tools and root native payload manifests; those entries
+were preserved while the scoped Head Builder payloads were regenerated.
+
+Added a public `open_mode(CharacterMode.HEAD)` entry that reuses one native
+Character Builder window without clearing or replacing its scene. The main
+command strip, Tools menu, Getting Started guide, Character Builder selector,
+and external aliases now route `native_kotor_head`, `head_builder`,
+`custom_head`, and `modular_head` through that lifecycle boundary.
+
+Head mode now dispatches load, model check, strict validation, default resref,
+and export to the Head Workflow and `HEAD_SHELL` slot rather than the
+headless-body workflow. Its five-stage bridge is visibly distinct: Import
+Custom Head Art, Select Native Donor, Align + Transfer Skin, Preview Head, and
+Validate + Export. Body skeleton construction, body animation assignment,
+equipment attachment, and body-fit controls are hidden in Head mode. Donor
+discovery and donor-preserving transplant surfaces state their unavailable
+status honestly; pending binary export is reported as
+`HEAD_BINARY_PENDING`, never as a successful game-ready export.
+
+Affected files: Character Builder lifecycle, main-window chrome, mode selector,
+Getting Started guide, workflow rail, inspector, and Character Builder window
+payloads under `GhostRigger.Core.GUI.Display`; synchronized inspector/window
+consumer copies under `GhostRigger.Core.Tools`; theme/layout documentation;
+the Custom Head Builder architecture specification; payload manifests; and
+focused Head Builder entry tests.
+
+Verification: Python compile checks passed. Twenty-five focused project,
+entry-routing, UI-state, workspace-boundary, and payload identity/project
+membership tests passed. The scoped GUI Display/Tools payloads regenerated, the
+Debug x64 host rebuilt, and all 18 payload DLLs were staged successfully. In
+the actual staged Debug application, the command-strip Head Builder route
+opened `Character Builder [Head]`; Windows accessibility checks confirmed the
+Head toggle, all five stages, Head-specific page controls, absence of body-only
+controls, and exactly one window before and after reopening. Screenshot:
+`artifacts/custom_head_builder/20260723_slice1_head_entry_mode_correct.png`.
+Only Visual Studio Build Tools are installed, so an active-IDE launch and the
+full six-theme route matrix remain explicit validation gates.
+
 ### [2026-07-23] T2909 Measured Korriban dressing shelf and complete-selection delete UX
 
 Owner: ShaolinGhost
@@ -445,16 +1112,53 @@ through the headless body's animated head hook. The loader recovers the native
 secondary reference, the writer resolves and validates it by node name, and
 Character Builder carries it through fallback model-shell copies.
 
+The first Xaria build with that link exposed a second independent header
+contract. It declared only its 38 locally serialized nodes at geometry
+`BASE+44`; after the engine began following the restored `neck_g` inheritance
+path, the game visibly terminated with a Microsoft Visual C++ Runtime Error.
+Stock `PFHA04` has 38 local nodes but declares 564 there
+(`S_Male01 -> S_Male02 -> S_Female01 -> S_Female02 -> S_Female03 -> PFHA04`).
+Ghost Studio now reads, preserves, validates, and writes that explicit span
+separately from the physical local-node count. Skin bone maps and inverse-bind
+arrays remain local and are not expanded. The field is treated as opaque
+outside this donor-exact case: both cumulative and local conventions occur in
+working character resources, so a generic loader/writer must preserve the raw
+declaration rather than derive it from the local DAG.
+
+The same audit found that the KOTOR loader read model-level bounds correctly,
+then unconditionally replaced them with tight computed preview bounds. Stock
+`PFHA04` declares `(-5,-5,-1)..(5,5,10)` with radius 7, but the first generated
+heads serialized undersized bounds. The loader now retains computed geometry
+bounds only in the renderer's `_gr_render_bounds` side channel and restores
+the raw retail envelope for round-trip writing. Xaria's final export copies
+and raw-verifies the donor envelope.
+
 Affected files: Core Math model data, Core Resources KOTOR loader, Core IO and
 Runtime Core Host MDL writers, Core Workflow Character Builder, synchronized
 payload manifests, and focused modular-head regression tests.
 
-Verification: focused modular-head writer, loader/writer round-trip, missing
-target, duplicate-target, sparse-supernode, and payload-identity tests passed.
+Verification: seven focused modular-head, declared-bounds round-trip,
+undersized-span rejection, sparse-supernode, and render-bounds tests passed.
+Scoped Core Math and Core Resources payload source/manifest checks have zero
+mismatches. The repository-wide payload test is presently blocked by unrelated
+concurrent Map Studio drift in `authored_room_floorplan.py`; no unrelated
+payload was regenerated.
 An authoritative retail K2 `PFHA04` round-trip retained geometry root
-`PFHA04` and secondary root `neck_g`. The rebuilt `p_xariah` likewise retains
-geometry root `p_xariah` and secondary root `neck_g`; it was transactionally
-staged for a clean retail visual test with the custom renderer disabled.
+`PFHA04`, secondary root `neck_g`, declared span 564, and the exact 28-byte
+header-bounds block. The corrected `p_xariah` retains geometry root
+`p_xariah` and secondary root `neck_g`. Against the rejected linked build,
+only two node-span bytes and the model-bounds block differ; MDX, geometry,
+skin, hierarchy, controllers, and animation state remain identical. Corrected
+candidate SHA-256 is
+`9D5CC62585FE805CF7934E78FCC9E4BAE24D54C2A440BCD133A1366DA2F556B9`.
+It was transactionally staged with the custom renderer disabled at
+`Kotor-Patch-Manager/logs/k2-plcaa-xaria-staging/20260723T082610`; the
+installed header and hash read back exactly and PLCaa remained byte-identical.
+Fresh observer session
+`20260723-082802-custom-animation-flurry-plcaa` launched successfully through
+`KPatchLauncher`, after which the user visibly confirmed “She finally works.”
+This closes the rigid-hair modular-head retail baseline; hair physics remains
+a separate follow-up and must retain this exact head as its rollback control.
 
 ## 2026-07-22
 

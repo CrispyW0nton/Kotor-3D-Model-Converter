@@ -81,6 +81,11 @@ _MAP_STUDIO_TERRAIN_CATALOG_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="map-studio-terrain-catalog",
 )
 
+_MAP_STUDIO_ENVIRONMENT_THUMBNAIL_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="map-studio-environment-thumbnail",
+)
+
 _MAP_STUDIO_PIE_ACTOR_EXECUTOR = ThreadPoolExecutor(
     max_workers=1,
     thread_name_prefix="map-studio-pie-actors",
@@ -1179,6 +1184,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     environmentCatalogProgress = QtCore.Signal(str)
     environmentCatalogReady = QtCore.Signal(object, str)
     environmentCatalogFailed = QtCore.Signal(str)
+    environmentThumbnailReady = QtCore.Signal(object, object, object)
 
     def __init__(
         self,
@@ -1209,6 +1215,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_terrain_kit_thumbnail_waits: dict[tuple[Any, ...], int] = {}
         self._map_studio_environment_kit_thumbnail_cache: dict[tuple[Any, ...], QtGui.QPixmap | None] = {}
         self._map_studio_environment_kit_thumbnail_waits: dict[tuple[Any, ...], int] = {}
+        self._map_studio_environment_kit_thumbnail_inflight: set[tuple[Any, ...]] = set()
         self._scripting_studio_resources: tuple[tuple[str, str, bytes], ...] = ()
         self._plcaa_manual_proof_rows: list[dict[str, Any]] = []
         self._plcaa_manual_proof_build: Any = None
@@ -1598,6 +1605,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.terrain_kit_browser = TerrainKitBrowser()
         self.terrain_kit_browser.set_assets(self.controller.available_map_studio_terrain_kit_assets())
         self.builder_tab.adopt_terrain_kit_browser(self.terrain_kit_browser)
+        self._map_studio_kit_browser_game = str(getattr(self.project, "game", "K1") or "K1").upper()
         self.builder_tab.adopt_skybox_tools(
             self.environment_tab.sky_group,
             self.environment_tab.sky_traffic_group,
@@ -2151,6 +2159,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         self.environmentCatalogReady.connect(self._vanilla_environment_catalog_ready)
         self.environmentCatalogFailed.connect(self._vanilla_environment_catalog_failed)
+        self.environmentThumbnailReady.connect(self._apply_map_studio_environment_kit_thumbnail)
         self.placement_tab.statusChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.texture_paint_tab.importRequested.connect(self.import_project_texture)
         self.texture_paint_tab.assignRequested.connect(self._assign_map_studio_texture_paint_target)
@@ -10450,6 +10459,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
         _MAP_STUDIO_TERRAIN_CATALOG_EXECUTOR.submit(work)
 
+    def _sync_map_studio_kit_browsers_for_project_game(self) -> bool:
+        """Reload both drag shelves when an opened KMAP changes the target game."""
+
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        if game == str(getattr(self, "_map_studio_kit_browser_game", "") or "").upper():
+            return False
+        self.environment_kit_browser.set_assets(
+            self.controller.available_map_studio_environment_kit_pieces()
+        )
+        self.terrain_kit_browser.set_assets(
+            self.controller.available_map_studio_terrain_kit_assets()
+        )
+        self._map_studio_kit_browser_game = game
+        return True
+
     def _vanilla_environment_catalog_ready(self, rows: object, path: str) -> None:
         self._environment_catalog_scan_active = False
         self._map_studio_environment_kit_thumbnail_cache.clear()
@@ -10574,7 +10598,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
 
     def _render_map_studio_environment_kit_thumbnail(self, entry: object) -> None:
-        """Render one trained vanilla room tile through the active viewport renderer."""
+        """Queue one authentic room-tile preview without blocking Map Studio."""
 
         def value(key: str, default: Any = "") -> Any:
             if isinstance(entry, dict):
@@ -10594,74 +10618,118 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 f"{label}: drag into the viewport; green means a compatible doorway snap.",
             )
             return
-        try:
-            model = self.controller.map_studio_environment_kit_preview_model(
-                piece_id,
-                resource_manager=manager,
-            )
-            if model is None:
-                raise ValueError("The source room model is unavailable in the connected game installation.")
-            textures: dict[str, Any] = {}
-            texture_list = getattr(model, "texture_list", None)
-            for texture_name in tuple(texture_list() or ())[:24] if callable(texture_list) else ():
-                clean_name = str(texture_name or "").strip().strip("\x00").lower()
-                if manager is None or not clean_name or clean_name in {"null", "none", "default"}:
-                    continue
-                try:
-                    image = manager.load_texture_image(clean_name, game, max_size=256)
-                except TypeError:
-                    image = manager.load_texture_image(clean_name, game)
-                if image is not None:
-                    textures[clean_name] = image
+        if cache_key in self._map_studio_environment_kit_thumbnail_inflight:
+            return
+        self._map_studio_environment_kit_thumbnail_inflight.add(cache_key)
+        future = _MAP_STUDIO_ENVIRONMENT_THUMBNAIL_EXECUTOR.submit(
+            self._build_map_studio_environment_kit_thumbnail,
+            piece_id,
+            game,
+            manager,
+        )
 
-            viewport = getattr(self.viewport_panel, "viewport", None)
-            thumbnail_renderer = getattr(viewport, "_gpu_renderer", None)
-            active_renderer = getattr(thumbnail_renderer, "active_renderer", None)
-            if active_renderer is not None:
-                thumbnail_renderer = active_renderer
-            backend_id = str(getattr(thumbnail_renderer, "backend_id", "") or "").strip().lower()
-            if (
-                thumbnail_renderer is None
-                or not callable(getattr(thumbnail_renderer, "render", None))
-                or "null" in backend_id
-            ):
-                wait_count = self._map_studio_environment_kit_thumbnail_waits.get(cache_key, 0) + 1
-                self._map_studio_environment_kit_thumbnail_waits[cache_key] = wait_count
-                if wait_count <= 12:
-                    QtCore.QTimer.singleShot(
-                        250,
-                        lambda pending_entry=entry: self._render_map_studio_environment_kit_thumbnail(pending_entry),
-                    )
-                    return
-                raise ValueError("The viewport renderer is unavailable for thumbnail reuse.")
+        def publish(done: object) -> None:
+            try:
+                payload = done.result()
+            except Exception as exc:  # worker failure is rendered as a usable placeholder
+                payload = {"error": str(exc)}
+            self.environmentThumbnailReady.emit(entry, cache_key, payload)
 
-            from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe
+        future.add_done_callback(publish)
 
-            rendered = render_model_autoframe(
-                model,
-                W=192,
-                H=192,
-                textures=textures,
-                views=["diag"],
-                renderer=thumbnail_renderer,
-            ).get("diag")
-            if rendered is None:
-                raise ValueError("The renderer did not produce an environment-piece thumbnail.")
-            rgba = rendered.convert("RGBA")
-            width, height = rgba.size
-            qimage = QtGui.QImage(
-                rgba.tobytes("raw", "RGBA"),
-                int(width),
-                int(height),
-                int(width) * 4,
-                QtGui.QImage.Format.Format_RGBA8888,
-            ).copy()
-            pixmap = QtGui.QPixmap.fromImage(qimage)
-            if pixmap.isNull():
-                raise ValueError("The environment-piece thumbnail was empty.")
-        except Exception as exc:
-            self._map_studio_environment_kit_thumbnail_cache[cache_key] = None
-            self._log(f"Environment Kit thumbnail warning for {piece_id}: {exc}")
+    def _build_map_studio_environment_kit_thumbnail(
+        self,
+        piece_id: str,
+        game: str,
+        manager: object,
+    ) -> dict[str, Any]:
+        """Load and render one thumbnail entirely away from Qt's UI thread."""
+
+        model = self.controller.map_studio_environment_kit_preview_model(
+            piece_id,
+            resource_manager=manager,
+        )
+        if model is None:
+            raise ValueError("The source room model is unavailable in the connected game installation.")
+        textures: dict[str, Any] = {}
+        texture_list = getattr(model, "texture_list", None)
+        for texture_name in tuple(texture_list() or ())[:24] if callable(texture_list) else ():
+            clean_name = str(texture_name or "").strip().strip("\x00").lower()
+            if manager is None or not clean_name or clean_name in {"null", "none", "default"}:
+                continue
+            try:
+                image = manager.load_texture_image(clean_name, game, max_size=256)
+            except TypeError:
+                image = manager.load_texture_image(clean_name, game)
+            if image is not None:
+                textures[clean_name] = image
+
+        from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe
+
+        rendered = render_model_autoframe(
+            model,
+            W=192,
+            H=192,
+            textures=textures,
+            views=["diag"],
+        ).get("diag")
+        if rendered is None:
+            raise ValueError("The renderer did not produce an environment-piece thumbnail.")
+        rgba = rendered.convert("RGBA")
+        width, height = rgba.size
+        return {
+            "rgba": rgba.tobytes("raw", "RGBA"),
+            "width": int(width),
+            "height": int(height),
+        }
+
+    @QtCore.Slot(object, object, object)
+    def _apply_map_studio_environment_kit_thumbnail(
+        self,
+        entry: object,
+        cache_key: object,
+        payload: object,
+    ) -> None:
+        """Publish a completed worker thumbnail as a GUI-owned pixmap."""
+
+        key = tuple(cache_key or ())
+        self._map_studio_environment_kit_thumbnail_inflight.discard(key)
+        values = dict(payload) if isinstance(payload, dict) else {}
+        piece_id = str(
+            (entry.get("piece_id") if isinstance(entry, dict) else getattr(entry, "piece_id", ""))
+            or ""
+        )
+        label = str(
+            (entry.get("label") if isinstance(entry, dict) else getattr(entry, "label", ""))
+            or piece_id
+            or "Environment piece"
+        )
+        error = str(values.get("error") or "").strip()
+        pixmap: QtGui.QPixmap | None = None
+        if not error:
+            try:
+                width = int(values.get("width", 0) or 0)
+                height = int(values.get("height", 0) or 0)
+                rgba = bytes(values.get("rgba") or b"")
+                if width <= 0 or height <= 0 or len(rgba) != width * height * 4:
+                    raise ValueError("The environment-piece thumbnail buffer was invalid.")
+                qimage = QtGui.QImage(
+                    rgba,
+                    width,
+                    height,
+                    width * 4,
+                    QtGui.QImage.Format.Format_RGBA8888,
+                ).copy()
+                pixmap = QtGui.QPixmap.fromImage(qimage)
+                if pixmap.isNull():
+                    raise ValueError("The environment-piece thumbnail was empty.")
+            except Exception as exc:
+                error = str(exc)
+                pixmap = None
+
+        if error:
+            self._map_studio_environment_kit_thumbnail_cache[key] = None
+            self._log(f"Environment Kit thumbnail warning for {piece_id}: {error}")
             self.environment_kit_browser.set_asset_thumbnail(
                 entry,
                 None,
@@ -10669,8 +10737,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
             return
 
-        self._map_studio_environment_kit_thumbnail_cache[cache_key] = pixmap
-        self._map_studio_environment_kit_thumbnail_waits.pop(cache_key, None)
+        self._map_studio_environment_kit_thumbnail_cache[key] = pixmap
+        self._map_studio_environment_kit_thumbnail_waits.pop(key, None)
         if len(self._map_studio_environment_kit_thumbnail_cache) > 192:
             oldest_key = next(iter(self._map_studio_environment_kit_thumbnail_cache))
             self._map_studio_environment_kit_thumbnail_cache.pop(oldest_key, None)
@@ -15264,13 +15332,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
 
     def _sync_map_studio_viewport_resource_manager(self) -> None:
-        """Push the game resource manager into the viewport texture cache once."""
+        """Push stock plus active-project resources into the viewport cache."""
 
         manager = getattr(self, "resource_manager", None)
         if manager is None:
             return
         game = str(getattr(self.project, "game", "K1") or "K1").upper()
-        key = (id(manager), game)
+        publish_project = getattr(manager, "set_project_overlay", None)
+        if callable(publish_project):
+            try:
+                publish_project(self.controller.authored_project_extra_resources())
+            except Exception as exc:
+                self._log(f"Map Studio project texture preview warning: {exc}")
+        key = (id(manager), game, int(getattr(manager, "revision", 0) or 0))
         if getattr(self, "_map_studio_viewport_resource_key", None) == key:
             return
         viewport = getattr(self.viewport_panel, "viewport", None)
@@ -15641,6 +15715,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
+        self._sync_map_studio_kit_browsers_for_project_game()
         self.builder_tab.set_building_styles(self.controller.available_map_studio_building_styles())
         building_style_context = self.controller.map_studio_building_style_context()
         if building_style_context:

@@ -542,6 +542,18 @@ class QtGhostRiggerMainWindow(
                 "blueprint_editor": self._open_blueprint_editor_window,
                 "character_builder": self._open_qt_character_builder_window,
                 "character_studio": self._open_qt_character_builder_window,
+                "native_kotor_head": lambda: self._open_qt_character_builder_window(
+                    "native_kotor_head"
+                ),
+                "head_builder": lambda: self._open_qt_character_builder_window(
+                    "native_kotor_head"
+                ),
+                "custom_head": lambda: self._open_qt_character_builder_window(
+                    "native_kotor_head"
+                ),
+                "modular_head": lambda: self._open_qt_character_builder_window(
+                    "native_kotor_head"
+                ),
                 "retarget": self._open_animation_retarget_window,
                 "retarget_workbench": self._open_animation_retarget_window,
                 "animation_retarget": self._open_animation_retarget_window,

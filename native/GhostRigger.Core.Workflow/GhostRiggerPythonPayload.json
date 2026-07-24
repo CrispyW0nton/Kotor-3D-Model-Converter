@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 140,
+    "file_count": 147,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -357,7 +357,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "e6a94f0f57b03239ee6963358d9d65ba1faf8507167772f44eb7215c37234506"
+            "sha256": "2e4271ff447933afae5af23510f07cb58e7de09768d480075d5981e8528474f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
@@ -424,6 +424,48 @@
             "source_path": "src/core/characters/custom_rigged_character_packaging_service.py",
             "packaged_path": "Python/src/core/characters/custom_rigged_character_packaging_service.py",
             "sha256": "4630c1495f91f367f686b0e79393ac55af927aef03d04021bfffb5552ffa105a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_ATTACHMENT_PREVIEW",
+            "source_path": "src/core/characters/head_attachment_preview.py",
+            "packaged_path": "Python/src/core/characters/head_attachment_preview.py",
+            "sha256": "97dcff51d5c7666112fb32afd01ed1c56bae43fab1bd2730e70f24e5633fb8f7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_BUILDER_PROJECT",
+            "source_path": "src/core/characters/head_builder_project.py",
+            "packaged_path": "Python/src/core/characters/head_builder_project.py",
+            "sha256": "347076e92abe14f42aac44712b732b9a55ba08117ffd772e79b49558abaeec0d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_BUILDER_SERVICE",
+            "source_path": "src/core/characters/head_builder_service.py",
+            "packaged_path": "Python/src/core/characters/head_builder_service.py",
+            "sha256": "6efddfcda1c271b3d657235cb9492b24dbc6b5ab5d318a1c359e80ea075e6d63"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_COMPONENT_CATALOG",
+            "source_path": "src/core/characters/head_component_catalog.py",
+            "packaged_path": "Python/src/core/characters/head_component_catalog.py",
+            "sha256": "bdd050c036519c406ee29baf4b7333d233ab0af29fbf3766f36a44a0865ebf51"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_DONOR_SNAPSHOT",
+            "source_path": "src/core/characters/head_donor_snapshot.py",
+            "packaged_path": "Python/src/core/characters/head_donor_snapshot.py",
+            "sha256": "b185465283422096e3112ce937c507f95c0b1d1741b84c283e35e746f40b0e4d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_GEOMETRY_TRANSPLANT",
+            "source_path": "src/core/characters/head_geometry_transplant.py",
+            "packaged_path": "Python/src/core/characters/head_geometry_transplant.py",
+            "sha256": "79c84a63c945eb6afd20114260faf46d9a5cd7ba2f8860660c8be7651240e649"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_TEXTURE_MATERIALS",
+            "source_path": "src/core/characters/head_texture_materials.py",
+            "packaged_path": "Python/src/core/characters/head_texture_materials.py",
+            "sha256": "09c66ec1e2bd3d61eb8c62cefaacabd29e67d6d9714f4ed23cbfd2d6bec17d2a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",

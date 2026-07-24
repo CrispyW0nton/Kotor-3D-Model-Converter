@@ -77,6 +77,7 @@ class TextureCache:
         self._game_tag: str = "K1"
         self._installation = None  # Optional KotorInstallation (fast path, legacy)
         self._resource_manager = None  # Optional ResourceManager (new unified path)
+        self._resource_manager_revision = -1
         self._lock = threading.Lock()  # thread-safe access (render + prewarm threads)
         # Per-name load lock dict: prevents two threads loading the SAME texture simultaneously
         # while not blocking threads loading DIFFERENT textures (vs. a single global lock).
@@ -153,10 +154,13 @@ class TextureCache:
         Clears all caches when the manager reference or game tag changes.
         """
         with self._lock:
+            revision = int(getattr(manager, "revision", 0) or 0) if manager is not None else -1
             changed = (manager is not self._resource_manager or
-                       game_tag != self._game_tag)
+                       game_tag != self._game_tag or
+                       revision != self._resource_manager_revision)
             if changed:
                 self._resource_manager = manager
+                self._resource_manager_revision = revision
                 self._game_tag = game_tag
                 # Also keep _installation in sync for legacy code paths
                 if manager is not None:

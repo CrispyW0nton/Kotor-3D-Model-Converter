@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtWidgets
 
 CHARACTER_BUILDER_MODES = (
     "native_kotor_character",
+    "native_kotor_head",
     "custom_rigged_character",
 )
 
@@ -58,7 +59,7 @@ class _ModeCard(QtWidgets.QGroupBox):
 
 
 class QtCharacterBuilderModeSelector(QtWidgets.QDialog):
-    """Two-card welcome screen for the independent builder products."""
+    """Beginner-facing welcome screen for the independent builder products."""
 
     modeSelected = QtCore.Signal(str)
 
@@ -90,6 +91,13 @@ class QtCharacterBuilderModeSelector(QtWidgets.QDialog):
             "Build a character using KOTOR-compatible body models, heads, equipment, and native animation conventions.",
             parent=self,
         )
+        head = _ModeCard(
+            "native_kotor_head",
+            "Custom KOTOR Head",
+            "Fit custom OBJ or FBX head art to a native KOTOR donor, preserve its attachment and animation contracts, and prepare a modular head package.",
+            badge="Modular Head Builder",
+            parent=self,
+        )
         custom = _ModeCard(
             "custom_rigged_character",
             "Custom Rigged Character",
@@ -98,8 +106,10 @@ class QtCharacterBuilderModeSelector(QtWidgets.QDialog):
             parent=self,
         )
         native.activated.connect(self._choose)
+        head.activated.connect(self._choose)
         custom.activated.connect(self._choose)
         cards.addWidget(native, 1)
+        cards.addWidget(head, 1)
         cards.addWidget(custom, 1)
         outer.addLayout(cards, 1)
 

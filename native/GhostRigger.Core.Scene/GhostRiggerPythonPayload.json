@@ -141,7 +141,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
             "source_path": "src/core/modules/authored_module_layout.py",
             "packaged_path": "Python/src/core/modules/authored_module_layout.py",
-            "sha256": "5b54f5bcd16b9584309d695a2f15889b8de878de36995ba8f8c897b3f913b663"
+            "sha256": "1896689f71030465d5a4904d81950da79e739793795d7d888de5b34809914c35"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LIGHTING",
@@ -207,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_WALKMESH",
             "source_path": "src/core/modules/authored_module_walkmesh.py",
             "packaged_path": "Python/src/core/modules/authored_module_walkmesh.py",
-            "sha256": "90b01861390510649bd7d02984e0b4dfb5576497178f31ddad8c007121bfc152"
+            "sha256": "2f91a06ba30a9bacc3bcf22de1080caa43e8e8aca7daf13691c9fdd72d7e050b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_WORLD_LIGHTING",
@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "ef932db314992f162c17a93de17d1da05dea3903a13f0608f31dc0e66c91553e"
+            "sha256": "6d0f06e2dbb38045460fdc7f0708e33fe47741c87b520f134af99e3a4c0c81fb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -375,7 +375,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ENVIRONMENT_KITS",
             "source_path": "src/core/modules/map_studio_environment_kits.py",
             "packaged_path": "Python/src/core/modules/map_studio_environment_kits.py",
-            "sha256": "52df0efadac6f5ab3a7ab443ac670e37b7ebd28a81a60cc05af5ac0c039f6473"
+            "sha256": "de09cced43b81c7feee46a9b7581eb1935c0d8a0fc13e96b8c40dc652c97d313"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS",
@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "339691db019ff7fe8134cf31381f54bab0519380f6332e580577f10d45e8117a"
+            "sha256": "5a5f99f3e1a86caa3ee9636427174ffc8fefa9aca71a10f6aa7799b3b66e6cb5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
@@ -561,7 +561,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_KIT",
             "source_path": "src/core/modules/map_studio_terrain_kit.py",
             "packaged_path": "Python/src/core/modules/map_studio_terrain_kit.py",
-            "sha256": "72075dee83d61fb07b44a42e41582d1e932adcc27979804cc3fbd0d88047b262"
+            "sha256": "37611cfeedb9321b38d2a2e3eac8f16151bfd71ebde5acfa4ed1bf9066996dab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION",
@@ -621,7 +621,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "79bd8602bd93df05c7bf9ec1f0a5c4e3825783d81e9ba1e29c864585cafab52d"
+            "sha256": "8cefbb5173b7786a8f4d5dc68e7e2376f517a07233bf1bf8c3a6a5e7703bd701"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

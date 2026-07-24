@@ -17,6 +17,20 @@ forms, resource catalog, validation summary, and add/delete actions all paint
 with the active Qt palette. PIE receives an immutable GUI preview payload and
 must not import the editor window.
 
+## Custom KOTOR Head Builder Notes
+
+The beginner-facing Character Builder selector assigns the Custom KOTOR Head
+card the stable layout id `characterBuilderMode.native_kotor_head`. Selecting
+it reuses the existing Character Builder workbench in Head mode, so the active
+theme, `main` toolbar metrics, viewport metrics, rail/inspector sizing, and
+splitter policy remain authoritative. The entry adds no head-only color tokens
+or fixed layout contract.
+
+Vanilla face, eye, eyelid/lash, hair, and modular-alien selectors remain inside
+the existing `headBuilderProperties` layout surface and inherit standard form,
+input, label, group-box, and button styling. No component-specific theme token
+or splitter metric is introduced.
+
 ## Scripting Suite Notes
 
 The Scripting Suite is a standalone, non-modal workbench with the

@@ -50,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 325,
+        "python_file_count": 326,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -192,6 +192,7 @@
             "src\\gui\\panels\\qt_common_panels.py",
             "src\\gui\\panels\\qt_content_browser_panel.py",
             "src\\gui\\panels\\qt_diagnostics_panel.py",
+            "src\\gui\\panels\\qt_head_builder_workspace.py",
             "src\\gui\\panels\\qt_inspector_panel.py",
             "src\\gui\\panels\\qt_library_panel.py",
             "src\\gui\\panels\\qt_lighting_panel.py",
@@ -397,7 +398,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 41,
+        "python_file_count": 46,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -436,6 +437,11 @@
             "src\\io\\fbx\\fbx_sdk_loader.py",
             "src\\io\\fbx\\fbx_sdk_paths.py",
             "src\\io\\fbx\\fbx_sdk_setup.py",
+            "src\\io\\head_art_importer.py",
+            "src\\io\\head_binary_export.py",
+            "src\\io\\head_builder_package.py",
+            "src\\io\\head_game_records.py",
+            "src\\io\\head_texture_asset.py",
             "src\\io\\kotor_gui_io.py",
             "src\\io\\mdl_auto_import.py",
             "src\\io\\obj_room_document.py",
@@ -444,7 +450,7 @@
     },
     {
         "project": "GhostRigger.Core.Math",
-        "python_file_count": 59,
+        "python_file_count": 63,
         "files": [
             "src\\core\\camera\\__init__.py",
             "src\\core\\camera\\arcball_camera.py",
@@ -488,6 +494,10 @@
             "src\\math\\correspondence_fit.py",
             "src\\math\\frame_math.py",
             "src\\math\\gpu_math.py",
+            "src\\math\\head_alignment.py",
+            "src\\math\\head_component_transform.py",
+            "src\\math\\head_skin_transfer.py",
+            "src\\math\\head_uv.py",
             "src\\math\\heat_diffusion_skinning.py",
             "src\\math\\landmark_alignment.py",
             "src\\math\\limb_ik.py",
@@ -509,11 +519,12 @@
     },
     {
         "project": "GhostRigger.Core.Project",
-        "python_file_count": 6,
+        "python_file_count": 7,
         "files": [
             "src\\core\\project\\__init__.py",
             "src\\core\\project\\custom_rigged_character_project.py",
             "src\\core\\project\\ghostrigger_project.py",
+            "src\\core\\project\\head_builder_repository.py",
             "src\\core\\project\\placeable_asset.py",
             "src\\core\\project\\project_validation.py",
             "src\\core\\project\\resource_address.py"
@@ -677,7 +688,7 @@
     },
     {
         "project": "GhostRigger.Core.Resources",
-        "python_file_count": 19,
+        "python_file_count": 21,
         "files": [
             "src\\core\\assets\\__init__.py",
             "src\\core\\assets\\asset_preview.py",
@@ -693,6 +704,8 @@
             "src\\core\\game\\pykotor_mdl_io_fix.py",
             "src\\core\\resources\\__init__.py",
             "src\\core\\resources\\game_resource_provider.py",
+            "src\\core\\resources\\head_donor_catalog.py",
+            "src\\core\\resources\\head_game_install.py",
             "src\\core\\resources\\placeable_library.py",
             "src\\resources\\__init__.py",
             "src\\resources\\game_detector.py",
@@ -842,7 +855,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 401,
+        "python_file_count": 403,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -1084,6 +1097,8 @@
             "src\\gui\\camera\\frame_renderer.py",
             "src\\gui\\camera\\render_manifest.py",
             "src\\gui\\camera\\render_output.py",
+            "src\\gui\\controllers\\__init__.py",
+            "src\\gui\\controllers\\head_builder_controller.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
             "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
             "src\\gui\\lighting\\__init__.py",
@@ -1258,7 +1273,7 @@
     },
     {
         "project": "GhostRigger.Core.Validation",
-        "python_file_count": 10,
+        "python_file_count": 11,
         "files": [
             "src\\core\\validation\\__init__.py",
             "src\\core\\validation\\_native.py",
@@ -1266,6 +1281,7 @@
             "src\\core\\validation\\animation_roundtrip_validator.py",
             "src\\core\\validation\\capture_specs.py",
             "src\\core\\validation\\custom_rigged_character_validator.py",
+            "src\\core\\validation\\head_builder_preflight.py",
             "src\\core\\validation\\kotor_module_engine_contract.py",
             "src\\core\\validation\\validation_adapters.py",
             "src\\core\\validation\\validation_bus.py",
@@ -1274,7 +1290,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 140,
+        "python_file_count": 147,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1346,6 +1362,13 @@
             "src\\core\\characters\\custom_rigged_character_build_service.py",
             "src\\core\\characters\\custom_rigged_character_import_service.py",
             "src\\core\\characters\\custom_rigged_character_packaging_service.py",
+            "src\\core\\characters\\head_attachment_preview.py",
+            "src\\core\\characters\\head_builder_project.py",
+            "src\\core\\characters\\head_builder_service.py",
+            "src\\core\\characters\\head_component_catalog.py",
+            "src\\core\\characters\\head_donor_snapshot.py",
+            "src\\core\\characters\\head_geometry_transplant.py",
+            "src\\core\\characters\\head_texture_materials.py",
             "src\\core\\characters\\head_workflow.py",
             "src\\core\\characters\\headless_body_workflow.py",
             "src\\core\\characters\\kotor_constants.py",

@@ -122,7 +122,29 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
         # Scene/Tools and GUI Display/Tools payload rows.
     # The stable-ID Pascal wall graph and T-junction planarizer ship through
     # Scene and the embedded Tools consumer, adding two payload rows.
-    assert len(payload_files) == 1385
+    # The versioned Custom Head Builder project/evidence contract adds one
+    # Core.Workflow owner payload.
+    # Head Builder Slice 2 adds its atomic Project repository, Resources donor
+    # catalog/install verifier, and Workflow donor snapshot/service: five
+    # additional owner payloads.
+    # Head Builder Slice 3 adds the Core.IO custom-art contract and Core.Math
+    # named-space headhook alignment solver: two additional owner payloads.
+    # Head Builder Slice 4 adds donor-preserving head skin transfer in Core
+    # Math and geometry-transplant orchestration in Core Workflow.
+    # Head Builder Slice 5 adds UV orientation in Core Math, texture inspection
+    # in Core IO, and material-policy orchestration in Core Workflow.
+    # Head Builder Slice 6 adds exact-headhook attachment and inherited
+    # animation preview orchestration in Core Workflow.
+    # Head Builder Slice 7 adds raw binary export/readback in Core IO and
+    # head-specific structural preflight in Core Validation.
+    # Head Builder Slice 8 adds merge-safe game records plus transactional
+    # package/install/restore IO.
+    # The production Head Builder UI adds one GUI Display workspace, one Core
+    # Tools controller, and the Tools-side namespace initializer used to join
+    # that controller to the canonical Qt controller package.
+    # Stock face/eyes/eyelids/hair recipes add one Core Workflow inventory
+    # and assembly owner plus one Core Math named-space rebase helper.
+    assert len(payload_files) == 1408
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

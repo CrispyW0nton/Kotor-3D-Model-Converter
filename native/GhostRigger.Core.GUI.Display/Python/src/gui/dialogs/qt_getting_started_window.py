@@ -24,12 +24,32 @@ class TutorialPage:
     readiness: str
     route: str
     route_label: str
+    where: str = ""
+    before_you_start: str = ""
 
 
 TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
     TutorialPage(
+        key="start",
+        title="1. Start Here",
+        icon="settings",
+        goal="Complete the one-time setup, learn where GhostStudio saves authored work, and know how to return to these tutorials at any time.",
+        steps=(
+            "Select Open Settings below (or File → Settings…, Ctrl+Comma), choose the KOTOR 1 and/or KOTOR 2 installation folders, and save.",
+            "Confirm the detected game and renderer paths. If a path is missing, use Auto Detect or browse to the folder that contains the game executable.",
+            "Create or open a project before editing. Save editable scenes as KMAX and authored areas as KMAP; export game files only after validation.",
+            "Close this tutorial when ready. Press F1 or choose Help → Tutorials & Getting Started… to reopen it from anywhere in the main window.",
+        ),
+        outputs="Saved install paths, a working resource library, and a clear separation between editable project files and exported KOTOR files.",
+        readiness="At least one game installation resolves, the Resource Browser can show assets from it, and you know that F1 reopens this guide.",
+        route="settings",
+        route_label="Open Settings (Ctrl+Comma)",
+        where="File → Settings… (Ctrl+Comma). Reopen this guide with Help → Tutorials & Getting Started… (F1).",
+        before_you_start="Have a legal KOTOR 1 or KOTOR 2 installation available. GhostStudio never needs to overwrite the original game archives.",
+    ),
+    TutorialPage(
         key="resources",
-        title="1. Resources & Projects",
+        title="2. Resources & Projects",
         icon="library",
         goal="Point GhostStudio at KOTOR 1 or KOTOR 2, find a real game asset, and keep edits in a project instead of changing the installation in place.",
         steps=(
@@ -42,10 +62,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="The resource resolves from the selected game, the project can be reopened, and no source game archive has been overwritten.",
         route="resources",
         route_label="Open Resource Browser",
+        where="Window → Open Resource Browser. Use Window → Open Content Browser for the dockable asset shelf.",
+        before_you_start="Complete Start Here so the K1/K2 install folder is saved and its library has been scanned.",
     ),
     TutorialPage(
         key="scene",
-        title="2. Scene & Model Editing",
+        title="3. Scene & Model Editing",
         icon="scene",
         goal="Assemble and transform a multi-object KMAX scene while preserving stable object identity, pivots, hierarchy, materials, and source references.",
         steps=(
@@ -58,10 +80,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="Reopening preserves every selected object, transform, pivot, hierarchy link, source reference, and material override.",
         route="scene",
         route_label="Open Scene Workspace",
+        where="Window → Scene, Window → Properties, and Window → Mesh Tools in the main workspace.",
+        before_you_start="Create or open a KMAX scene, then add a model from the Resource or Content Browser.",
     ),
     TutorialPage(
         key="modeling",
-        title="3. Multi-Component Modeling",
+        title="4. Multi-Component Modeling",
         icon="mesh_tools",
         goal="Edit the nearest visible face, edge, or vertex with a Maya-style hover-and-act loop while keeping KOTOR-safe topology.",
         steps=(
@@ -74,10 +98,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="No degenerate triangles, accidental occluded selection, broken winding, isolated vertices, missing UV intent, or unreviewed open borders remain.",
         route="modeling",
         route_label="Open Multi-Component Modeling",
+        where="Tools → Open Map Studio (KMAP Area Authoring), then Modeling → Multi-Component.",
+        before_you_start="Open a KMAP containing editable authored geometry. Stock room geometry must first be made editable.",
     ),
     TutorialPage(
         key="placeable_builder",
-        title="4. Placeable Builder",
+        title="5. Placeable Builder",
         icon="placeable_builder",
         goal="Create a reusable KOTOR placeable for containers, terminals, puzzles, interactive props, or decor, then place that exact asset from Map Studio's Placeable Library.",
         steps=(
@@ -90,10 +116,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="Library-ready means the document is valid; module-ready additionally requires resolved UTP/model/script/item dependencies. Engine-ready still requires a manual in-game interaction proof.",
         route="placeable_builder",
         route_label="Open Placeable Builder",
+        where="Tools → Open Placeable Builder…. Finished assets appear in Map Studio's Place workspace.",
+        before_you_start="Choose K1 or K2 and decide whether to clone a retail UTP or create a new placeable from a known appearance.",
     ),
     TutorialPage(
         key="map_studio",
-        title="5. Map Studio",
+        title="6. Map Studio",
         icon="modular",
         goal="Load a stock module or start blank, author rooms and gameplay, and carry one KMAP project through validation and KOTOR packaging.",
         steps=(
@@ -106,10 +134,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="Structural checks match a known-loadable vanilla room, the module is staged without collisions, and the latest geometry has a fresh manual warp proof.",
         route="map_studio",
         route_label="Open Map Studio",
+        where="Tools → Open Map Studio (KMAP Area Authoring). Use Workflow → Build for rooms, terrain, and skybox.",
+        before_you_start="Choose the target game and either create a blank KMAP or import a stock module as a read-only reference.",
     ),
     TutorialPage(
         key="terrain",
-        title="6. Terrain Sculpting",
+        title="7. Terrain Sculpting",
         icon="modular",
         goal="Create a subdivided plane, sculpt an exterior heightfield interactively, and generate a floor-only terrain-wrapping walkmesh.",
         steps=(
@@ -122,10 +152,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="The player start lies on generated walkable floor; ceilings/walls are absent from WOK; holes, ramps, slopes, and every perimeter loop validate.",
         route="terrain",
         route_label="Open Terrain Tools",
+        where="Tools → Open Map Studio → Workflow → Build → Terrain Building, then enable Sculpt Terrain.",
+        before_you_start="Create or select a subdivided Terrain Patch. Sculpting does not operate on an empty scene or a stock room that has not been converted.",
     ),
     TutorialPage(
         key="texture_paint",
-        title="7. Texture Paint & Materials",
+        title="8. Texture Paint & Materials",
         icon="texture",
         goal="Assign a unique project texture to a visible map face and paint it directly in the rendered Map Studio viewport without modifying shared game textures.",
         steps=(
@@ -138,10 +170,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="The correct visible face receives the unique texture, painted pixels and assignments survive reopen, UV seams are intentional, and no shared resref is overwritten accidentally.",
         route="texture_paint",
         route_label="Open Texture Paint",
+        where="Tools → Open Map Studio → Workflow → Textures, then choose Texture Paint.",
+        before_you_start="Select editable authored geometry with usable diffuse UV0 and create a project-owned texture target.",
     ),
     TutorialPage(
         key="module_editor",
-        title="8. Stock Module Editor",
+        title="9. Stock Module Editor",
         icon="module_meshes",
         goal="Patch an existing MOD/RIM conservatively while retaining every unknown or untouched KOTOR resource.",
         steps=(
@@ -154,10 +188,84 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="The output reloads, untouched resource hashes remain unchanged, edited resources validate, and the module has a fresh in-game test.",
         route="module_editor",
         route_label="Open Stock Module Editor",
+        where="Tools → Open Module Editor (Stock MOD/RIM Patcher).",
+        before_you_start="Make a backup and choose a source MOD/RIM. Always write the patch to a separate output archive.",
+    ),
+    TutorialPage(
+        key="particle_editor",
+        title="10. Particle Editor",
+        icon="particle_editor",
+        goal="Load a retail KOTOR emitter, edit it live, and save a reusable particle effect without changing the retail-accurate simulation path.",
+        steps=(
+            "Choose K1 or K2, load a model with emitter nodes, or select a scanned retail emitter template.",
+            "Edit birth, lifetime, velocity, spread, gravity, drag, size, alpha, color, flipbook, billboard, blend, and render settings while watching the live preview.",
+            "Use force fields or hue cycling only when a GhostStudio-specific extension is intended; both remain off for retail parity.",
+            "Save the effect, attach it in Placeable Builder when needed, then validate the exported model and inspect it again in Map Studio and KOTOR.",
+        ),
+        outputs="A reusable emitter definition or particle-bearing model/placeable with explicit retail or GhostStudio-extension intent.",
+        readiness="The preview is stable, stock effects still match their source, blend and flipbook behavior are correct, and the exported emitter reloads.",
+        route="particle_editor",
+        route_label="Open Particle Editor",
+        where="Tools → Open Particle Editor…. Placeable Builder exposes saved particle effects on its Particles tab.",
+        before_you_start="Scan or connect a K1/K2 game library so retail emitter templates and their textures can resolve.",
+    ),
+    TutorialPage(
+        key="scripting",
+        title="11. Scripting & Dialogue",
+        icon="script",
+        goal="Create and validate module scripts or dialogue resources, then connect them to authored gameplay without losing track of resrefs and dependencies.",
+        steps=(
+            "Open Scripting Suite, choose the target game, and create or load the script/dialogue resource you intend to edit.",
+            "Use stable resrefs, compile scripts for the selected game, and resolve every referenced object, item, conversation, and event hook.",
+            "Return to Map Studio or a builder and assign the resource through the labeled script or conversation field.",
+            "Package the compiled resources with the module, read the package back, and trigger each path during a manual in-game test.",
+        ),
+        outputs="Source and compiled script resources and/or dialogue resources connected to explicit authored gameplay hooks.",
+        readiness="Compilation succeeds for the correct game, dependencies resolve, the package contains the expected resrefs, and each hook is triggered in KOTOR.",
+        route="scripting",
+        route_label="Open Scripting Suite (Ctrl+Shift+J)",
+        where="Tools → Open Scripting Suite… (Ctrl+Shift+J). Script buttons in Map Studio reopen the same resource.",
+        before_you_start="Know the target game and module root. K1 and K2 script/gameplay contracts are not interchangeable.",
+    ),
+    TutorialPage(
+        key="gui_editor",
+        title="12. Odyssey GUI Editor",
+        icon="gui_editor",
+        goal="Edit KOTOR GUI layout resources visually while preserving control identity, hierarchy, anchors, and game-specific behavior.",
+        steps=(
+            "Choose K1 or K2 and open a GUI resource from that game's library or a project-owned copy.",
+            "Select controls in the hierarchy, edit positions and properties deliberately, and preview the target resolution and safe area.",
+            "Validate control names, parent-child relationships, anchors, bounds, text, textures, and any game-specific fields.",
+            "Save to a new project/output resource, reload it, package it without resref collision, and inspect it in the target game.",
+        ),
+        outputs="A project-owned Odyssey GUI resource that preserves the expected control tree and can be packaged as an override.",
+        readiness="The resource reloads, controls remain selectable and correctly anchored, validation is clean, and the GUI is visually confirmed in KOTOR.",
+        route="gui_editor",
+        route_label="Open Odyssey GUI Editor",
+        where="Tools → Open GUI Editor (Odyssey UI)….",
+        before_you_start="Choose the target game and keep an untouched copy of the retail GUI resource for comparison.",
+    ),
+    TutorialPage(
+        key="head_builder",
+        title="13. Custom KOTOR Head Builder",
+        icon="charbuilder",
+        goal="Turn custom OBJ or FBX art into a modular KOTOR head while preserving a retail donor's native hierarchy, skin palette, attachment, bounds, and inherited animation contracts.",
+        steps=(
+            "Choose K1 or K2, start a versioned head project, and select stock-only or effective-Override resource discovery.",
+            "Import custom head art, choose a native head donor and body context, then align the neck seam through the body's real headhook composition.",
+            "Replace only the donor's rendered geometry, transfer normalized capped weights, preserve donor node identity and bind data, and review UV/material orientation.",
+            "Run binary preflight, package without overwriting unrelated resources, reload the output, and record a user-confirmed retail test before calling it game-ready.",
+        ),
+        outputs="A versioned Head Builder project plus modular head MDL/MDX, texture/TXI assets, merge-safe game records, package manifest, readback evidence, and retail-test record.",
+        readiness="The donor-native DAG and skin contract remain exact, the head attaches and animates in preview, binary readback passes, and the exact installed package has explicit user-observed retail proof.",
+        route="head_builder",
+        route_label="Open Custom Head Builder",
+        where="Tools → Custom KOTOR Head Builder… (Ctrl+Shift+H).",
+        before_you_start="Prepare clean OBJ/FBX head art and choose a retail donor head and body context from the target game.",
     ),
     TutorialPage(
         key="character",
-        title="9. Character Builder",
+        title="14. Character Builder",
         icon="charbuilder",
         goal="Fit custom geometry to an exact Odyssey character hierarchy, transfer skinning, preserve hooks, preview native animation, and export a reloadable character.",
         steps=(
@@ -170,10 +278,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="Bind pose and animated deformation are stable, hook names survive exactly, weights normalize, MDL/MDX reload, and the model is visually proven in the Debug app and game.",
         route="character",
         route_label="Open Character Builder",
+        where="Tools → Character Builder (New Window)… (Ctrl+Shift+C).",
+        before_you_start="Choose the target game, a compatible retail body/skeleton, and cleaned custom geometry with known scale and axis orientation.",
     ),
     TutorialPage(
         key="retarget",
-        title="10. Animation Retargeting",
+        title="15. Animation Retargeting",
         icon="anims",
         goal="Retarget KOTOR-to-KOTOR or Unreal/FBX humanoid animation onto a fixed KOTOR target skeleton and inject a game-usable custom animation.",
         steps=(
@@ -186,10 +296,12 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         readiness="The mapping report is clean, preview is stable across the full clip, target DAG/hooks remain unchanged, exported controllers reload, and the animation has an in-game trigger proof.",
         route="retarget",
         route_label="Open Retarget Workbench",
+        where="Tools → Animation Retargeting Workbench… (Ctrl+Shift+A).",
+        before_you_start="Prepare the source skeleton/clip and a fixed target KOTOR character. Do not reshape the target skeleton.",
     ),
     TutorialPage(
         key="game_proof",
-        title="11. Validate, Export & Game Proof",
+        title="16. Validate, Export & Game Proof",
         icon="export",
         goal="Treat KOTOR itself as the final oracle: compare against vanilla structure, stage safely, manually warp, and preserve the crash/proof evidence.",
         steps=(
@@ -201,7 +313,9 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         outputs="A staged/installed module, structural comparison report, read-back report, and dated manual in-game proof record.",
         readiness="A parser-only pass is never sufficient. The exact latest export must load, render, move, transition, and run authored gameplay in the target KOTOR version.",
         route="game_proof",
-        route_label="Open Export & Proof",
+        route_label="Open Export and Proof",
+        where="Tools → Open Map Studio → Export. Validation is also available from the Map Studio toolbar and Tools menu.",
+        before_you_start="Save the editable project, choose a safe staging directory, close any process locking the output, and keep the latest known-good build available.",
     ),
 )
 
@@ -252,10 +366,13 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
         root.addWidget(title)
 
         intro = QtWidgets.QLabel(
-            "Choose a pillar. Each lesson follows the same production loop: author, inspect, validate, export, reload, and prove the exact result in KOTOR."
+            "This guide opens automatically once. Press F1 or choose Help → Tutorials & Getting Started… "
+            "to return at any time. Start with setup, then choose the task you want to complete; every lesson "
+            "names the exact menu path, required input, output, and proof standard."
         )
         intro.setObjectName("gettingStartedIntro")
         intro.setWordWrap(True)
+        intro.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         root.addWidget(intro)
 
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
@@ -264,7 +381,10 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
 
         self.page_list = QtWidgets.QListWidget()
         self.page_list.setObjectName("gettingStartedPillarList")
-        self.page_list.setAccessibleName("GhostStudio tutorial pillars")
+        self.page_list.setAccessibleName("GhostStudio first-time task tutorials")
+        self.page_list.setAccessibleDescription(
+            "Select a task to see its exact menu path, prerequisites, numbered workflow, output, and completion check."
+        )
         self.page_list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.page_list.currentRowChanged.connect(self._show_page)
         splitter.addWidget(self.page_list)
@@ -284,6 +404,20 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
         self.progress_label = QtWidgets.QLabel()
         self.progress_label.setObjectName("gettingStartedProgress")
         details_layout.addWidget(self.progress_label)
+
+        details_layout.addWidget(self._heading("Open it from"))
+        self.where_label = QtWidgets.QLabel()
+        self.where_label.setObjectName("gettingStartedWhere")
+        self.where_label.setWordWrap(True)
+        self.where_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        details_layout.addWidget(self.where_label)
+
+        details_layout.addWidget(self._heading("Before you start"))
+        self.before_label = QtWidgets.QLabel()
+        self.before_label.setObjectName("gettingStartedBefore")
+        self.before_label.setWordWrap(True)
+        self.before_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        details_layout.addWidget(self.before_label)
 
         details_layout.addWidget(self._heading("Goal"))
         self.goal_label = QtWidgets.QLabel()
@@ -315,6 +449,7 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
 
         self.open_button = QtWidgets.QPushButton()
         self.open_button.setObjectName("gettingStartedOpenWorkspaceButton")
+        self.open_button.setAccessibleName("Open the workspace for this tutorial")
         self.open_button.setAccessibleDescription("Open the real GhostStudio workspace used by this tutorial")
         self.open_button.clicked.connect(self._open_current_page)
         details_layout.addWidget(self.open_button, 0, QtCore.Qt.AlignLeft)
@@ -327,18 +462,28 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
         nav = QtWidgets.QHBoxLayout()
         self.back_button = QtWidgets.QPushButton("Back")
         self.back_button.setObjectName("gettingStartedBackButton")
+        self.back_button.setAccessibleDescription("Show the previous tutorial task")
         self.back_button.clicked.connect(lambda: self._move_page(-1))
         nav.addWidget(self.back_button)
         self.next_button = QtWidgets.QPushButton("Next")
         self.next_button.setObjectName("gettingStartedNextButton")
+        self.next_button.setAccessibleDescription("Show the next tutorial task")
         self.next_button.clicked.connect(lambda: self._move_page(1))
         nav.addWidget(self.next_button)
         nav.addStretch(1)
-        close_button = QtWidgets.QPushButton("Close")
-        close_button.setObjectName("gettingStartedCloseButton")
-        close_button.clicked.connect(self.hide)
-        nav.addWidget(close_button)
+        self.close_button = QtWidgets.QPushButton("Close Tutorial")
+        self.close_button.setObjectName("gettingStartedCloseButton")
+        self.close_button.setAccessibleDescription("Hide this guide; press F1 to reopen it")
+        self.close_button.clicked.connect(self.hide)
+        nav.addWidget(self.close_button)
         root.addLayout(nav)
+
+        self.previous_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Alt+Left"), self)
+        self.previous_shortcut.setContext(QtCore.Qt.WindowShortcut)
+        self.previous_shortcut.activated.connect(lambda: self._move_page(-1))
+        self.next_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Alt+Right"), self)
+        self.next_shortcut.setContext(QtCore.Qt.WindowShortcut)
+        self.next_shortcut.activated.connect(lambda: self._move_page(1))
 
     @staticmethod
     def _heading(text: str) -> QtWidgets.QLabel:
@@ -372,7 +517,9 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
             return
         page = TUTORIAL_PAGES[row]
         self.page_title.setText(page.title)
-        self.progress_label.setText(f"Pillar {row + 1} of {len(TUTORIAL_PAGES)}")
+        self.progress_label.setText(f"Task {row + 1} of {len(TUTORIAL_PAGES)}")
+        self.where_label.setText(page.where)
+        self.before_label.setText(page.before_you_start)
         self.goal_label.setText(page.goal)
         self.outputs_label.setText(page.outputs)
         self.readiness_label.setText(page.readiness)
@@ -391,8 +538,33 @@ class QtGettingStartedWindow(QtWidgets.QDialog):
             label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
             self.steps_layout.addWidget(label)
 
-        self.back_button.setEnabled(row > 0)
-        self.next_button.setEnabled(row + 1 < len(TUTORIAL_PAGES))
+        previous_page = TUTORIAL_PAGES[row - 1] if row > 0 else None
+        next_page = TUTORIAL_PAGES[row + 1] if row + 1 < len(TUTORIAL_PAGES) else None
+        self.back_button.setEnabled(previous_page is not None)
+        self.back_button.setText(
+            f"Previous: {self._short_title(previous_page.title)}" if previous_page is not None else "Previous"
+        )
+        self.back_button.setToolTip(
+            f"Alt+Left · {previous_page.title}" if previous_page is not None else "This is the first tutorial task."
+        )
+        self.next_button.setEnabled(next_page is not None)
+        self.next_button.setText(
+            f"Next: {self._short_title(next_page.title)}" if next_page is not None else "Next"
+        )
+        self.next_button.setToolTip(
+            f"Alt+Right · {next_page.title}" if next_page is not None else "This is the last tutorial task."
+        )
+        self.open_button.setAccessibleName(page.route_label)
+        self.open_button.setToolTip(f"Open now · {page.where}")
+
+    @staticmethod
+    def _short_title(title: str) -> str:
+        """Remove only the numeric prefix from a navigation destination."""
+
+        text = str(title or "").strip()
+        if ". " in text:
+            return text.split(". ", 1)[1]
+        return text
 
     def _move_page(self, offset: int) -> None:
         row = max(0, min(self.page_list.count() - 1, self.page_list.currentRow() + int(offset)))

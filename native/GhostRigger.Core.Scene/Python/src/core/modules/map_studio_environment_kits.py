@@ -576,6 +576,26 @@ def environment_kit_builder_style_id(game: str, module_resref: str, collection_i
         return "architecture:k2_korriban_caves"
     if target_game == "K2" and (module in {"151har", "152har", "153har", "154har"} or collection.startswith("k2_harbinger")):
         return "architecture:k2_harbinger"
+    if target_game == "K2" and (
+        module in {"201tel", "202tel", "203tel", "204tel", "207tel", "208tel", "209tel", "211tel", "220tel", "221tel", "222tel"}
+        or collection.startswith(
+            (
+                "k2_201tel",
+                "k2_202tel",
+                "k2_203tel",
+                "k2_204tel",
+                "k2_207tel",
+                "k2_208tel",
+                "k2_209tel",
+                "k2_211tel",
+                "k2_220tel",
+                "k2_221tel",
+                "k2_222tel",
+                "k2_telos_citadel",
+            )
+        )
+    ):
+        return "architecture:k2_telos_citadel"
     return f"kit:{collection}" if collection else ""
 
 
@@ -589,6 +609,7 @@ def environment_kit_builder_style_label(style_id: str) -> str:
         "architecture:k2_korriban_tombs": "K2 Secret Tomb — All Ruined Chambers & Corridors",
         "architecture:k2_korriban_caves": "K2 Shyrack Caves — All Corridors, Caverns & Webbed Passages",
         "architecture:k2_harbinger": "Harbinger — All Vanilla Rooms + Dressing",
+        "architecture:k2_telos_citadel": "Telos Citadel Station — All Public, Residential & Entertainment Rooms + Dressing",
     }.get(str(style_id or "").strip().lower(), "Selected Building Style")
 
 
@@ -1000,9 +1021,81 @@ def _korriban_dressing_collection(*, game: str, family: str) -> EnvironmentKitCo
                 tags=(tag.lower(), "korriban", "shyrack cave", "water", "pool", "vanilla-derived"),
             ),
         )
+        if not is_k2:
+            pieces += (
+                EnvironmentKitPiece(
+                    piece_id=f"{prefix}_rock_ridge",
+                    collection_id=f"{prefix}_dressing",
+                    label="K1 Shyrack Cave Long Rock Ridge",
+                    game=tag,
+                    module_resref="m34aa",
+                    room_resref="m34aa_05a",
+                    role="dressing",
+                    class_id="dressing:cave_rock_ridge",
+                    model_resref="m34aa_05a",
+                    source_bounds_m=(91.945, -84.265, -7.072, 106.089, -77.413, -4.961),
+                    source_surface_names=("m34aa_mesh091",),
+                    anchor_mode="floor",
+                    dimensions_m=(14.144, 6.852, 2.111),
+                    texture_resref="lko_rock5",
+                    tags=("k1", "korriban", "shyrack cave", "rock", "ridge", "terrain form", "vanilla-derived"),
+                ),
+                EnvironmentKitPiece(
+                    piece_id=f"{prefix}_rock_shelf",
+                    collection_id=f"{prefix}_dressing",
+                    label="K1 Shyrack Cave Layered Rock Shelf",
+                    game=tag,
+                    module_resref="m34aa",
+                    room_resref="m34aa_06a",
+                    role="dressing",
+                    class_id="dressing:cave_rock_shelf",
+                    model_resref="m34aa_06a",
+                    source_bounds_m=(88.790, -83.373, -7.005, 102.332, -78.092, -4.960),
+                    source_surface_names=("m34aa_mesh226",),
+                    anchor_mode="floor",
+                    dimensions_m=(13.542, 5.281, 2.045),
+                    texture_resref="lko_rock5",
+                    tags=("k1", "korriban", "shyrack cave", "rock", "shelf", "terrain form", "vanilla-derived"),
+                ),
+                EnvironmentKitPiece(
+                    piece_id=f"{prefix}_web_curtain",
+                    collection_id=f"{prefix}_dressing",
+                    label="K1 Shyrack Cave Hanging Web Curtain",
+                    game=tag,
+                    module_resref="m34aa",
+                    room_resref="m34aa_07b",
+                    role="dressing",
+                    class_id="dressing:cave_web_curtain",
+                    model_resref="m34aa_07b",
+                    source_bounds_m=(-14.298, -103.560, -0.422, -12.005, -97.435, 4.086),
+                    source_surface_names=("mesh27",),
+                    anchor_mode="wall",
+                    local_normal_axis="x",
+                    dimensions_m=(2.293, 6.125, 4.508),
+                    texture_resref="lko_web",
+                    tags=("k1", "korriban", "shyrack cave", "web", "curtain", "wall dressing", "vanilla-derived"),
+                ),
+                EnvironmentKitPiece(
+                    piece_id=f"{prefix}_large_water_sheet",
+                    collection_id=f"{prefix}_dressing",
+                    label="K1 Shyrack Cave Large Water Sheet",
+                    game=tag,
+                    module_resref="m34aa",
+                    room_resref="m34aa_03a",
+                    role="dressing",
+                    class_id="dressing:cave_water_large",
+                    model_resref="m34aa_03a",
+                    source_bounds_m=(35.073, -78.267, -5.005, 59.349, -59.406, -5.001),
+                    source_surface_names=("plane01",),
+                    anchor_mode="floor",
+                    dimensions_m=(24.276, 18.861, 0.004),
+                    texture_resref="lko_water01",
+                    tags=("k1", "korriban", "shyrack cave", "water", "large pool", "floor dressing", "vanilla-derived"),
+                ),
+            )
         return EnvironmentKitCollection(
             collection_id=f"{prefix}_dressing",
-            label=f"{tag} Shyrack Caves — Rock, Web & Water Pieces",
+            label=f"{tag} Shyrack Caves — Rock Formations, Webs & Water",
             game=tag,
             module_resref=module,
             environment_kind="interior",
@@ -1266,10 +1359,205 @@ def _korriban_dressing_collection(*, game: str, family: str) -> EnvironmentKitCo
     )
 
 
+def _telos_citadel_dressing_collection() -> EnvironmentKitCollection:
+    """Portable Citadel Station fixtures clipped from installed K2 rooms.
+
+    These are deliberately separate content-browser pieces. The recipes retain
+    retail UVs and materials while stripping room lightmaps and walkability, so
+    a builder can stage signs, seating, terminals, lights, and structural trim
+    without dragging an entire vanilla room.
+    """
+
+    collection_id = "k2_telos_citadel_dressing"
+    source_rows = (
+        (
+            "201tel",
+            "201tel05",
+            "directory_wide",
+            "Citadel Wide Directory Panel",
+            "directory_panel",
+            (10.30, 13.88, 14.10, 14.32, 14.36, 15.68),
+            ("billa1", "billa2", "billa3"),
+            "wall",
+            "y",
+            (3.853, 0.346, 1.432),
+            "tel_bbrds",
+            ("sign", "directory", "wall panel", "wayfinding"),
+        ),
+        (
+            "201tel",
+            "201tel05",
+            "directory_tall",
+            "Citadel Tall Directory Panel",
+            "directory_panel",
+            (17.28, 13.92, 13.64, 20.63, 14.36, 16.16),
+            ("billb1", "billb2", "billb3"),
+            "wall",
+            "y",
+            (3.206, 0.303, 2.370),
+            "tel_bbrds",
+            ("sign", "directory", "wall panel", "wayfinding"),
+        ),
+        (
+            "201tel",
+            "201tel05",
+            "directory_split",
+            "Citadel Split Directory Panel",
+            "directory_panel",
+            (23.55, 13.93, 13.78, 28.05, 14.38, 15.84),
+            ("billc1", "billc2", "billc3"),
+            "wall",
+            "y",
+            (4.340, 0.303, 1.904),
+            "tel_bbrds",
+            ("sign", "directory", "wall panel", "wayfinding"),
+        ),
+        (
+            "201tel",
+            "201tel05",
+            "directory_pillar",
+            "Citadel Directory Pillar",
+            "directory_pillar",
+            (21.84, 13.90, 13.34, 22.78, 14.34, 16.08),
+            ("lbbrds1", "lbbrds3"),
+            "wall",
+            "y",
+            (0.783, 0.303, 2.604),
+            "tel_bbrds3",
+            ("sign", "directory", "vertical panel", "wayfinding"),
+        ),
+        (
+            "202tel",
+            "202tel02",
+            "wall_monitor",
+            "Citadel Wall Monitor Cluster",
+            "wall_monitor",
+            (-21.30, 12.50, 13.10, -17.90, 14.10, 14.70),
+            ("wr_mon02", "wr_scrn06", "wr_scrn07", "wr_scrn08", "wr_scrn09", "wr_scrn10"),
+            "wall",
+            "y",
+            (3.187, 1.366, 1.366),
+            "tel_hjk",
+            ("computer", "monitor", "screen", "wall control"),
+        ),
+        (
+            "202tel",
+            "202tel02",
+            "corridor_bench",
+            "Citadel Corridor Bench",
+            "seating",
+            (-20.18, -1.20, 11.45, -18.94, 9.30, 11.96),
+            ("bench03",),
+            "floor",
+            "x",
+            (1.098, 10.358, 0.380),
+            "tel_hw8",
+            ("bench", "seating", "public space", "furniture"),
+        ),
+        (
+            "202tel",
+            "202tel08",
+            "doorway_pier",
+            "Citadel Structural Doorway Pier",
+            "structural_trim",
+            (17.48, -11.84, 12.88, 18.42, -6.35, 16.56),
+            ("object10", "object11"),
+            "floor",
+            "x",
+            (0.788, 5.356, 3.558),
+            "tel_hw10",
+            ("doorway", "pier", "structural", "wall trim"),
+        ),
+        (
+            "207tel",
+            "207tel_1",
+            "cantina_terminal",
+            "Citadel Cantina Service Terminal",
+            "service_terminal",
+            (-0.98, 11.65, 10.60, 0.42, 12.55, 12.10),
+            ("gr_bar1", "gr_bar2", "gr_bar3", "gr_duct"),
+            "floor",
+            "y",
+            (1.232, 0.796, 1.375),
+            "nar_bar1",
+            ("cantina", "terminal", "service", "computer"),
+        ),
+        (
+            "207tel",
+            "207tel_1",
+            "civic_light_band",
+            "Citadel Civic Light Band",
+            "wall_light",
+            (-5.78, 35.00, 10.12, 4.18, 35.58, 14.54),
+            ("object09",),
+            "wall",
+            "y",
+            (9.787, 0.412, 4.261),
+            "tel_lt02",
+            ("light", "wall light", "civic", "luminaire"),
+        ),
+    )
+    pieces = tuple(
+        EnvironmentKitPiece(
+            piece_id=f"k2_telos_citadel_{suffix}",
+            collection_id=collection_id,
+            label=label,
+            game="K2",
+            module_resref=module_resref,
+            room_resref=room_resref,
+            role="dressing",
+            class_id=f"dressing:{class_name}",
+            model_resref=room_resref,
+            source_bounds_m=bounds,
+            source_surface_names=surface_names,
+            anchor_mode=anchor_mode,
+            local_normal_axis=local_normal_axis,
+            dimensions_m=dimensions,
+            texture_resref=texture,
+            tags=("k2", "telos", "citadel station", "vanilla-derived") + tuple(extra_tags),
+        )
+        for (
+            module_resref,
+            room_resref,
+            suffix,
+            label,
+            class_name,
+            bounds,
+            surface_names,
+            anchor_mode,
+            local_normal_axis,
+            dimensions,
+            texture,
+            extra_tags,
+        ) in source_rows
+    )
+    return EnvironmentKitCollection(
+        collection_id=collection_id,
+        label="Telos Citadel Station — Environment Pieces",
+        game="K2",
+        module_resref="203tel",
+        environment_kind="interior",
+        floor_texture="tel_fl05",
+        wall_texture="tel_wl06",
+        ceiling_texture="tel_fl01",
+        pieces=pieces,
+        tags=(
+            "k2",
+            "telos",
+            "citadel station",
+            "dressing",
+            "content-browser",
+            "individually-placeable",
+            "vanilla-derived",
+        ),
+    )
+
+
 def _builtin_environment_kit_collections() -> tuple[EnvironmentKitCollection, ...]:
     return (
         _republic_warship_dressing_collection(game="K1"),
         _republic_warship_dressing_collection(game="K2"),
+        _telos_citadel_dressing_collection(),
         _korriban_dressing_collection(game="K1", family="tombs"),
         _korriban_dressing_collection(game="K2", family="tombs"),
         _korriban_dressing_collection(game="K1", family="caves"),

@@ -135,6 +135,19 @@ Matrix-only colors or fixed splitter contract. Its import, rig, ground,
 animation, material, gameplay, validation, and install pages must remain
 readable in Default/native, Matrix, Droid, Dark, Light, and Classic themes.
 
+## Custom KOTOR Head Builder
+
+The Character Builder selector exposes the Custom KOTOR Head entry through the
+stable card layout id `characterBuilderMode.native_kotor_head`. The entry reuses
+the existing themed Character Builder window, viewport, rail, inspector, and
+layout metrics in Head mode; it introduces no private colors, splitter sizes,
+or button modes.
+
+The vanilla component recipe is part of the existing
+`headBuilderProperties` surface. Its carrier, face, eyes, eyelids/lashes, hair,
+alien-family, and build controls use ordinary themed forms, grids, labels, and
+buttons. They add no private colour tokens or fixed panel dimensions.
+
 ## Scripting Suite
 
 The standalone Scripting Suite registers as

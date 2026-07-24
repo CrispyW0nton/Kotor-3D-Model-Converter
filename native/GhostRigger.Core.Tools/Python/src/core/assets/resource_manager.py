@@ -290,6 +290,10 @@ class ResourceManager:
         # editing an imported custom map resolves its bundled assets. Keyed by
         # (resref_lower, res_type).
         self._overlay: Dict[Tuple[str, int], bytes] = {}
+        # Replaceable in-memory resources owned by the active authored project.
+        # These sit above imported-module/base-game content so custom textures
+        # and models render in Map Studio before the module is exported.
+        self._project_overlay: Dict[Tuple[str, int], bytes] = {}
         # Legacy community maps commonly ship a tiny ARE/GIT/IFO ``.mod`` in
         # ``Modules`` and put LYT/VIS/MDL/MDX/WOK/textures in a sibling
         # ``Override`` folder.  Keep those files lazy: several recovered map
@@ -387,6 +391,38 @@ class ResourceManager:
                 self._revision += 1
         log.info("ResourceManager: module overlay indexed %d resources from %r", added, capsule_path)
         return added
+
+    def set_project_overlay(self, resources: Any = ()) -> int:
+        """Publish the active project's typed resources as a replaceable overlay.
+
+        ``resources`` contains ``(resref, restype, bytes)`` rows. Replacing the
+        complete map prevents a texture removed from one KMAP from leaking into
+        the next project while preserving independently loaded module overlays.
+        The manager revision advances only when the published bytes change.
+        """
+
+        published: Dict[Tuple[str, int], bytes] = {}
+        for item in tuple(resources or ()):
+            try:
+                resref, raw_type, data = item
+            except (TypeError, ValueError):
+                continue
+            name = str(resref or "").strip().lower()
+            if isinstance(raw_type, int) and not isinstance(raw_type, bool):
+                res_type = int(raw_type)
+            else:
+                res_type = EXT_TO_TYPE.get(
+                    str(raw_type or "").strip().lower().lstrip("."),
+                    -1,
+                )
+            payload = bytes(data or b"")
+            if name and res_type >= 0 and payload:
+                published[(name, res_type)] = payload
+        with self._lock:
+            if published != self._project_overlay:
+                self._project_overlay = published
+                self._revision += 1
+        return len(published)
 
     def add_loose_overlay(self, directory: str, *, recursive: bool = True) -> int:
         """Index loose KOTOR resources from a recovered module bundle.
@@ -486,6 +522,7 @@ class ResourceManager:
         """Drop all bundled-module overlay resources."""
         with self._lock:
             self._overlay = {}
+            self._project_overlay = {}
             self._loose_overlay = {}
             self._loose_overlay_candidates = {}
             self._revision += 1
@@ -514,6 +551,9 @@ class ResourceManager:
         """
         # Bundled-module overlay wins (matches the engine's Override priority):
         # a custom module's own room models/WOKs/textures shadow the base game.
+        authored = self._project_overlay.get((name.lower(), res_type))
+        if authored is not None:
+            return authored
         loose = self._get_loose_overlay(name, res_type)
         if loose is not None:
             return loose
@@ -536,6 +576,9 @@ class ResourceManager:
     def _get_strict_locked(self, name: str, res_type: int, game: str = 'K1') -> Optional[bytes]:
         """Fetch one strict resource while the caller holds ``self._lock``."""
 
+        authored = self._project_overlay.get((name.lower(), res_type))
+        if authored is not None:
+            return authored
         loose = self._get_loose_overlay(name, res_type)
         if loose is not None:
             return loose

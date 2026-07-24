@@ -4497,7 +4497,15 @@ def test_t2909_building_styles_group_complete_vanilla_room_collections() -> None
     assert {row["module_resref"] for row in caves} == {"m34aa"}
     assert sum(row["role"] in {"room_tile", "exterior_tile"} for row in caves) >= 13
     assert any(row["magnet_count"] >= 2 for row in caves if row["role"] in {"room_tile", "exterior_tile"})
-    assert {"dressing:cave_cliff", "dressing:cave_web", "dressing:cave_water"} <= {
+    assert {
+        "dressing:cave_cliff",
+        "dressing:cave_web",
+        "dressing:cave_water",
+        "dressing:cave_rock_ridge",
+        "dressing:cave_rock_shelf",
+        "dressing:cave_web_curtain",
+        "dressing:cave_water_large",
+    } <= {
         row["class_id"] for row in caves if row["role"] == "dressing"
     }
 
@@ -4608,7 +4616,10 @@ def test_t2909_korriban_profiles_use_measured_vaults_and_organic_caves() -> None
         "shyrack_cliff_wall",
         "canted_rock_shoulders",
         "faceted_cave_ceiling",
-        "korriban_cave_connector",
+        "korriban_cave_portal_rock_mound",
+        "korriban_cave_portal_throat",
+        "korriban_cave_portal_floor_shoulder",
+        "korriban_cave_portal_threshold",
     } <= cave_roles
     assert 3.9 <= max(vertex[2] for mesh in k1_tomb.helper_meshes for vertex in mesh.vertices) < 4.0
     assert max(uv[0] for mesh in k1_tomb.helper_meshes for uv in mesh.uvs) > 2.0
@@ -4635,6 +4646,139 @@ def test_t2909_korriban_profiles_use_measured_vaults_and_organic_caves() -> None
         for mesh in k1_cave.helper_meshes
         for face in mesh.faces
     )
+
+
+def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tree_tunnel() -> None:
+    _install_native_payload_paths()
+
+    from types import SimpleNamespace
+
+    from src.core.modules.authored_room_floorplan import (
+        FloorPlanRoomPrimitive,
+        FloorPlanWallOpening,
+        compile_floor_plan_room_geometry,
+    )
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.map_studio_terrain_kit import (
+        build_module_transition_shell_meshes,
+        module_transition_asset_for_profiles,
+        terrain_kit_asset,
+        terrain_kit_asset_path,
+        terrain_kit_asset_rows,
+        terrain_kit_runtime_resources,
+    )
+
+    expected_faces = {
+        "korriban_cave_entrance": (6624, "gr_korrentr"),
+        "shyrack_cave_entrance": (6273, "gr_shyrentr"),
+        "shadowlands_module_transition": (4795, "gr_shadentr"),
+    }
+    expected_yaw = {
+        "korriban_cave_entrance": 180.0,
+        "shyrack_cave_entrance": 90.0,
+        "shadowlands_module_transition": 0.0,
+    }
+    rows = {
+        row["asset_id"]: row
+        for row in terrain_kit_asset_rows(game="K1")
+        if row["asset_id"] in expected_faces
+    }
+    assert set(rows) == set(expected_faces)
+    assert {row["category"] for row in rows.values()} == {"Module Transitions"}
+
+    for asset_id, (face_count, texture) in expected_faces.items():
+        asset = terrain_kit_asset(asset_id)
+        assert terrain_kit_asset_path(asset).is_file()
+        shells = build_module_transition_shell_meshes(
+            asset_id,
+            room_resref="grtransition",
+            edge_index=0,
+            opening_name="module_link",
+            center=(0.0, 0.0, 0.0),
+            tangent=(1.0, 0.0),
+            inward_normal=(0.0, 1.0),
+            opening_width=5.25,
+            connected_room_resref="vanilla_room",
+            game="K1",
+        )
+        assert shells
+        assert sum(len(mesh.faces) for mesh in shells) == face_count
+        assert {mesh.texture for mesh in shells} == {texture}
+        assert all(len(mesh.uvs) == len(mesh.vertices) for mesh in shells)
+        assert all(len(mesh.normals) == len(mesh.vertices) for mesh in shells)
+        assert all(mesh.metadata["uv0_preserved"] is True for mesh in shells)
+        assert len({mesh.metadata["uniform_scale"] for mesh in shells}) == 1
+        assert {mesh.metadata["source_yaw_degrees"] for mesh in shells} == {
+            expected_yaw[asset_id]
+        }
+
+    assert module_transition_asset_for_profiles(
+        "korriban_tombs",
+        "korriban_caves_k1",
+    ) == "korriban_cave_entrance"
+    assert module_transition_asset_for_profiles(
+        "korriban_caves_k1",
+        "korriban_tombs",
+    ) == "shyrack_cave_entrance"
+    assert module_transition_asset_for_profiles(
+        "shadowlands",
+        "shadowlands",
+    ) == "shadowlands_module_transition"
+
+    opening = FloorPlanWallOpening(
+        name="forest_link",
+        edge_index=1,
+        center_fraction=0.5,
+        width=4.0,
+        height=3.25,
+        bottom=0.0,
+        metadata={
+            "connected_room_resref": "m25aa_01a",
+            "module_transition_asset_id": "shadowlands_module_transition",
+            "module_transition_floor_required": True,
+        },
+    )
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grshadowlink",
+        points=((0.0, 0.0), (18.0, 0.0), (18.0, 14.0), (0.0, 14.0)),
+        wall_height=6.0,
+        material=PrimitiveMaterial(texture="lka_mud02"),
+        wall_material=PrimitiveMaterial(texture="lka_mud02"),
+        include_ceiling=False,
+        openings=(opening,),
+        metadata={
+            "architecture_profile": "shadowlands",
+            "architecture_shell_profile": "shadowlands_root_wall",
+            "architecture_accent_textures": ("lka_bark06", "lka_plant02"),
+        },
+    )
+    geometry = compile_floor_plan_room_geometry(primitive)
+    roles = [str(mesh.metadata.get("architecture_role") or "") for mesh in geometry.helper_meshes]
+    shell_meshes = [
+        mesh
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("module_transition_asset_id") == "shadowlands_module_transition"
+    ]
+    assert shell_meshes
+    assert {mesh.texture for mesh in shell_meshes} == {"gr_shadentr"}
+    assert roles.count("shadowlands_transition_floor") == 1
+    assert roles.count("shadowlands_jungle_panorama_card") == 4
+    assert {
+        mesh.texture
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("architecture_role") == "shadowlands_jungle_panorama_card"
+    } == {"gr_shadentr"}
+    assert roles.count("shadowlands_cave_connector") >= 16
+    assert geometry.wok.walkable_face_count() > 0
+
+    project = SimpleNamespace(
+        rooms=(SimpleNamespace(metadata={}, primitive=primitive),),
+    )
+    resources = terrain_kit_runtime_resources(project)
+    assert [(resref, extension) for resref, extension, _data in resources] == [
+        ("gr_shadentr", "tga")
+    ]
+    assert len(resources[0][2]) > 1024
 
 
 def test_t2909_korriban_reliquary_chamber_is_tall_tiled_and_walkable() -> None:
@@ -5005,6 +5149,501 @@ def test_t2909_shyrack_rooms_use_wok_transition_magnets() -> None:
             math.isclose(magnet.snap_facing_radians, magnet.yaw_radians, abs_tol=1.0e-9)
             for magnet in piece.magnets
         )
+
+
+def test_t2909_shyrack_measured_dressing_previews_places_and_preserves_uvs() -> None:
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\swkotor")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K1 retail corpus is required for the Shyrack dressing proof.")
+    resources = ResourceManager()
+    assert resources.set_k1_dir(str(game_dir))
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grshyrdress", game="K1")
+    specs = (
+        ("k1_korriban_caves_rock_ridge", (0.0, 0.0, 0.0), "m34aa_05a", "lko_rock5", 65),
+        ("k1_korriban_caves_rock_shelf", (20.0, 0.0, 0.0), "m34aa_06a", "lko_rock5", 59),
+        ("k1_korriban_caves_web_curtain", (40.0, 0.0, 2.5), "m34aa_07b", "lko_web", 3),
+        ("k1_korriban_caves_large_water_sheet", (60.0, 0.0, 0.0), "m34aa_03a", "lko_water01", 2),
+    )
+    placed: list[str] = []
+    for piece_id, position, source_room, texture, triangle_count in specs:
+        assert controller.map_studio_environment_kit_preview_model(
+            piece_id,
+            resource_manager=resources,
+        ) is not None
+        room_resref = controller.add_authored_environment_kit_piece(
+            piece_id=piece_id,
+            position=position,
+            resource_manager=resources,
+        )
+        placed.append(room_resref)
+        authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+        room = next(candidate for candidate in authored.rooms if candidate.normalised_resref() == room_resref)
+        primitive = room.primitive
+        assert room.metadata["environment_kit_source_module"] == "m34aa"
+        assert room.metadata["environment_kit_source_room"] == source_room
+        assert primitive.metadata["visual_only"] is True
+        assert isinstance(primitive.metadata["source_lightmaps_removed_for_relighting"], bool)
+        assert sum(len(surface.faces) for surface in primitive.surfaces) == triangle_count
+        assert {surface.texture for surface in primitive.surfaces} == {texture}
+        assert all(len(surface.vertices) == len(surface.uvs) for surface in primitive.surfaces)
+        assert all(not surface.lightmap and not surface.uvs_lm for surface in primitive.surfaces)
+        assert primitive.wok is not None and primitive.wok.faces == []
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    assert len(authored.rooms) == len(specs)
+    assert len(set(placed)) == len(specs)
+
+
+def test_t2909_architecture_corpus_rebuild_preserves_other_profile_rows(tmp_path: Path) -> None:
+    import json
+
+    from scripts.build_kotor_architecture_corpus import _preserved_manifest_rows
+
+    retained_sequence = tmp_path / "endar_spire" / "m01aa_01a.mesh.txt"
+    retained_sequence.parent.mkdir(parents=True)
+    retained_sequence.write_text("# retained\n", encoding="utf-8")
+    rebuilt_sequence = tmp_path / "korriban_caves_k1" / "m34aa_01a.mesh.txt"
+    rebuilt_sequence.parent.mkdir(parents=True)
+    rebuilt_sequence.write_text("# replaced\n", encoding="utf-8")
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "rooms": [
+                    {
+                        "profile": "endar_spire",
+                        "room_resref": "m01aa_01a",
+                        "sequence_path": "endar_spire/m01aa_01a.mesh.txt",
+                    },
+                    {
+                        "profile": "korriban_caves_k1",
+                        "room_resref": "m34aa_01a",
+                        "sequence_path": "korriban_caves_k1/m34aa_01a.mesh.txt",
+                    },
+                    {
+                        "profile": "taris_apartments",
+                        "room_resref": "missing",
+                        "sequence_path": "taris_apartments/missing.mesh.txt",
+                    },
+                    {
+                        "profile": "invalid",
+                        "room_resref": "escape",
+                        "sequence_path": "../outside.mesh.txt",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    rows = _preserved_manifest_rows(
+        tmp_path,
+        rebuilt_profiles={"korriban_caves_k1"},
+    )
+
+    assert rows == [
+        {
+            "profile": "endar_spire",
+            "room_resref": "m01aa_01a",
+            "sequence_path": "endar_spire/m01aa_01a.mesh.txt",
+        }
+    ]
+
+
+def test_t2909_shyrack_generated_room_snaps_to_stock_cavern_and_traverses(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_module_project import compile_authored_room_spec
+    from src.core.modules.authored_module_walkmesh import (
+        combine_authored_module_walkmesh,
+        compile_authored_room_connection_walkmeshes,
+    )
+    from src.core.modules.map_studio_pie import MapStudioPIESession
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\swkotor")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K1 retail corpus is required for the Shyrack mixed-room proof.")
+    resources = ResourceManager()
+    assert resources.set_k1_dir(str(game_dir))
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grshyrlego", game="K1")
+    generated_room = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (24.0, 0.0), (24.0, 18.0), (0.0, 18.0)),
+        wall_height=6.25,
+        style_id="architecture:k1_korriban_caves",
+        include_ceiling=True,
+    )
+    preview = controller.preview_authored_terrain_kit_placement(
+        asset_id="k1_m34aa_m34aa_01a",
+        position=(12.0, 18.0, 0.0),
+    )
+    assert preview["magnet_snapped"] is True
+    assert preview["target_is_authored_wall"] is True
+    assert preview["target_room_resref"] == generated_room
+    assert preview["target_edge_index"] == 2
+    assert preview["opening_width"] == pytest.approx(5.0)
+    assert preview["opening_height"] == pytest.approx(4.15)
+
+    stock_room = controller.add_authored_environment_kit_piece(
+        piece_id="k1_m34aa_m34aa_01a",
+        position=(12.0, 18.0, 0.0),
+        resource_manager=resources,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    assert len(authored.rooms) == 2
+    generated = next(room for room in authored.rooms if room.normalised_resref() == generated_room)
+    stock = next(room for room in authored.rooms if room.normalised_resref() == stock_room)
+
+    build = compile_authored_room_connection_walkmeshes(authored)
+    assert build.ready is True, build.blocking_issues
+    assert len(build.portals) == 1
+    portal = build.portals[0]
+    assert portal.midpoint_gap <= 1.0e-5
+    assert portal.source_midpoint == pytest.approx((12.0, 18.0, 0.0), abs=1.0e-5)
+    assert portal.target_midpoint == pytest.approx((12.0, 18.0, 0.0), abs=1.0e-5)
+
+    assert stock.metadata["environment_kit_source_module"] == "m34aa"
+    assert stock.metadata["environment_kit_source_room"] == "m34aa_01a"
+    trim = stock.primitive.metadata["environment_kit_connection_trim"]
+    assert trim["operation"] == "portal_half_space_trim"
+    assert 0 < int(trim["render_faces_after"]) <= int(trim["render_faces_before"])
+    assert trim["wok_shared_vertex_policy"] == "preserved-imported-raw-indices"
+    assert trim["wok_visual_clip_excluded"] is True
+    assert stock.primitive.wok is not None and len(stock.primitive.wok.faces) > 0
+    assert all(
+        not surface.uvs or len(surface.uvs) == len(surface.vertices)
+        for surface in stock.primitive.surfaces
+    )
+    assert max(
+        max(abs(float(value)) for uv in surface.uvs for value in uv)
+        for surface in stock.primitive.surfaces
+        if surface.uvs
+    ) > 1.0
+
+    opening = generated.primitive.openings[0]
+    assert 1.60 < opening.width < 2.0
+    assert opening.height == pytest.approx(4.15)
+    assert opening.metadata["walkmesh_portal_source"] == "environment_kit_stock_threshold"
+    assert authored.placements.doors == ()
+
+    geometry = compile_authored_room_spec(generated)
+    connectors = tuple(
+        mesh
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("architecture_role") == "korriban_cave_connector"
+    )
+    assert connectors
+    assert {mesh.metadata.get("connected_room_resref") for mesh in connectors} == {stock_room}
+    assert min(float(vertex[2]) for mesh in connectors for vertex in mesh.vertices) == pytest.approx(0.0)
+    assert all(
+        len({mesh.vertices[index] for index in face}) == 3
+        for mesh in geometry.helper_meshes
+        for face in mesh.faces
+    )
+
+    projected = tuple(
+        mesh
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("surface_role") in {"cave_wall", "cave_ceiling"}
+    )
+    assert projected
+    for mesh in projected:
+        for face in mesh.faces:
+            normal = mesh.normals[int(face[0])]
+            abs_normal = tuple(abs(float(component)) for component in normal)
+            for vertex_index in face:
+                vertex = mesh.vertices[int(vertex_index)]
+                uv = mesh.uvs[int(vertex_index)]
+                if abs_normal[2] >= abs_normal[0] and abs_normal[2] >= abs_normal[1]:
+                    expected = (float(vertex[0]) * 0.30, float(vertex[1]) * 0.30)
+                elif abs_normal[0] >= abs_normal[1]:
+                    expected = (float(vertex[1]) * 0.30, float(vertex[2]) * 0.30)
+                else:
+                    expected = (float(vertex[0]) * 0.30, float(vertex[2]) * 0.30)
+                assert uv == pytest.approx(expected)
+
+    combined = combine_authored_module_walkmesh(authored)
+    assert not combined.blocking_issues
+    session = MapStudioPIESession(
+        combined.wok,
+        game="K1",
+        spawn_position=(12.0, 16.0, 0.05),
+    )
+    assert session.validation.ok is True
+    for _index in range(360):
+        session.set_move_input(1.0, 0.0, camera_azimuth_degrees=-90.0, run=True)
+        session.advance(1.0 / 30.0)
+    assert session.state.position[1] > 24.0
+
+    export = controller.export_authored_module(tmp_path / "shyrack_connection")
+    assert export.ok is True
+    assert export.package_verification is not None and export.package_verification.ok is True
+    assert set(export.package_verification.parsed_wok) == {
+        f"{generated_room}.wok",
+        f"{stock_room}.wok",
+    }
+
+
+def test_t2909_tomb_to_concave_shyrack_to_vanilla_tomb_chain(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    import statistics
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_module_project import compile_authored_room_spec
+    from src.core.modules.authored_module_walkmesh import (
+        combine_authored_module_walkmesh,
+        compile_authored_room_connection_walkmeshes,
+    )
+    from src.core.modules.map_studio_pie import MapStudioPIESession
+    from src.core.modules.map_studio_pie_entities import build_pie_entity_registry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\swkotor")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K1 retail corpus is required for the cross-style Shyrack proof.")
+    resources = ResourceManager()
+    assert resources.set_k1_dir(str(game_dir))
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grshyrchain", game="K1")
+    tomb_room = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (18.0, 0.0), (18.0, 14.0), (0.0, 14.0)),
+        wall_height=3.9,
+        style_id="architecture:k1_korriban_tombs",
+    )
+    controller.set_map_studio_building_opening(
+        room_resref=tomb_room,
+        edge_index=2,
+        opening_kind="door",
+        center_fraction=0.5,
+        width=5.25,
+        height=3.75,
+        bottom=0.0,
+    )
+    cave_room = controller.add_map_studio_building_room(
+        points=((-3.0, 16.0), (21.0, 16.0), (21.0, 34.0), (-3.0, 34.0)),
+        wall_height=6.25,
+        style_id="architecture:k1_korriban_caves",
+        include_ceiling=True,
+    )
+    controller.set_map_studio_building_opening(
+        room_resref=cave_room,
+        edge_index=0,
+        opening_kind="door",
+        center_fraction=0.5,
+        width=5.25,
+        height=3.75,
+        bottom=0.0,
+    )
+    broad = controller.preview_authored_room_drag_snap(
+        source_room_resref=cave_room,
+        world_delta=(0.0, 0.0, 0.0),
+        snap_distance=100.0,
+    )
+    preview = controller.preview_authored_room_drag_snap(
+        source_room_resref=cave_room,
+        world_delta=broad["world_delta"],
+    )
+    assert preview["magnet_snapped"] is True
+    assert preview["source_edge_index"] == 0
+    assert preview["target_room_resref"] == tomb_room
+    assert preview["auto_cut_source"] is False
+    controller.connect_authored_room_drag_snap(preview)
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    cave_before_stock = next(room for room in authored.rooms if room.normalised_resref() == cave_room)
+    cave_points = tuple(cave_before_stock.primitive.points)
+    cave_origin = tuple(float(value) for value in cave_before_stock.position)
+    north_start = cave_points[2]
+    north_end = cave_points[3]
+    north_midpoint = (
+        cave_origin[0] + (float(north_start[0]) + float(north_end[0])) * 0.5,
+        cave_origin[1] + (float(north_start[1]) + float(north_end[1])) * 0.5,
+        cave_origin[2],
+    )
+    stock_preview = controller.preview_authored_terrain_kit_placement(
+        asset_id="k1_m38aa_m38aa_02",
+        position=north_midpoint,
+    )
+    assert stock_preview["magnet_snapped"] is True
+    assert stock_preview["target_is_authored_wall"] is True
+    assert stock_preview["target_room_resref"] == cave_room
+    assert stock_preview["target_edge_index"] == 2
+    stock_tomb = controller.add_authored_environment_kit_piece(
+        piece_id="k1_m38aa_m38aa_02",
+        position=north_midpoint,
+        resource_manager=resources,
+    )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    assert {room.normalised_resref() for room in authored.rooms} == {
+        tomb_room,
+        cave_room,
+        stock_tomb,
+    }
+    build = compile_authored_room_connection_walkmeshes(authored)
+    assert build.ready is True, build.blocking_issues
+    assert len(build.portals) == 2
+    assert all(portal.midpoint_gap <= 1.0e-5 for portal in build.portals)
+    assert {
+        frozenset((portal.source_room_resref, portal.target_room_resref))
+        for portal in build.portals
+    } == {
+        frozenset((tomb_room, cave_room)),
+        frozenset((cave_room, stock_tomb)),
+    }
+
+    cave = next(room for room in authored.rooms if room.normalised_resref() == cave_room)
+    tomb = next(room for room in authored.rooms if room.normalised_resref() == tomb_room)
+    stock = next(room for room in authored.rooms if room.normalised_resref() == stock_tomb)
+    assert stock.metadata["environment_kit_source_module"] == "m38aa"
+    assert stock.metadata["environment_kit_source_room"] == "m38aa_02"
+    cave_openings = tuple(cave.primitive.openings)
+    assert len(cave_openings) == 2
+    tomb_opening = next(
+        opening
+        for opening in tomb.primitive.openings
+        if str(dict(opening.metadata or {}).get("connected_room_resref") or "").strip().lower()
+        == cave_room
+    )
+    assert tomb_opening.metadata["module_transition_asset_id"] == "korriban_cave_entrance"
+    cave_tomb_opening = next(
+        opening
+        for opening in cave_openings
+        if str(dict(opening.metadata or {}).get("connected_room_resref") or "").strip().lower()
+        == tomb_room
+    )
+    assert "module_transition_asset_id" not in cave_tomb_opening.metadata
+    stock_opening = next(
+        opening
+        for opening in cave_openings
+        if str(dict(opening.metadata or {}).get("connected_room_resref") or "").strip().lower()
+        == stock_tomb
+    )
+    assert stock_opening.metadata["module_transition_asset_id"] == "shyrack_cave_entrance"
+    assert stock_opening.metadata["open_module_transition"] is True
+    assert stock_opening.metadata["cave_archway_transition"] is True
+    assert stock_opening.metadata["suppress_door_actor"] is True
+    assert bool(stock_opening.metadata.get("shared_connection_door", False)) is False
+    assert "cross_style_transition" not in stock_opening.metadata
+    assert "door_model_resref" not in stock_opening.metadata
+    assert "cross_style_transition_actor" not in stock_opening.metadata
+    assert len(authored.placements.doors) == 0
+
+    geometry = compile_authored_room_spec(cave)
+    roles = [
+        str(mesh.metadata.get("architecture_role") or "")
+        for mesh in geometry.helper_meshes
+    ]
+    assert roles.count("shyrack_stalactite") >= 2
+    assert roles.count("shyrack_stalagmite") >= 2
+    ceiling = tuple(
+        mesh
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("architecture_role") == "faceted_cave_ceiling"
+    )
+    assert len(ceiling) >= 16
+    assert {
+        str(mesh.metadata.get("ceiling_region") or "")
+        for mesh in ceiling
+    } == {"concave_outer_pocket", "irregular_inner_vault"}
+    assert not any(
+        str(mesh.metadata.get("architecture_role") or "").startswith("korriban_door_frame_")
+        for mesh in geometry.helper_meshes
+    )
+
+    # Measure the actual top edge of each wall contour band against authored
+    # edge 1.  Multiple decreases prove the shell is re-entrant rather than a
+    # monotonic inward berm with noisy triangulation.
+    edge_start = cave.primitive.points[1]
+    edge_end = cave.primitive.points[2]
+    dx = float(edge_end[0]) - float(edge_start[0])
+    dy = float(edge_end[1]) - float(edge_start[1])
+    edge_length = math.hypot(dx, dy)
+    band_depths: dict[int, list[float]] = {}
+    for mesh in geometry.helper_meshes:
+        if mesh.metadata.get("surface_role") != "cave_wall":
+            continue
+        if int(mesh.metadata.get("edge_index", -1)) != 1:
+            continue
+        band = int(mesh.metadata["contour_band"])
+        top_z = max(float(vertex[2]) for vertex in mesh.vertices)
+        for vertex in mesh.vertices:
+            if math.isclose(float(vertex[2]), top_z, abs_tol=1.0e-7):
+                inward = (
+                    dx * (float(vertex[1]) - float(edge_start[1]))
+                    - dy * (float(vertex[0]) - float(edge_start[0]))
+                ) / edge_length
+                band_depths.setdefault(band, []).append(inward)
+    ordered_depths = [
+        statistics.median(band_depths[index])
+        for index in sorted(band_depths)
+    ]
+    assert sum(
+        following < previous - 0.05
+        for previous, following in zip(ordered_depths, ordered_depths[1:])
+    ) >= 2
+
+    textured_organic = tuple(
+        mesh
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("surface_role") in {
+            "cave_wall",
+            "cave_ceiling",
+            "cave_formation",
+        }
+    )
+    assert textured_organic
+    assert all(len(mesh.vertices) == len(mesh.uvs) for mesh in textured_organic)
+    assert max(
+        max(abs(float(value)) for uv in mesh.uvs for value in uv)
+        for mesh in textured_organic
+        if mesh.uvs
+    ) > 1.0
+    assert all(
+        len({mesh.vertices[index] for index in face}) == 3
+        for mesh in geometry.helper_meshes
+        for face in mesh.faces
+    )
+
+    combined = combine_authored_module_walkmesh(authored)
+    assert not combined.blocking_issues
+    session = MapStudioPIESession(
+        combined.wok,
+        game="K1",
+        spawn_position=(9.0, 12.0, 0.05),
+    )
+    session.entity_registry = build_pie_entity_registry(authored)
+    assert session.validation.ok is True
+    events = []
+    for _index in range(720):
+        session.set_move_input(1.0, 0.0, camera_azimuth_degrees=-90.0, run=True)
+        events.extend(session.advance(1.0 / 30.0).events)
+    assert "door_opened" not in {event.kind for event in events}
+    assert session.state.position[1] > north_midpoint[1] + 0.5
+
+    controller.save_project(tmp_path / "grshyrchain.kmap")
+    export = controller.export_authored_module(tmp_path / "shyrack_tomb_chain")
+    assert export.ok is True
+    assert export.package_verification is not None and export.package_verification.ok is True
+    assert set(export.package_verification.parsed_wok) == {
+        f"{tomb_room}.wok",
+        f"{cave_room}.wok",
+        f"{stock_tomb}.wok",
+    }
 
 
 def test_t2909_korriban_tomb_room_snaps_through_measured_frame_and_reciprocal_wok() -> None:
@@ -5832,3 +6471,218 @@ def test_t2909_whole_room_move_keeps_its_working_door_attached() -> None:
     assert after.placements.doors[0].position == tuple(
         float(door_position[index]) + (2.0, -1.0, 0.25)[index] for index in range(3)
     )
+
+
+def test_t2909_telos_citadel_style_exposes_measured_contours_and_repeat_safe_geometry() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grtelosstyle", game="K2")
+    styles = {row["style_id"]: row for row in controller.available_map_studio_building_styles()}
+    style = styles["architecture:k2_telos_citadel"]
+
+    archetypes = {row["archetype_id"]: row for row in style["architecture_archetypes"]}
+    assert style["architecture_profile"] == "telos_citadel"
+    assert style["recommended_door_width_m"] == pytest.approx(3.48)
+    assert style["recommended_door_height_m"] == pytest.approx(3.029)
+    assert set(archetypes) == {"residential", "civic", "concourse"}
+    assert archetypes["residential"]["shell_profile"] == "telos_citadel_residential"
+    assert archetypes["residential"]["recommended_wall_height_m"] == pytest.approx(3.985)
+    assert archetypes["civic"]["shell_profile"] == "telos_citadel_civic"
+    assert archetypes["civic"]["recommended_wall_height_m"] == pytest.approx(5.995)
+    assert archetypes["concourse"]["shell_profile"] == "telos_citadel_concourse"
+    assert archetypes["concourse"]["recommended_wall_height_m"] == pytest.approx(6.739)
+
+    room_resrefs = []
+    for index, archetype_id in enumerate(("residential", "civic", "concourse")):
+        height = float(archetypes[archetype_id]["recommended_wall_height_m"])
+        x0 = float(index * 18)
+        room_resrefs.append(
+            controller.add_map_studio_building_room(
+                points=((x0, 0.0), (x0 + 12.0, 0.0), (x0 + 12.0, 8.0), (x0, 8.0)),
+                wall_height=height,
+                style_id="architecture:k2_telos_citadel",
+                architecture_archetype=archetype_id,
+            )
+        )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    expected_profiles = {
+        room_resrefs[0]: "telos_citadel_residential",
+        room_resrefs[1]: "telos_citadel_civic",
+        room_resrefs[2]: "telos_citadel_concourse",
+    }
+    required_roles = {
+        "telos_citadel_residential": {"citadel_canted_ceiling_shoulder", "citadel_recessed_ceiling_transition"},
+        "telos_citadel_civic": {"citadel_civic_canted_crown", "citadel_civic_ceiling_coffer"},
+        "telos_citadel_concourse": {"citadel_concourse_upper_return", "citadel_concourse_ceiling_coffer"},
+    }
+    for room in authored.rooms:
+        geometry = compile_floor_plan_room_geometry(room.primitive)
+        profile = expected_profiles[room.normalised_resref()]
+        roles = {str(mesh.metadata.get("architecture_role") or "") for mesh in geometry.helper_meshes}
+        assert geometry.metadata["architecture_shell_profile"] == profile
+        assert required_roles[profile] <= roles
+        assert geometry.room_mesh.faces
+        assert geometry.wok.faces
+        assert all(len(mesh.uvs) == len(mesh.vertices) for mesh in geometry.helper_meshes)
+        assert {"tel_fl01", "tel_fl05", "tel_lt02", "tel_tr04", "tel_wl03"} <= {
+            mesh.texture for mesh in geometry.helper_meshes
+        }
+
+
+def test_t2909_telos_citadel_browser_separates_props_and_unifies_vanilla_rooms() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        environment_kit_collection_rows,
+        environment_kit_piece_rows,
+    )
+
+    collections = tuple(
+        row
+        for row in environment_kit_collection_rows(game="K2")
+        if row["building_style_id"] == "architecture:k2_telos_citadel"
+    )
+    collection_ids = {row["collection_id"] for row in collections}
+    assert {
+        "k2_201tel",
+        "k2_202tel",
+        "k2_203tel",
+        "k2_204tel",
+        "k2_207tel",
+        "k2_220tel",
+        "k2_221tel",
+        "k2_222tel",
+        "k2_telos_citadel_dressing",
+    } <= collection_ids
+
+    rows = tuple(
+        row
+        for row in environment_kit_piece_rows(game="K2")
+        if row["building_style_id"] == "architecture:k2_telos_citadel"
+    )
+    vanilla_rooms = tuple(row for row in rows if row["role"] in {"room_tile", "exterior_tile"})
+    dressing = tuple(row for row in rows if row["collection_id"] == "k2_telos_citadel_dressing")
+    assert len(vanilla_rooms) >= 90
+    assert len(dressing) == 9
+    assert all(row["role"] == "dressing" for row in dressing)
+    assert all(str(row["class_id"]).startswith("dressing:") for row in dressing)
+    assert all(row["anchor_mode"] in {"floor", "wall"} for row in dressing)
+    assert {
+        "k2_telos_citadel_directory_wide",
+        "k2_telos_citadel_wall_monitor",
+        "k2_telos_citadel_corridor_bench",
+        "k2_telos_citadel_doorway_pier",
+        "k2_telos_citadel_cantina_terminal",
+        "k2_telos_citadel_civic_light_band",
+    } <= {row["piece_id"] for row in dressing}
+    assert any(row["magnet_count"] > 0 for row in vanilla_rooms)
+
+
+def test_t2909_telos_citadel_door_uses_stock_tel14_and_solid_reveal() -> None:
+    _install_native_payload_paths()
+
+    from pykotor.resource.generics.utd import read_utd
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.map_studio_pascal_building import pascal_architecture_runtime_resources
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grteldoor", game="K2")
+    room_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (12.0, 0.0), (12.0, 8.0), (0.0, 8.0)),
+        wall_height=3.985,
+        style_id="architecture:k2_telos_citadel",
+        architecture_archetype="residential",
+    )
+    controller.set_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=2,
+        opening_kind="door",
+        center_fraction=0.5,
+        width=2.0,
+        height=2.2,
+        bottom=0.0,
+    )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    room = authored.rooms[0]
+    opening = room.primitive.openings[0]
+    assert opening.width == pytest.approx(3.48)
+    assert opening.height == pytest.approx(3.029)
+    assert opening.metadata["door_model_resref"] == "dor_tel14"
+    assert opening.metadata["door_appearance_id"] == 117
+    assert opening.metadata["door_outer_width_m"] == pytest.approx(3.92)
+    assert opening.metadata["door_outer_height_m"] == pytest.approx(3.31)
+    assert len(authored.placements.doors) == 1
+    assert authored.placements.doors[0].template_resref == "gr_teldoor"
+
+    geometry = compile_floor_plan_room_geometry(room.primitive)
+    roles = {str(mesh.metadata.get("architecture_role") or "") for mesh in geometry.helper_meshes}
+    assert {"telos_citadel_door_frame", "telos_door_light"} <= roles
+    reveal_parts = {
+        str(mesh.metadata.get("door_frame_part") or "")
+        for mesh in geometry.helper_meshes
+        if mesh.metadata.get("sealed_transition_reveal")
+    }
+    assert {"left", "right", "lintel", "threshold"} <= reveal_parts
+
+    resources = pascal_architecture_runtime_resources(authored)
+    door_bytes = next(data for resref, restype, data in resources if (resref, restype) == ("gr_teldoor", "utd"))
+    door = read_utd(door_bytes)
+    assert door.appearance_id == 117
+    assert door.static is False
+    assert door.locked is False
+
+
+def test_t2909_telos_citadel_individual_prop_recipes_extract_real_uv_meshes() -> None:
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.map_studio_environment_kits import environment_kit_piece_rows
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K2 retail corpus is required for the Telos dressing proof.")
+    resources = ResourceManager()
+    assert resources.set_k2_dir(str(game_dir))
+
+    rows = environment_kit_piece_rows(
+        game="K2",
+        collection_id="k2_telos_citadel_dressing",
+    )
+    assert len(rows) == 9
+    controller = ModuleEditorController()
+    controller.new_project(name="grtelprops", game="K2")
+    placed = []
+    for index, row in enumerate(rows):
+        assert controller.map_studio_environment_kit_preview_model(
+            row["piece_id"],
+            resource_manager=resources,
+        ) is not None
+        placed.append(
+            controller.add_authored_environment_kit_piece(
+                piece_id=row["piece_id"],
+                position=(float(index * 12), 0.0, 0.0),
+                resource_manager=resources,
+            )
+        )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    placed_rooms = tuple(room for room in authored.rooms if room.normalised_resref() in set(placed))
+    assert len(placed_rooms) == 9
+    for room in placed_rooms:
+        primitive = room.primitive
+        assert primitive.surfaces
+        assert all(surface.faces for surface in primitive.surfaces)
+        assert all(len(surface.uvs) == len(surface.vertices) for surface in primitive.surfaces)
+        assert primitive.wok is not None and not primitive.wok.faces
+        assert primitive.metadata["visual_only"] is True

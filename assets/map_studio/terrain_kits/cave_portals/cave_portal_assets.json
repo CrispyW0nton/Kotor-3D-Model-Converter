@@ -1,0 +1,84 @@
+{
+  "schema": "ghostrigger.cave-portal-assets/v1",
+  "source_license": "user-supplied modder resources",
+  "assets": [
+    {
+      "asset_id": "korriban_cave_entrance",
+      "source_obj": "Caves/KorribanCaveEntrance1Mirrored.obj",
+      "source_texture": "Caves/KorribanCaveEntrance1_basecolor.jpg",
+      "output_stem": "KorribanCaveEntranceMirrored",
+      "texture_resref": "gr_korrentr",
+      "source_units": "centimeters",
+      "drop_small_rear_component": true,
+      "style": "korriban_tombs",
+      "source_component_count": 4,
+      "source_triangle_count": 7254,
+      "retained_triangle_count": 6470,
+      "removed_triangle_count": 784,
+      "source_path": "C:\\Users\\NewAdmin\\Documents\\KotorMods\\ModdersResourceFiles\\CustomProps\\Environment\\Caves\\KorribanCaveEntrance1Mirrored.obj",
+      "obj": "KorribanCaveEntranceMirrored.obj",
+      "mtl": "KorribanCaveEntranceMirrored.mtl",
+      "texture": "gr_korrentr.tga",
+      "texture_size": [
+        2048,
+        2048
+      ],
+      "obj_sha256": "ee4c980afcda22d7b0b9b0473e2a0b819b40e1023407b585e2bf5e6003885d4d",
+      "texture_sha256": "7529e9f74e2c96c2269b3b77700f917d3a3a0a3825e22561f67b5f7fb959cf1d",
+      "visual_shell_only": true,
+      "walkmesh_owner": "generated_transition_floor"
+    },
+    {
+      "asset_id": "shyrack_cave_entrance",
+      "source_obj": "Caves/ShyrackCaveEntranceMirrored.obj",
+      "source_texture": "Caves/ShyrackCaveEntranceMirrored_basecolor.jpg",
+      "output_stem": "ShyrackCaveEntranceMirrored",
+      "texture_resref": "gr_shyrentr",
+      "source_units": "meters",
+      "drop_small_rear_component": false,
+      "style": "korriban_caves_k1",
+      "source_component_count": 1,
+      "source_triangle_count": 6273,
+      "retained_triangle_count": 6273,
+      "removed_triangle_count": 0,
+      "source_path": "C:\\Users\\NewAdmin\\Documents\\KotorMods\\ModdersResourceFiles\\CustomProps\\Environment\\Caves\\ShyrackCaveEntranceMirrored.obj",
+      "obj": "ShyrackCaveEntranceMirrored.obj",
+      "mtl": "ShyrackCaveEntranceMirrored.mtl",
+      "texture": "gr_shyrentr.tga",
+      "texture_size": [
+        2048,
+        2048
+      ],
+      "obj_sha256": "9560fb421a5870cb7f3e82c57ee3ee329d04ff728efc46ff189c7eab0123c3c0",
+      "texture_sha256": "03fa1d2df99091d20cdd28789b2d5d3116e878d6b7e938084c5fa1aaa8e5ed46",
+      "visual_shell_only": true,
+      "walkmesh_owner": "generated_transition_floor"
+    },
+    {
+      "asset_id": "shadowlands_module_transition",
+      "source_obj": "Shadowlands/Shadowlandsmoduletransition1.obj.obj",
+      "source_texture": "Shadowlands/Shadowlandsmoduletransition1.obj_basecolor.jpg",
+      "output_stem": "ShadowlandsModuleTransition",
+      "texture_resref": "gr_shadentr",
+      "source_units": "meters",
+      "drop_small_rear_component": false,
+      "style": "shadowlands",
+      "source_component_count": 1,
+      "source_triangle_count": 4795,
+      "retained_triangle_count": 4795,
+      "removed_triangle_count": 0,
+      "source_path": "C:\\Users\\NewAdmin\\Documents\\KotorMods\\ModdersResourceFiles\\CustomProps\\Environment\\Shadowlands\\Shadowlandsmoduletransition1.obj.obj",
+      "obj": "ShadowlandsModuleTransition.obj",
+      "mtl": "ShadowlandsModuleTransition.mtl",
+      "texture": "gr_shadentr.tga",
+      "texture_size": [
+        2048,
+        2048
+      ],
+      "obj_sha256": "4237f1b9ca575d22273026d9d640f306b8ae87ec739ce169ebd0995eec7e4177",
+      "texture_sha256": "e117fa176f68551b159803d56a7382bd523b5777c2eb762207ee4f44957dba6f",
+      "visual_shell_only": true,
+      "walkmesh_owner": "generated_transition_floor"
+    }
+  ]
+}

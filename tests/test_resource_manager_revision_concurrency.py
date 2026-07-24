@@ -6,7 +6,7 @@ from types import MethodType, SimpleNamespace
 import threading
 
 from src.core.assets import resource_manager as resource_manager_module
-from src.core.assets.resource_manager import RES_MDL, RES_MDX, ResourceManager
+from src.core.assets.resource_manager import RES_MDL, RES_MDX, RES_TGA, ResourceManager
 from src.core.game import kotor_loader
 
 
@@ -46,6 +46,32 @@ def test_resource_manager_revision_advances_only_after_successful_publication(tm
 
     manager.clear_module_overlay()
     assert manager.revision == 4
+
+
+def test_project_overlay_replaces_stale_authored_resources_and_revisions_texture_cache() -> None:
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    manager = ResourceManager()
+    assert manager.set_project_overlay((("gr_forest", "tga", b"first"),)) == 1
+    first_revision = manager.revision
+    assert manager.get("gr_forest", RES_TGA, "K1") == b"first"
+    assert manager.get_strict("gr_forest", RES_TGA, "K1") == b"first"
+
+    # Republishing identical bytes is stable; replacing the active project
+    # evicts the old resource and advances the renderer-visible revision.
+    assert manager.set_project_overlay((("gr_forest", ".tga", b"first"),)) == 1
+    assert manager.revision == first_revision
+    assert manager.set_project_overlay((("gr_cave", RES_TGA, b"second"),)) == 1
+    assert manager.revision == first_revision + 1
+    assert manager.get("gr_forest", RES_TGA, "K1") is None
+    assert manager.get("gr_cave", RES_TGA, "K1") == b"second"
+
+    cache = TextureCache()
+    cache.set_resource_manager(manager, "K1")
+    cache._cache["gr_cave"] = object()
+    manager.set_project_overlay((("gr_cave", "tga", b"third"),))
+    cache.set_resource_manager(manager, "K1")
+    assert cache._cache == {}
 
 
 def test_strict_model_pair_is_coherent_and_parse_runs_outside_resource_lock(monkeypatch) -> None:

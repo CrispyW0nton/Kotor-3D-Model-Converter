@@ -1,0 +1,7 @@
+newmtl KorribanCaveEntrance1:tripo_node_14ca3826_2eb9_48f1_9409_78bd29c64a81_material
+illum 2
+Kd 1.000000 1.000000 1.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.000000 0.000000 0.000000
+d 1.000000
+map_Kd gr_korrentr.tga

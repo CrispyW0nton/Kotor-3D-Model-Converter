@@ -606,6 +606,29 @@ class MDLBinaryWriter:
             if nm and nm not in self._supernode_number_by_name:
                 self._supernode_number_by_name[nm] = supernode_number
 
+        # This field is not always the number of local geometry records.
+        # Supermodel-derived character resources store the cumulative node
+        # span of the complete inheritance chain. For example, stock K2
+        # PFHA04 contains 38 local nodes but declares 564 after S_Female03.
+        # A modular neck_g link makes retail consume that inherited span, so
+        # collapsing it to len(self._nodes) can terminate the game at load.
+        requested_geometry_node_count = int(
+            getattr(model, "geometry_node_count", 0) or 0
+        )
+        if (
+            requested_geometry_node_count > 0
+            and requested_geometry_node_count < len(self._nodes)
+        ):
+            raise ValueError(
+                "Geometry node span cannot be smaller than the local node "
+                f"tree: {requested_geometry_node_count} < {len(self._nodes)}."
+            )
+        self._geometry_node_count = (
+            requested_geometry_node_count
+            if requested_geometry_node_count > 0
+            else len(self._nodes)
+        )
+
         # ── 2. Build name list (deduplicated, preserving DFS order) ─────────
         self._names: List[str] = []
         self._name_idx: Dict[str, int] = {}
@@ -648,7 +671,7 @@ class MDLBinaryWriter:
         buf.write(_wstr(model.name or 'unnamed', 32))
         self._root_off_patch = buf.tell()  # patch root_off later
         buf.write(_wu32(0))                # root_node_off (patched)
-        buf.write(_wu32(len(self._nodes))) # node_count
+        buf.write(_wu32(self._geometry_node_count)) # inherited geometry span
         # MaxTree subtype byte lives at geometry header +0x4C.  The K1 engine's
         # AsModel() masks this byte with 0x7F and requires value 2 before
         # InputBinary::Read writes model fields through the returned pointer.
@@ -792,6 +815,7 @@ class MDLBinaryWriter:
 
         log.debug(f"MDLBinaryWriter: {model.name!r} → MDL {len(mdl_buf)} B, "
                   f"MDX {mdx_size} B, {len(self._nodes)} nodes, "
+                  f"declared span {self._geometry_node_count}, "
                   f"{len(model.animations)} anims")
 
         return mdl_buf, mdx_bytes
@@ -1103,6 +1127,11 @@ class MDLBinaryWriter:
     def _uv_pair_for_mdx(node: ModelNode, u: float, v: float) -> Tuple[float, float]:
         """Return the UV pair in KOTOR MDX storage orientation.
 
+        Head Builder carries an explicit ``_gr_mdx_uv_transform`` so its
+        serialized choice is independent from the editor renderer's preview
+        transform.  Older import paths retain the historical ``uv_v_flip``
+        fallback unchanged.
+
         DCC/renderer-imported nodes can carry top-left style UV rows marked with
         ``uv_v_flip=False`` because the preview renderer flips V at upload time.
         The game consumes the MDX bytes directly, so the writer must perform
@@ -1112,7 +1141,17 @@ class MDLBinaryWriter:
 
         out_u = float(u)
         out_v = float(v)
-        if getattr(node, "uv_v_flip", True) is False:
+        explicit = str(
+            getattr(node, "_gr_mdx_uv_transform", "") or ""
+        ).strip().lower()
+        if explicit not in {"", "identity", "flip_v"}:
+            raise ValueError(
+                "Unsupported explicit MDX UV transform: "
+                f"{explicit!r}"
+            )
+        if explicit == "flip_v" or (
+            not explicit and getattr(node, "uv_v_flip", True) is False
+        ):
             out_v = 1.0 - out_v
         return out_u, out_v
 
@@ -2258,16 +2297,28 @@ class MDLBinaryWriter:
     def _write_dangly_header(self, buf: BytesIO, node: ModelNode) -> None:
         """
         Write the 28-byte dangly header that follows the mesh header.
-        Layout (verified against mdl_parser._parse_dangly):
+        Layout (verified against stock K2 PFHA04 and reone):
           +0  constraints_off uint32
           +4  constraints_cnt uint32
           +8  constraints_cnt2 uint32
           +12 displacement float
           +16 tightness float
           +20 period float
-          +24 unknown uint32
+          +24 rest_vertices_off uint32
+
+        Both pointers use the normal MDL ``absolute file offset - 12``
+        convention.  Retail dangly meshes store one constraint float and one
+        local-space rest-position vec3 per rendered vertex.  The second array
+        is not an optional runtime pointer: Odyssey uses it as the simulation
+        baseline.
         """
-        constraints = node.dangly_constraints or []
+        constraints = list(node.dangly_constraints or [])
+        vertices = list(node.vertices or [])
+        if len(constraints) != len(vertices):
+            raise ValueError(
+                f"Dangly node {node.name!r} needs one constraint per vertex: "
+                f"{len(constraints)} constraints for {len(vertices)} vertices"
+            )
         # Convert back to 0-255 range for binary format
         cst_denorm = [max(0.0, min(255.0, c * 255.0)) for c in constraints]
         cst_cnt = len(cst_denorm)
@@ -2279,17 +2330,35 @@ class MDLBinaryWriter:
         buf.write(_wf32(node.dangly_displacement or 0.0))
         buf.write(_wf32(node.dangly_tightness or 0.25))
         buf.write(_wf32(node.dangly_period or 1.0))
-        buf.write(_wu32(0))             # unknown (runtime pointer)
+        rest_off_patch = buf.tell()
+        buf.write(_wu32(0))             # local-space rest vertices (patched)
 
-        # Constraint float array
+        if not cst_cnt:
+            return
+
+        # Constraint float array.
         _align4(buf)
         cst_abs = buf.tell()
-        for c in cst_denorm:
-            buf.write(_wf32(c))
+        for constraint in cst_denorm:
+            buf.write(_wf32(constraint))
+
+        # Retail PFHA04 stores the exact mesh-local vertex positions again as
+        # the dangly simulation rest pose.
+        _align4(buf)
+        rest_abs = buf.tell()
+        for x, y, z in vertices:
+            buf.write(struct.pack(
+                "<fff",
+                _sanitize_float(x),
+                _sanitize_float(y),
+                _sanitize_float(z),
+            ))
 
         end = buf.tell()
         buf.seek(cst_off_patch)
         buf.write(_wu32(cst_abs - _BASE))
+        buf.seek(rest_off_patch)
+        buf.write(_wu32(rest_abs - _BASE))
         buf.seek(end)
 
     @staticmethod

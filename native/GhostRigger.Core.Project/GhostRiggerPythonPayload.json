@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Project",
-    "file_count": 6,
+    "file_count": 7,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -22,6 +22,12 @@
             "source_path": "src/core/project/ghostrigger_project.py",
             "packaged_path": "Python/src/core/project/ghostrigger_project.py",
             "sha256": "f1ac343676a225a6cfe4613c531da08b8d35e5c786c382b3ebf7b24286c6f201"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_HEAD_BUILDER_REPOSITORY",
+            "source_path": "src/core/project/head_builder_repository.py",
+            "packaged_path": "Python/src/core/project/head_builder_repository.py",
+            "sha256": "9028871e5463dcf71289fabd911b2e6aec848dfafa90aa3f9b2cbcceaca268f7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_PLACEABLE_ASSET",

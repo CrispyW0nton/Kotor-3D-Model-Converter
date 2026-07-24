@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Resources",
-    "file_count": 19,
+    "file_count": 21,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "fef51ecf2fd4c6415eede850253673c19a8c5658465582a35fdf2922c6a63bed"
+            "sha256": "f315d584449cccb77df10db46d5ec3e2d09a17ecf2c02a260b3c26f034fd3091"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_INIT",
@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_KOTOR_LOADER",
             "source_path": "src/core/game/kotor_loader.py",
             "packaged_path": "Python/src/core/game/kotor_loader.py",
-            "sha256": "87ce687cd0d37dfc4bf9548493dfdeeeedab84ab6368501a8a7754ab9c1a48fa"
+            "sha256": "3f2c69f8913165df5cf9b8de7576ef62a8ec05c65d21c1b2e7493b86b54c0638"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_BRIDGE",
@@ -88,6 +88,18 @@
             "source_path": "src/core/resources/game_resource_provider.py",
             "packaged_path": "Python/src/core/resources/game_resource_provider.py",
             "sha256": "b02b90ff851d70042f893ea753a9195828e8907719db979554e093be125d7ba2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_HEAD_DONOR_CATALOG",
+            "source_path": "src/core/resources/head_donor_catalog.py",
+            "packaged_path": "Python/src/core/resources/head_donor_catalog.py",
+            "sha256": "fbf21546f012c35c40d1854ee131ae29d3a2f75785a6d845d0b05817e5dbc0f7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_HEAD_GAME_INSTALL",
+            "source_path": "src/core/resources/head_game_install.py",
+            "packaged_path": "Python/src/core/resources/head_game_install.py",
+            "sha256": "695a0ad08815faca32da40077f27ebf82c80b56a493e2221942d4ab2a87b1b68"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_PLACEABLE_LIBRARY",

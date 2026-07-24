@@ -91,6 +91,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self._thumbnail_timer = QtCore.QTimer(self)
         self._thumbnail_timer.setSingleShot(True)
         self._thumbnail_timer.timeout.connect(self._request_next_visible_thumbnail)
+        self._thumbnail_auto_budget = 0
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -412,6 +413,9 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self._request_thumbnail_for_index(current)
 
     def _queue_visible_thumbnails(self, _value: object = None) -> None:
+        if not self.isVisible():
+            return
+        self._thumbnail_auto_budget = 1
         self._thumbnail_timer.start(0)
 
     def _request_thumbnail_for_index(self, proxy_index: QtCore.QModelIndex) -> bool:
@@ -429,6 +433,8 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         return True
 
     def _request_next_visible_thumbnail(self) -> None:
+        if not self.isVisible() or self._thumbnail_auto_budget <= 0:
+            return
         viewport_rect = self.asset_list.viewport().rect()
         first = self.asset_list.indexAt(viewport_rect.topLeft())
         last = self.asset_list.indexAt(viewport_rect.bottomRight())
@@ -444,8 +450,14 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             index = self._proxy.index(row, 0)
             if self.asset_list.visualRect(index).intersects(viewport_rect):
                 if self._request_thumbnail_for_index(index):
-                    self._thumbnail_timer.start(45)
+                    self._thumbnail_auto_budget -= 1
                     return
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        """Materialize only the cards the user can currently see."""
+
+        super().showEvent(event)
+        self._queue_visible_thumbnails()
 
     def set_asset_thumbnail(self, entry: object, pixmap: QtGui.QPixmap | None, detail: str = "") -> None:
         for row in range(self._model.rowCount()):

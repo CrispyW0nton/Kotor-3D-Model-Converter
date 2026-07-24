@@ -193,6 +193,17 @@ class WindowChromeMixin:
         self.character_builder_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["character_builder"]), "Character Builder (New Window)...", self)
         self.character_builder_action.setShortcut("Ctrl+Shift+C")
         self.character_builder_action.triggered.connect(self._open_qt_character_builder_window)
+        self.head_builder_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["character_builder"]),
+            "Custom KOTOR Head Builder...",
+            self,
+        )
+        self.head_builder_action.setShortcut("Ctrl+Shift+H")
+        self.head_builder_action.triggered.connect(
+            lambda _checked=False: self._open_qt_character_builder_window(
+                "native_kotor_head"
+            )
+        )
         self.anims_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["animation_library"]), "Animation Library", self)
         self.anims_action.setShortcut("Ctrl+Shift+A")
         self.anims_action.triggered.connect(lambda: self._show_content_browser("Animation"))
@@ -508,6 +519,7 @@ class WindowChromeMixin:
         tools_menu.addAction(self.blueprint_editor_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.character_builder_action)
+        tools_menu.addAction(self.head_builder_action)
         tools_menu.addAction(self.validate_character_action)
         tools_menu.addSeparator()
         # Developer / IPC tooling. These low-level diagnostics should be hidden
@@ -779,6 +791,16 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  Ctrl+Shift+G", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["character_builder"]))
+        head_builder_button = self._tool_button(
+            "Head Builder",
+            self.head_builder_action,
+            MAIN_COMMAND_STRIP_ICON_KEYS["character_builder"],
+        )
+        head_builder_button.setObjectName("CommandStripHeadBuilderButton")
+        head_builder_button.setToolTip(
+            "Open the Custom KOTOR Head Builder in the reusable Character Studio window"
+        )
+        layout.addWidget(head_builder_button)
         map_studio_button = self._tool_button("Map Studio", self.modules_action, MAIN_COMMAND_STRIP_ICON_KEYS["map_studio"])
         map_studio_button.setObjectName("CommandStripMapStudioButton")
         map_studio_button.setToolTip("Open Map Studio (KMAP Area Authoring)")

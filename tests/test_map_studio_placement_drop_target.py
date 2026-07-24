@@ -123,11 +123,16 @@ def test_environment_kit_browser_exposes_typed_thumbnail_drag_cards() -> None:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     browser = EnvironmentKitBrowser()
     rows = environment_kit_piece_rows(game="K1")
+    thumbnail_requests: list[object] = []
+    browser.thumbnailRequested.connect(thumbnail_requests.append)
     try:
         browser.set_assets(rows)
+        app.processEvents()
+        assert thumbnail_requests == []
         browser.resize(620, 720)
         browser.show()
         app.processEvents()
+        assert len(thumbnail_requests) == 1
 
         assert browser.asset_list.dragEnabled() is True
         assert browser.collection_combo.count() >= 2
@@ -270,6 +275,18 @@ def test_map_studio_content_browser_workflow_is_floatable_and_redockable() -> No
         assert window.environment_kit_browser._model.rowCount() < len(
             window.controller.available_map_studio_environment_kit_pieces()
         )
+        window.project.game = "K2"
+        assert window._sync_map_studio_kit_browsers_for_project_game() is True
+        assert window._sync_map_studio_kit_browsers_for_project_game() is False
+        assert window.environment_kit_browser.select_building_style(
+            "architecture:k2_telos_citadel",
+            "interior",
+        ) is True
+        assert "Telos Citadel Station" in window.environment_kit_browser.detail_label.text()
+        assert {
+            str(entry.get("game") or "")
+            for entry in window.environment_kit_browser._entries
+        } == {"K2"}
 
         window.show()
         app.processEvents()

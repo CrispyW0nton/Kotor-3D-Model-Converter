@@ -66,6 +66,9 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "render_manifest",
         "render_output",
     ),
+    "controllers": (
+        "head_builder_controller",
+    ),
     "lighting": (
         "aurora_light_adapter",
         "light_export_bridge",
@@ -133,6 +136,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_body_attachment_panel",
         "qt_character_builder_panel",
         "qt_common_panels",
+        "qt_head_builder_workspace",
         "qt_camera_panel",
         "qt_diagnostics_panel",
         "qt_inspector_panel",

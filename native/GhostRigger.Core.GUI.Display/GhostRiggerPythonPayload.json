@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Display",
-    "file_count": 325,
+    "file_count": 326,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -75,7 +75,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_CONTROLLERS_INIT",
             "source_path": "src/gui/controllers/__init__.py",
             "packaged_path": "Python/src/gui/controllers/__init__.py",
-            "sha256": "28596212a4d7e45b312dc218e5d14f1fdd4d05c70514c5101f080ca109fc5049"
+            "sha256": "564c2f641b761e0795d5809ab2937f1aa1c107a8c1a09b84f464296fce6dfcac"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CONTROLLERS_SCRIPTING_BLUEPRINT_CONTROLLER",
@@ -177,7 +177,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_GETTING_STARTED_WINDOW",
             "source_path": "src/gui/dialogs/qt_getting_started_window.py",
             "packaged_path": "Python/src/gui/dialogs/qt_getting_started_window.py",
-            "sha256": "eb98403927288c240e4c2ed023d489a05fcf71f38d0838813e5c58a5afb0ac0f"
+            "sha256": "a0b6fba07e1ee93dda6ccf29559da19f70da732f9968b371c753c8f40559db9a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_LIGHTMAP_BAKER_DIALOG",
@@ -675,7 +675,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_KIT_BROWSER",
             "source_path": "src/gui/panels/module_editor/environment_kit_browser.py",
             "packaged_path": "Python/src/gui/panels/module_editor/environment_kit_browser.py",
-            "sha256": "0c75eeee79297a28bc5e0b2df9973288aa6bead4ad6496d48eaa67bd8efec88e"
+            "sha256": "eabdce28d627679c2ba6bbc447b43a8db90c5e958626d383e66b6cae0775c642"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_TAB",
@@ -825,7 +825,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "7bed617e08423a4599c30a50355f491a2b3635b0a4de82947e1eab81680910a0"
+            "sha256": "3dd5893bbe740b777950dca3ad095b4e0b721f9016017be15cb1e33641155fd7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS",
@@ -846,10 +846,16 @@
             "sha256": "4e11aa48acf741fef21519ef76fd102518584c09981c13015ac5ee04873f0d69"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_HEAD_BUILDER_WORKSPACE",
+            "source_path": "src/gui/panels/qt_head_builder_workspace.py",
+            "packaged_path": "Python/src/gui/panels/qt_head_builder_workspace.py",
+            "sha256": "227d5e6504d91dafeaafc6ac0bb1044e4a11baf71039118cc0b7c171791ce78e"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL",
             "source_path": "src/gui/panels/qt_inspector_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_inspector_panel.py",
-            "sha256": "cf94d05642deb6f97b3ebb5bfc2aa410f9135f74e024c0c5a511dff6dcde2b80"
+            "sha256": "266ba4e48cdefcd31b2cd07b7955e46ac7df5b8ebdb196f1b94eb7cc87630c2d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL",
@@ -957,13 +963,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_WORKFLOW_RAIL",
             "source_path": "src/gui/panels/qt_workflow_rail.py",
             "packaged_path": "Python/src/gui/panels/qt_workflow_rail.py",
-            "sha256": "d7b97d31e410b528a8a0347d34bba313e5e60e588e066c4c6c1c623784a6d0c6"
+            "sha256": "2f8a9eb29c569abdd011e5288694c4f94aff9a1ad4f6576f4737ad9c14a60754"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_QT_LIB",
             "source_path": "src/gui/qt_lib.py",
             "packaged_path": "Python/src/gui/qt_lib.py",
-            "sha256": "376c447eea7ba3b7e8beedaf3f6013db6ae211ad3b490f08387f3f6f0f81f1ac"
+            "sha256": "5db04b78ba6c85c637ab88544b6d4c468dfd75edd781843591807577e01fe15f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_INIT",
@@ -1839,13 +1845,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
             "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
-            "sha256": "110a270a7911bf00ade9e93667ceed0bbe4ea90055b9da62fbf778896ee7c1a4"
+            "sha256": "648b94272b4b4b33aafe3477e06de37bfe6d21e96151341c55d772194d947e1e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
             "source_path": "src/gui/windows/application_core/shared/window_lifecycle.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_lifecycle.py",
-            "sha256": "2c8ba991fe77107964db10a939606d83979e463d631940c5792d1dd0f675af89"
+            "sha256": "8f469cbdd77f690f75eb88a7799b6486ae30f7fe43cde99a59e6286a33f7328e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",
@@ -1881,7 +1887,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_CHARACTER_BUILDER_MODE_SELECTOR",
             "source_path": "src/gui/windows/qt_character_builder_mode_selector.py",
             "packaged_path": "Python/src/gui/windows/qt_character_builder_mode_selector.py",
-            "sha256": "22ce1d54747cbf6d4b20101d963e20a6114d05526a5d57eec4eaaa4d977de5f8"
+            "sha256": "1c9e3e6baed303926e8f6a96ae30fc35ed8a75b9afbd554ac8cd6af5c65bd316"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_CUSTOM_RIGGED_CHARACTER_BUILDER_CONTROLLER",
@@ -1905,7 +1911,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "ecd41de1868bc61414027735000dbdccbe250f05798a00b3050772c8615a0599"
+            "sha256": "f74bbf002fc12f0ca767a2b4337b745e69ed7f8b9832262ec1c9352b7c76f489"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_SCRIPTING_BLUEPRINT_PAGE",

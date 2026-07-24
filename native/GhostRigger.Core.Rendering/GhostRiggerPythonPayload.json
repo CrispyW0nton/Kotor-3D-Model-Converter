@@ -603,7 +603,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_TEXTURE_CACHE",
             "source_path": "src/core/rendering/frame_core/texture_cache.py",
             "packaged_path": "Python/src/core/rendering/frame_core/texture_cache.py",
-            "sha256": "b3b3b552a1c454696eebe898e0f6a87fc1b60f0b64eaa05a2977b740c9c7e031"
+            "sha256": "11aba1336bfaf49ae7133387a2470ac23871885d8d2c6e2db1cdeb8b55fbe5ff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DEBUG_TABLES",

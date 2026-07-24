@@ -665,6 +665,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
     warnings: list[str] = []
     blocking: list[str] = []
     raw_woks: dict[str, WOKData] = {}
+    room_face_offsets: dict[str, int] = {}
     for room in tuple(project.rooms or ()):
         room_resref = room.normalised_resref()
         room_metadata = dict(getattr(room, "metadata", {}) or {})
@@ -689,6 +690,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
             continue
         vertex_offset = len(combined.verts)
         face_offset = len(combined.faces)
+        room_face_offsets[room_resref] = face_offset
         wok_coordinate_space = _room_wok_coordinate_space(room)
         position_offset, alignment_warning = resolve_room_wok_module_offset(room, source_wok)
         combined.verts.extend(_offset_vertex(vertex, position_offset) for vertex in tuple(source_wok.verts or ()))
@@ -720,6 +722,42 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
                 f"Room {room_resref or '(unnamed)'} WOK was offset to module coordinates at "
                 f"({position_offset[0]:.3f}, {position_offset[1]:.3f}, {position_offset[2]:.3f})."
             )
+
+    # Individual Odyssey WOK files express room joins through ``transN`` room
+    # indices. PIE uses one combined in-memory WOK, so stitch those same
+    # validated portal edges into ordinary face adjacency for navigation and
+    # collision. Exported per-room WOK transition values remain untouched.
+    for portal in connection_build.portals:
+        if (
+            portal.source_room_resref not in room_face_offsets
+            or portal.target_room_resref not in room_face_offsets
+        ):
+            continue
+        source_face_index = (
+            room_face_offsets[portal.source_room_resref] + int(portal.source_face_index)
+        )
+        target_face_index = (
+            room_face_offsets[portal.target_room_resref] + int(portal.target_face_index)
+        )
+        if not (
+            0 <= source_face_index < len(combined.faces)
+            and 0 <= target_face_index < len(combined.faces)
+        ):
+            blocking.append(
+                f"Combined PIE WOK portal {portal.source_room_resref} -> "
+                f"{portal.target_room_resref} resolved outside the compiled face table."
+            )
+            continue
+        source_adj_key = ("adj1", "adj2", "adj3")[int(portal.source_local_edge)]
+        target_adj_key = ("adj1", "adj2", "adj3")[int(portal.target_local_edge)]
+        combined.faces[source_face_index] = replace(
+            combined.faces[source_face_index],
+            **{source_adj_key: target_face_index},
+        )
+        combined.faces[target_face_index] = replace(
+            combined.faces[target_face_index],
+            **{target_adj_key: source_face_index},
+        )
 
     if not combined.faces and not blocking:
         blocking.append("Authored module has no generated room WOK faces.")

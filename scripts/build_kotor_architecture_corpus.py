@@ -56,6 +56,44 @@ def _configured_k2_dir() -> str:
     return str(payload.get("k2_dir") or os.environ.get("K2_PATH") or "")
 
 
+def _preserved_manifest_rows(
+    output: Path,
+    *,
+    rebuilt_profiles: set[str],
+) -> list[dict[str, object]]:
+    """Keep valid rows for profiles that are not part of this extraction run.
+
+    Architecture training is intentionally incremental: a modder may rebuild
+    one planet/style after installing a different game path or after improving
+    its semantic classifier.  Replacing the whole manifest in that case made
+    the already-generated mesh sequences invisible even though their files
+    remained in the cache.  Preserve only rows whose sequence still exists and
+    whose profile is not being rebuilt; selected profiles are replaced
+    atomically by the fresh rows assembled below.
+    """
+
+    manifest_path = output / "manifest.json"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return []
+    preserved: list[dict[str, object]] = []
+    for raw in tuple(dict(payload or {}).get("rooms") or ()):
+        row = dict(raw or {})
+        profile = str(row.get("profile") or "").strip()
+        relative = str(row.get("sequence_path") or "").strip().replace("\\", "/")
+        if not profile or profile in rebuilt_profiles or not relative:
+            continue
+        sequence_path = (output / relative).resolve()
+        try:
+            sequence_path.relative_to(output.resolve())
+        except ValueError:
+            continue
+        if sequence_path.is_file():
+            preserved.append(row)
+    return preserved
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -65,6 +103,7 @@ def main() -> int:
             "endar_spire",
             "taris_apartments",
             "harbinger",
+            "telos_citadel",
             "shadowlands",
             "korriban_tombs",
             "korriban_caves_k1",
@@ -95,7 +134,8 @@ def main() -> int:
         raise SystemExit("Configure a valid KOTOR 2 installation before building the architecture corpus.")
     output = Path(args.output).expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
-    manifest_rows: list[dict[str, object]] = []
+    rebuilt_profiles = set(profiles)
+    manifest_rows = _preserved_manifest_rows(output, rebuilt_profiles=rebuilt_profiles)
     for profile in profiles:
         profile_game = architecture_training_game(profile)
         profile_dir = output / profile
@@ -118,11 +158,19 @@ def main() -> int:
                 f"{profile}: {module_resref}/{room_resref} -> "
                 f"{summary['surface_count']} surfaces, {summary['triangle_count']} triangles"
             )
+    manifest_rows.sort(
+        key=lambda row: (
+            str(row.get("profile") or ""),
+            str(row.get("game") or ""),
+            str(row.get("module_resref") or ""),
+            str(row.get("room_resref") or ""),
+        )
+    )
     manifest = {
         "schema": "ghostrigger.kotor-architecture-corpus/v1",
         "representation": "labeled OBJ-compatible text sequence",
-        "games": sorted(required_games),
-        "profiles": list(profiles),
+        "games": sorted({str(row.get("game") or "") for row in manifest_rows if str(row.get("game") or "")}),
+        "profiles": sorted({str(row.get("profile") or "") for row in manifest_rows if str(row.get("profile") or "")}),
         "room_count": len(manifest_rows),
         "rooms": manifest_rows,
     }

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 41,
+    "file_count": 46,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -111,7 +111,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_WRITER",
             "source_path": "src/core/mdl/mdl_writer.py",
             "packaged_path": "Python/src/core/mdl/mdl_writer.py",
-            "sha256": "058aeb74db99b6b53d6fd24dcc3bc5b7b756804298a574594b40411924dce195"
+            "sha256": "534a0f36ab35d564b7e3b3df44d3402076c6183ac7ddc7262dc942973c2ffcf7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PLACEABLES_INIT",
@@ -177,7 +177,7 @@
             "resource_name": "PYTHON_PAYLOAD_IO_INIT",
             "source_path": "src/io/__init__.py",
             "packaged_path": "Python/src/io/__init__.py",
-            "sha256": "2ebd05d1b4fa7f2174deb594a5a3e5a71077cbd6ddadd4f7614d0f10267111d6"
+            "sha256": "4bc7e1082d58a2480086041af6bf852e8f4d7f7a6637ec1588ad6d15c726ccaa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_INIT",
@@ -226,6 +226,36 @@
             "source_path": "src/io/fbx/fbx_sdk_setup.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_setup.py",
             "sha256": "1b4a6ea2c515cfdf0cef629bf43c09d64bf7839a85c2d7a181cd5332c249ac7b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_HEAD_ART_IMPORTER",
+            "source_path": "src/io/head_art_importer.py",
+            "packaged_path": "Python/src/io/head_art_importer.py",
+            "sha256": "3ac74829ebe68c3c8d195db6d6c3ecc7655b4802f46e71cc50452d444f5ac2d0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_HEAD_BINARY_EXPORT",
+            "source_path": "src/io/head_binary_export.py",
+            "packaged_path": "Python/src/io/head_binary_export.py",
+            "sha256": "32e89e2b137f6dc89b7680a32a7d048de3dae695b4b832e2f642a9f93d1295aa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_HEAD_BUILDER_PACKAGE",
+            "source_path": "src/io/head_builder_package.py",
+            "packaged_path": "Python/src/io/head_builder_package.py",
+            "sha256": "03edf94165316ccddee53d8b3db2c125e9b43b8944df8b9f5703d10351308155"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_HEAD_GAME_RECORDS",
+            "source_path": "src/io/head_game_records.py",
+            "packaged_path": "Python/src/io/head_game_records.py",
+            "sha256": "a2516f79e0b126bcba1bde3d50d05e1cec502484a4d3a590b5586b1f12df47c5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_HEAD_TEXTURE_ASSET",
+            "source_path": "src/io/head_texture_asset.py",
+            "packaged_path": "Python/src/io/head_texture_asset.py",
+            "sha256": "54d0dde3ea5e286f824652545d422c90cf1d2758c85da61ce4cd8b5b16c94852"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_KOTOR_GUI_IO",

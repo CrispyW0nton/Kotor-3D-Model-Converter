@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Validation",
-    "file_count": 10,
+    "file_count": 11,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -40,6 +40,12 @@
             "source_path": "src/core/validation/custom_rigged_character_validator.py",
             "packaged_path": "Python/src/core/validation/custom_rigged_character_validator.py",
             "sha256": "8cc57689c012010f32b14f0bd312096aa0429f4dd5e8c005f2f3d2c2ab48430a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_HEAD_BUILDER_PREFLIGHT",
+            "source_path": "src/core/validation/head_builder_preflight.py",
+            "packaged_path": "Python/src/core/validation/head_builder_preflight.py",
+            "sha256": "c9638e0d13760dc7a81d616382090cc9a7a6d3e7a4121333dae1ea70c5953f2d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT",

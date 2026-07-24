@@ -28,11 +28,12 @@ def test_custom_project_defaults_to_the_independent_builder_mode() -> None:
     assert MaterialAssignment.from_dict({}).flip_vertical_for_kotor is True
 
 
-def test_character_builder_entry_offers_native_and_custom_cards() -> None:
+def test_character_builder_entry_offers_native_head_and_custom_cards() -> None:
     from src.gui.windows.qt_character_builder_mode_selector import CHARACTER_BUILDER_MODES
 
     assert tuple(CHARACTER_BUILDER_MODES) == (
         "native_kotor_character",
+        "native_kotor_head",
         "custom_rigged_character",
     )
 
@@ -40,6 +41,8 @@ def test_character_builder_entry_offers_native_and_custom_cards() -> None:
         encoding="utf-8"
     )
     assert "Native KOTOR Character" in source
+    assert "Custom KOTOR Head" in source
+    assert "Modular Head Builder" in source
     assert "Custom Rigged Character" in source
     assert "Custom Animation Patch" in source
     assert "self-contained KOTOR model" in source

@@ -2,9 +2,9 @@
 src/gui/qt_workflow_rail.py — Left-rail workflow widget (M2 / T202)
 
 The Character Builder's left-rail step list, ported from the AccuRig HUD
-reference (audit §4.2).  The rail is mode-aware for status text and future
-gates, but the visible sequence is intentionally unified around the practical
-KOTOR modder path.
+reference (audit §4.2).  The rail is mode-aware: body-like modes share the
+practical auto-rig path, while modular heads use a donor-preserving path that
+never implies a body skeleton should be built into the head resource.
 
 Public surface
 --------------
@@ -66,7 +66,17 @@ _STEPS_HEADLESS_BODY: List[Tuple[int, str]] = [
 ]
 
 _STEPS_HEAD: List[Tuple[int, str]] = [
-    *_STEPS_UNIFIED_CHARACTER_BUILDER,
+    (1, "Project and game"),
+    (2, "Import custom art"),
+    (3, "Select native donor"),
+    (4, "Align neck seam and head hook"),
+    (5, "Replace donor geometry and skin"),
+    (6, "UVs, textures, and materials"),
+    (7, "Attachment and animation preview"),
+    (8, "Optional hair/accessory physics"),
+    (9, "Binary preflight"),
+    (10, "Game records and package"),
+    (11, "Safe retail test"),
 ]
 
 _STEPS_SUPERMODEL: List[Tuple[int, str]] = [
@@ -116,6 +126,7 @@ def _steps_for_mode(mode) -> List[Tuple[int, str]]:
 # ── Roles for embedding step metadata into QListWidgetItem ──────────────────
 _ROLE_STEP_NUMBER = QtCore.Qt.UserRole + 1
 _ROLE_GATE_REASON = QtCore.Qt.UserRole + 2
+_ROLE_STEP_STATUS = QtCore.Qt.UserRole + 3
 
 _ICON_FOR_STEP = {
     1: "loadmodel",
@@ -123,6 +134,12 @@ _ICON_FOR_STEP = {
     3: "library",
     4: "anims",
     5: "export",
+    6: "texture",
+    7: "anims",
+    8: "physics",
+    9: "validation",
+    10: "package",
+    11: "play",
 }
 
 
@@ -380,6 +397,22 @@ class QtWorkflowRail(QtWidgets.QWidget):
             item = self._list.item(i)
             if int(item.data(_ROLE_STEP_NUMBER) or 0) == int(step_number):
                 self._list.setCurrentRow(i)
+                return True
+        return False
+
+    def set_step_status(self, step_number: int, status: str) -> bool:
+        """Project one serializable workflow status onto a rail row."""
+
+        normalized = str(status or "not_started").replace("_", " ").title()
+        for i in range(self._list.count()):
+            item = self._list.item(i)
+            if int(item.data(_ROLE_STEP_NUMBER) or 0) == int(step_number):
+                item.setData(_ROLE_STEP_STATUS, str(status or "not_started"))
+                gate_reason = str(item.data(_ROLE_GATE_REASON) or "")
+                tooltip = f"Status: {normalized}"
+                if gate_reason:
+                    tooltip += f"\n{gate_reason}"
+                item.setToolTip(tooltip)
                 return True
         return False
 
