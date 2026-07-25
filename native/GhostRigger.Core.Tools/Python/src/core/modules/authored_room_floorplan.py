@@ -2003,6 +2003,14 @@ def _architecture_door_transition_meshes(
     meshes: list[PrimitiveMesh] = []
     for opening in openings:
         metadata = dict(opening.metadata or {})
+        # A reciprocal Pascal-room connection owns one shared door actor and
+        # one shared transition shell.  Rebuilding the same surround from the
+        # non-owning room produced coincident lintels and thresholds at the
+        # seam, which appeared as dark flicker in PIE.
+        if bool(metadata.get("shared_connection_door")) and str(
+            metadata.get("shared_door_placement_id") or ""
+        ).strip():
+            continue
         door_model = str(metadata.get("door_model_resref") or "").strip().lower()
         if door_model == "dor_lko04":
             # K1/K2 tomb rooms supply a deep carved surround around the
@@ -2318,6 +2326,169 @@ def _architecture_door_transition_meshes(
                         )
                     )
             continue
+        if door_model in {"dor_ond01", "dor_ond02", "dor_ond03", "dor_ond06"}:
+            # Iziz doors sit inside substantial masonry portals. Rebuild a
+            # closed two-tier surround and reveal so authored walls meet the
+            # retail moving door as solid architecture rather than a paper
+            # cut-out. The exact UTD appearance remains profile-specific.
+            center = max(0.0, min(edge_length, float(opening.center_fraction) * edge_length))
+            half_width = min(edge_length * 0.5, float(opening.width) * 0.5)
+            inner_start = max(0.0, center - half_width)
+            inner_end = min(edge_length, center + half_width)
+            requested_outer_width = float(
+                metadata.get("door_outer_width_m")
+                or metadata.get("door_frame_width_m")
+                or (float(opening.width) + 0.55)
+            )
+            outer_half = min(edge_length * 0.5, max(half_width + 0.20, requested_outer_width * 0.5))
+            outer_start = max(0.0, center - outer_half)
+            outer_end = min(edge_length, center + outer_half)
+            opening_bottom = max(0.0, float(opening.bottom))
+            opening_top = min(wall_height - 0.01, opening_bottom + float(opening.height))
+            outer_top = min(
+                wall_height - 0.005,
+                max(
+                    opening_top + 0.20,
+                    float(metadata.get("door_outer_height_m") or metadata.get("door_frame_height_m") or (opening_top + 0.40)),
+                ),
+            )
+            frame_metadata = {
+                **common,
+                "opening_name": str(opening.name or ""),
+                "door_model_resref": door_model,
+                "door_aperture_width_m": float(opening.width),
+                "architecture_role": "onderon_door_portal",
+                "surface_role": "architectural_detail",
+                "vanilla_measurement_source": "502OND/504OND/506OND/512OND retail door hooks",
+            }
+            # The retail Onderon moving assemblies occupy as much as 0.617 m
+            # through the wall (DOR_OND01..03 measured model bounds).  A front
+            # surround alone lets that actor intersect or float outside a
+            # paper-thin authored facade.  Enclose it in a nearly one-metre
+            # masonry return, with the majority of that depth behind the room
+            # edge just as the stock Iziz modules do.
+            structural_depth_back = -0.68
+            structural_depth_front = 0.30
+            structural_spans = (
+                ("left", (outer_start, inner_start), floor_z + opening_bottom, floor_z + outer_top),
+                ("right", (inner_end, outer_end), floor_z + opening_bottom, floor_z + outer_top),
+                ("lintel", (outer_start, outer_end), floor_z + opening_top, floor_z + outer_top),
+            )
+            for part, span, z0, z1 in structural_spans:
+                meshes.extend(
+                    _architecture_closed_wall_prism_meshes(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_onderon_door_structural_{part}",
+                        start=start,
+                        end=end,
+                        span=span,
+                        depth_back=structural_depth_back,
+                        depth_front=structural_depth_front,
+                        z_bottom=z0,
+                        z_top=z1,
+                        material=trim_material,
+                        metadata={
+                            **frame_metadata,
+                            "door_frame_part": part,
+                            "architecture_role": "onderon_door_structural_return",
+                            "door_wall_depth_m": structural_depth_front - structural_depth_back,
+                        },
+                    )
+                )
+            for tier, depth, lateral, material in (
+                ("outer", 0.32, 0.0, trim_material),
+                ("inner", 0.45, 0.11, infill_material),
+            ):
+                tier_start = min(inner_start, outer_start + lateral)
+                tier_end = max(inner_end, outer_end - lateral)
+                tier_top = max(opening_top + 0.05, outer_top - lateral * 0.30)
+                for part, span, z0, z1 in (
+                    ("left", (tier_start, inner_start), floor_z + opening_bottom, floor_z + tier_top),
+                    ("right", (inner_end, tier_end), floor_z + opening_bottom, floor_z + tier_top),
+                    ("lintel", (tier_start, tier_end), floor_z + opening_top, floor_z + tier_top),
+                ):
+                    if span[1] - span[0] <= 0.012 or z1 - z0 <= 0.012:
+                        continue
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_onderon_door_{tier}_{part}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=None,
+                            depth_bottom=depth,
+                            depth_top=depth,
+                            z_bottom=z0,
+                            z_top=z1,
+                            material=material,
+                            metadata={
+                                **frame_metadata,
+                                "door_frame_tier": tier,
+                                "door_frame_part": part,
+                                "beveled_geometry": True,
+                            },
+                        )
+                    )
+
+            tx = (float(end[0]) - float(start[0])) / max(edge_length, 1.0e-8)
+            ty = (float(end[1]) - float(start[1])) / max(edge_length, 1.0e-8)
+            nx, ny = -ty, tx
+
+            def portal_point(distance: float, depth: float, z_value: float) -> Vec3:
+                return (
+                    float(start[0]) + tx * float(distance) + nx * float(depth),
+                    float(start[1]) + ty * float(distance) + ny * float(depth),
+                    float(z_value),
+                )
+
+            # The structural prism owns the reveal up to 0.30 m.  Continue
+            # from that boundary instead of drawing a second coplanar reveal
+            # across it.  The continuous room/stock floor is the authoritative
+            # threshold surface, so no raised duplicate floor plane is emitted.
+            reveal_start = structural_depth_front
+            reveal_depth = 0.48
+            for reveal, vertices in (
+                (
+                    "left",
+                    (
+                        portal_point(inner_start, reveal_start, floor_z + opening_bottom),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_bottom),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
+                    ),
+                ),
+                (
+                    "right",
+                    (
+                        portal_point(inner_end, reveal_start, floor_z + opening_bottom),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_bottom),
+                    ),
+                ),
+                (
+                    "lintel",
+                    (
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
+                    ),
+                ),
+            ):
+                meshes.append(
+                    _planar_surface_mesh(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_onderon_door_reveal_{reveal}",
+                        vertices=vertices,
+                        faces=((0, 1, 2), (0, 2, 3), (2, 1, 0), (3, 2, 0)),
+                        material=trim_material,
+                        metadata={
+                            **frame_metadata,
+                            "door_frame_part": reveal,
+                            "sealed_transition_reveal": True,
+                        },
+                    )
+                )
+            continue
         if door_model != "dor_lhr01":
             continue
         center = max(0.0, min(edge_length, float(opening.center_fraction) * edge_length))
@@ -2520,6 +2691,14 @@ def architecture_shell_profile(primitive: FloorPlanRoomPrimitive) -> str:
         return "harbinger_corridor"
     if architecture == "telos_citadel":
         return "telos_citadel_residential"
+    if architecture == "onderon_city":
+        return "onderon_city_courtyard"
+    if architecture == "onderon_cantina":
+        return "onderon_cantina_gallery"
+    if architecture == "onderon_sky_ramp":
+        return "onderon_sky_ramp_court"
+    if architecture == "onderon_palace":
+        return "onderon_palace_gallery"
     if architecture == "taris_apartments":
         return "taris_apartment"
     if architecture == "shadowlands":
@@ -2638,6 +2817,16 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         "telos_citadel_residential",
         "telos_citadel_civic",
         "telos_citadel_concourse",
+        "onderon_city_courtyard",
+        "onderon_city_square",
+        "onderon_city_spaceport",
+        "onderon_cantina_gallery",
+        "onderon_cantina_lounge",
+        "onderon_sky_ramp_court",
+        "onderon_sky_ramp_terrace",
+        "onderon_palace_gallery",
+        "onderon_palace_state_hall",
+        "onderon_palace_museum",
         "taris_apartment",
         "korriban_tomb",
         "korriban_tomb_chamber",
@@ -2656,6 +2845,16 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         "telos_citadel_residential": 3.50,
         "telos_citadel_civic": 5.40,
         "telos_citadel_concourse": 6.10,
+        "onderon_city_courtyard": 7.50,
+        "onderon_city_square": 9.25,
+        "onderon_city_spaceport": 8.00,
+        "onderon_cantina_gallery": 6.80,
+        "onderon_cantina_lounge": 6.00,
+        "onderon_sky_ramp_court": 11.25,
+        "onderon_sky_ramp_terrace": 14.00,
+        "onderon_palace_gallery": 5.40,
+        "onderon_palace_state_hall": 11.50,
+        "onderon_palace_museum": 5.40,
         "korriban_tomb": 3.85,
         "korriban_tomb_chamber": 9.75,
         "korriban_tomb_junction": 9.75,
@@ -2669,6 +2868,10 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
             if shell_profile == "taris_apartment"
             else "Telos Citadel room"
             if shell_profile.startswith("telos_citadel_")
+            else "Onderon exterior court"
+            if shell_profile.startswith(("onderon_city_", "onderon_sky_ramp_"))
+            else "Onderon interior"
+            if shell_profile.startswith(("onderon_cantina_", "onderon_palace_"))
             else "Korriban monumental tomb hall"
             if shell_profile == "korriban_tomb_monumental"
             else "Korriban tomb room"
@@ -2698,6 +2901,14 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         defaults = ("lts_pwall04", "lts_trim01", "lts_lite08", "lts_gwall01")
     elif architecture_profile == "telos_citadel":
         defaults = ("tel_wl03", "tel_tr04", "tel_lt02", "tel_hcl1")
+    elif architecture_profile == "onderon_city":
+        defaults = ("ond_tr04", "ond_wl08", "ond_lt02", "ond_wl06")
+    elif architecture_profile == "onderon_cantina":
+        defaults = ("ond_wl11", "ond_tr03", "ond_lt03", "ond_wl06")
+    elif architecture_profile == "onderon_sky_ramp":
+        defaults = ("ond_tr05", "ond_wl10", "ond_lt02", "ond_wl05")
+    elif architecture_profile == "onderon_palace":
+        defaults = ("ond_tr06", "ond_wl10", "ond_lt03", "ond_orn")
     elif architecture_profile == "korriban_tombs":
         defaults = ("lko_wal09", "lko_wal08", "lko_rocks", "lko_wal07")
     elif architecture_profile == "korriban_tombs_k2":
@@ -2712,6 +2923,14 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         if architecture_profile == "harbinger"
         else "tel_fl05"
         if architecture_profile == "telos_citadel"
+        else "ond_fl02"
+        if architecture_profile == "onderon_city"
+        else "ond_fl08"
+        if architecture_profile == "onderon_cantina"
+        else "ond_fl03"
+        if architecture_profile == "onderon_sky_ramp"
+        else "ond_fl07"
+        if architecture_profile == "onderon_palace"
         else "lts_floor01"
         if architecture_profile == "taris_apartments"
         else "lko_flr03"
@@ -2966,6 +3185,111 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
             rib_projection = 0.18
             bay_target = 7.00
             rib_role = "citadel_concourse_frame"
+    elif shell_profile.startswith("onderon_"):
+        # The Onderon profiles are measured as architectural sections rather
+        # than texture swaps. Iziz exteriors use a battered masonry base and
+        # stepped parapet; hospitality and palace interiors retain the same
+        # beveled stone language at different bay/ceiling scales.
+        if shell_profile.startswith("onderon_city_"):
+            nominal_height = (
+                10.50
+                if shell_profile == "onderon_city_square"
+                else 9.00
+                if shell_profile == "onderon_city_spaceport"
+                else 8.50
+            )
+            wall_material = _architecture_material("ond_wl05")
+            accent_material = _architecture_material("ond_wl08")
+            trim_material = _architecture_material("ond_tr04")
+            light_material = _architecture_material("ond_lt02", luminous=True)
+            utility_material = _architecture_material("ond_wl06")
+            ceiling_material = _architecture_material("ond_rk01")
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.16, 0.240 / nominal_height, "iziz_court_floor_curb", floor_edge_material, True),
+                (0.28, 1.050 / nominal_height, "iziz_battered_stone_dado", utility_material, False),
+                (0.42, 2.850 / nominal_height, "iziz_recessed_facade_field", wall_material, False),
+                (0.58, 3.220 / nominal_height, "iziz_civic_light_belt", light_material, False),
+                (0.74, 5.850 / nominal_height, "iziz_upper_facade_panel", accent_material, False),
+                (1.05, 7.050 / nominal_height, "iziz_canted_parapet_shoulder", trim_material, False),
+                (1.42, 1.000, "iziz_stepped_parapet_crown", wall_material, False),
+            )
+            if shell_profile == "onderon_city_square":
+                bay_target = 6.50
+                rib_projection = 0.30
+                rib_role = "iziz_monumental_square_buttress"
+            elif shell_profile == "onderon_city_spaceport":
+                bay_target = 7.50
+                rib_projection = 0.26
+                rib_role = "iziz_spaceport_facade_pier"
+            else:
+                bay_target = 5.50
+                rib_projection = 0.24
+                rib_role = "iziz_merchant_facade_pilaster"
+        elif shell_profile.startswith("onderon_cantina_"):
+            nominal_height = 6.80 if shell_profile == "onderon_cantina_lounge" else 7.70
+            wall_material = _architecture_material("ond_wl12")
+            accent_material = _architecture_material("ond_wl11")
+            trim_material = _architecture_material("ond_tr03")
+            light_material = _architecture_material("ond_lt03", luminous=True)
+            utility_material = _architecture_material("ond_wl06")
+            ceiling_material = _architecture_material("ond_wl02")
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.10, 0.180 / nominal_height, "cantina_floor_edge", floor_edge_material, True),
+                (0.20, 0.900 / nominal_height, "cantina_service_plinth", utility_material, False),
+                (0.32, 2.250 / nominal_height, "cantina_recessed_booth_field", accent_material, False),
+                (0.46, 2.620 / nominal_height, "cantina_luminous_hospitality_belt", light_material, False),
+                (0.58, 4.850 / nominal_height, "cantina_faceted_wall_panel", wall_material, False),
+                (0.92, 5.850 / nominal_height, "cantina_beveled_crown", trim_material, False),
+                (1.36, 1.000, "cantina_ceiling_coffer", ceiling_material, False),
+            )
+            rib_projection = 0.18
+            bay_target = 4.25 if shell_profile == "onderon_cantina_gallery" else 3.50
+            rib_role = "cantina_octagonal_bay_frame"
+        elif shell_profile.startswith("onderon_sky_ramp_"):
+            nominal_height = 16.00 if shell_profile == "onderon_sky_ramp_terrace" else 12.70
+            wall_material = _architecture_material("ond_wl08")
+            accent_material = _architecture_material("ond_wl10")
+            trim_material = _architecture_material("ond_tr05")
+            light_material = _architecture_material("ond_lt02", luminous=True)
+            utility_material = _architecture_material("ond_wl05")
+            ceiling_material = _architecture_material("ond_rk02")
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.22, 0.300 / nominal_height, "sky_ramp_terrace_curb", floor_edge_material, True),
+                (0.42, 1.800 / nominal_height, "sky_ramp_fortified_base", utility_material, False),
+                (0.64, 5.200 / nominal_height, "sky_ramp_recessed_civic_wall", wall_material, False),
+                (0.82, 5.650 / nominal_height, "sky_ramp_light_course", light_material, False),
+                (1.18, 9.100 / nominal_height, "sky_ramp_monumental_panel", accent_material, False),
+                (1.64, 10.900 / nominal_height, "sky_ramp_battered_crown", trim_material, False),
+                (2.15, 1.000, "sky_ramp_stepped_parapet", wall_material, False),
+            )
+            rib_projection = 0.44 if shell_profile == "onderon_sky_ramp_terrace" else 0.36
+            bay_target = 10.00 if shell_profile == "onderon_sky_ramp_terrace" else 8.00
+            rib_role = "sky_ramp_monumental_buttress"
+        else:
+            is_state_hall = shell_profile == "onderon_palace_state_hall"
+            nominal_height = 12.70 if is_state_hall else 6.00
+            wall_material = _architecture_material("ond_wl12")
+            accent_material = _architecture_material("ond_wl10")
+            trim_material = _architecture_material("ond_tr06")
+            light_material = _architecture_material("ond_lt03", luminous=True)
+            utility_material = _architecture_material("ond_orn")
+            ceiling_material = _architecture_material("ond_wl02")
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.12, 0.200 / nominal_height, "palace_floor_plinth", floor_edge_material, True),
+                (0.24, 0.900 / nominal_height, "palace_carved_dado", utility_material, False),
+                (0.38, 2.500 / nominal_height, "palace_recessed_relief_panel", accent_material, False),
+                (0.52, 2.850 / nominal_height, "palace_gold_light_course", light_material, False),
+                (0.68, 4.650 / nominal_height, "palace_upper_wall_field", wall_material, False),
+                (1.00, 5.350 / nominal_height, "palace_entablature", trim_material, False),
+                (1.45, 1.000, "palace_coffered_vault", ceiling_material, False),
+            )
+            rib_projection = 0.36 if is_state_hall else 0.20
+            bay_target = 7.50 if is_state_hall else 3.75 if shell_profile == "onderon_palace_museum" else 4.50
+            rib_role = "palace_monumental_pylon" if is_state_hall else "palace_beveled_column"
     elif shell_profile == "taris_apartment":
         # Repeated m02aa_03a/m02aa_06a and m02ad counterparts establish the
         # Taris apartment interior stations: 0.187 m skirting, 0.45 m lower
@@ -5093,6 +5417,10 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
         "harbinger",
         "taris_apartments",
         "telos_citadel",
+        "onderon_city",
+        "onderon_cantina",
+        "onderon_sky_ramp",
+        "onderon_palace",
         "shadowlands",
         "korriban_tombs",
         "korriban_tombs_k2",
@@ -5131,6 +5459,30 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
             else 5.00
             if architecture_shell_profile(primitive) == "telos_citadel_civic"
             else 4.00
+        )
+    elif profile == "onderon_city":
+        defaults = ("ond_tr04", "ond_wl08", "ond_lt02", "ond_wl06")
+        bay_target = (
+            6.50
+            if architecture_shell_profile(primitive) == "onderon_city_square"
+            else 7.50
+            if architecture_shell_profile(primitive) == "onderon_city_spaceport"
+            else 5.50
+        )
+    elif profile == "onderon_cantina":
+        defaults = ("ond_wl11", "ond_tr03", "ond_lt03", "ond_wl06")
+        bay_target = 3.50 if architecture_shell_profile(primitive) == "onderon_cantina_lounge" else 4.25
+    elif profile == "onderon_sky_ramp":
+        defaults = ("ond_tr05", "ond_wl10", "ond_lt02", "ond_wl05")
+        bay_target = 10.00 if architecture_shell_profile(primitive) == "onderon_sky_ramp_terrace" else 8.00
+    elif profile == "onderon_palace":
+        defaults = ("ond_tr06", "ond_wl10", "ond_lt03", "ond_orn")
+        bay_target = (
+            7.50
+            if architecture_shell_profile(primitive) == "onderon_palace_state_hall"
+            else 3.75
+            if architecture_shell_profile(primitive) == "onderon_palace_museum"
+            else 4.50
         )
     else:
         defaults = ("lts_pwall04", "lts_trim01", "lts_lite08", "lts_gwall01")
@@ -5224,10 +5576,27 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
             bay_span = (bay_start + margin, bay_end - margin)
             if bay_span[1] - bay_span[0] <= 0.08:
                 continue
-            panel_bottom = 0.34 if profile == "endar_spire" else 0.38 if profile == "telos_citadel" else 0.36
+            panel_bottom = (
+                0.34
+                if profile == "endar_spire"
+                else 0.38
+                if profile == "telos_citadel"
+                else 0.48
+                if profile.startswith("onderon_")
+                else 0.36
+            )
             panel_top = max(
                 panel_bottom + 0.25,
-                height - (0.82 if profile == "endar_spire" else 1.10 if profile == "telos_citadel" else 0.44),
+                height
+                - (
+                    0.82
+                    if profile == "endar_spire"
+                    else 1.10
+                    if profile == "telos_citadel"
+                    else max(1.25, height * 0.16)
+                    if profile.startswith("onderon_")
+                    else 0.44
+                ),
             )
             visible = _architecture_intersections(
                 _architecture_visible_intervals(edge_length, openings, z0=panel_bottom, z1=panel_top),
@@ -5359,6 +5728,75 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
                 light_bottom = max(1.25, panel_top - 0.42)
                 light_top = min(panel_top - 0.12, light_bottom + 0.16)
                 light_span = (max(bay_span[0], center - 0.42), min(bay_span[1], center + 0.42))
+            elif profile.startswith("onderon_"):
+                # One framed relief per measured bay keeps the authored wall
+                # readable as Iziz architecture even before dressing pieces are
+                # added. The geometry is inset, beveled, and world-tiled; it is
+                # not a decal or a stretched rectangular texture panel.
+                inset_bottom = 0.72 if profile != "onderon_sky_ramp" else 1.20
+                inset_top = max(inset_bottom + 0.75, panel_top - max(0.48, height * 0.10))
+                shoulder = min(0.32, bay_width * 0.08)
+                inset_span = (bay_span[0] + shoulder, bay_span[1] - shoulder)
+                for ordinal, span in enumerate(
+                    _architecture_intersections(
+                        _architecture_visible_intervals(edge_length, openings, z0=inset_bottom, z1=inset_top),
+                        inset_span,
+                    ),
+                    1,
+                ):
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_relief_{bay_index + 1:02d}_{ordinal:02d}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=(
+                                span[0] + min(0.18, (span[1] - span[0]) * 0.08),
+                                span[1] - min(0.18, (span[1] - span[0]) * 0.08),
+                            ),
+                            depth_bottom=0.095,
+                            depth_top=0.145,
+                            z_bottom=floor_z + inset_bottom,
+                            z_top=floor_z + inset_top,
+                            material=accent_material,
+                            metadata={
+                                **common,
+                                "architecture_role": "onderon_beveled_relief_bay",
+                                "beveled_geometry": True,
+                                "texture_stretching_prevented": True,
+                            },
+                        )
+                    )
+                belt_bottom = min(max(1.10, height * 0.27), panel_top - 0.35)
+                belt_top = min(panel_top - 0.10, belt_bottom + max(0.16, height * 0.025))
+                for ordinal, span in enumerate(
+                    _architecture_intersections(
+                        _architecture_visible_intervals(edge_length, openings, z0=belt_bottom, z1=belt_top),
+                        bay_span,
+                    ),
+                    1,
+                ):
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_course_{bay_index + 1:02d}_{ordinal:02d}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=None,
+                            depth_bottom=0.135,
+                            depth_top=0.135,
+                            z_bottom=floor_z + belt_bottom,
+                            z_top=floor_z + belt_top,
+                            material=trim_material,
+                            metadata={**common, "architecture_role": "onderon_projecting_trim_course"},
+                        )
+                    )
+                light_bottom = max(1.45, panel_top - max(0.62, height * 0.075))
+                light_top = min(panel_top - 0.16, light_bottom + max(0.16, height * 0.022))
+                light_span = (
+                    max(bay_span[0], center - min(0.62, bay_width * 0.20)),
+                    min(bay_span[1], center + min(0.62, bay_width * 0.20)),
+                )
             else:
                 inset_bottom, inset_top = 0.58, max(0.82, panel_top - 0.22)
                 inset_span = (bay_span[0] + min(0.16, bay_width * 0.08), bay_span[1] - min(0.16, bay_width * 0.08))

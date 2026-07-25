@@ -183,7 +183,10 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
 
     assert "mapStudioGameplayPaletteSearchLineEdit" in builder_source
     assert "mapStudioGameplayPaletteComboBox" in builder_source
+    assert "mapStudioGameplayPaletteResultLabel" in builder_source
     assert "mapStudioUseGameplayPaletteButton" in builder_source
+    assert "self._gameplay_palette_page_limit = 192" in builder_source
+    assert "matches[: self._gameplay_palette_page_limit]" in builder_source
     assert "set_gameplay_palette_entries" in builder_source
     assert "authored_gameplay_palette_entries" in controller_source
     assert "authored_gameplay_palette_from_library_rows" in controller_source

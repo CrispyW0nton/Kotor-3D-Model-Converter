@@ -9,6 +9,62 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-24
+
+### [2026-07-24] T2909 Onderon environment kit, stable portals, and responsive Build/Place browsers
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal environment building, K2 Onderon exterior and
+interior kits, spatial-design guidance, door/walkmesh PIE behavior, placeable
+content browsers, renderer diagnostics, and native embedded payload delivery.
+
+Intersects: the continuing multi-style Map Studio kit work on the
+`ghost-studio` branch. Existing Endar Spire, Shadowlands, Korriban/Shyrack,
+Telos, particle-placeable, and unrelated contributor changes were preserved.
+
+Added the first full Onderon construction family with distinct Iziz courtyard,
+sky-ramp, cantina, and palace architecture; classified vanilla buildings,
+rooms, sky geometry, and environment props; one-click vanilla sky setup; and a
+spatial-intent ledger that records zones, routes, landmarks, exact coordinates,
+purpose, and placement rationale. The proof layout now uses separate structural
+rooms, purposeful dressing, continuous authored/vanilla routes, generated
+walkmesh, and style-correct runtime doors.
+
+Corrected Onderon transition apertures against installed retail door-model
+bounds, made one connected room own each shared portal shell, removed duplicate
+coplanar threshold/reveal surfaces, closed the lintel gap, kept doorway frames
+clear of room floors, and retained first-frame closed-door actors that open
+upward and permit PIE traversal. PIE room identity now survives viewport
+resource publication so disposable runtime batching can rehydrate and compact
+authored room panels without changing editable geometry.
+
+Removed the placeable-library stall from both mode changes. Build and Place
+retain the complete searchable asset set but materialize at most 192 rows.
+Place mode shares lightweight placeholder icons, defers thumbnail work until
+the browser is visible and idle, and requests one real model preview at a time.
+Search still resolves assets beyond the first page by name or resref.
+
+Affected areas: Core Scene/Tools authored room, walkmesh, Pascal building,
+environment-kit, spatial-design, skybox, PIE, door, stock-preview, and
+controller modules; GUI Display/Core Tools Builder, Placement, Environment,
+viewport, renderer, and automation-proof surfaces; the Onderon proof and
+vanilla spatial-study scripts; focused Map Studio tests; native payload
+manifests; and `CHANGES.md`.
+
+Verification: focused doorway, authored-room, placement paging, deferred
+thumbnail, searchable Build palette, payload-source, and PIE batching checks
+passed. A 12,000-placeable Qt timing fixture switched Place in 22.46 ms and
+Build in 18.17 ms while showing 192 rows and finding asset 11,999 through
+search. The regenerated Onderon proof produced 14 separate structural rooms,
+10 portals, and 896 WOK faces with every cantina, sky-ramp, and palace route
+crossed and every tested door opened. The staged Debug x64 application moved
+the player 9.63 m through the cantina transition and produced continuous
+retained frames under
+`artifacts/onderon_pascal_proof/final_browser_door_pie_clean/`. GUI Display,
+Core Scene, and Core Tools rebuilt successfully, all 18 payload DLLs were
+staged, and the user manually accepted the staged workflow before this push.
+
 ## 2026-07-23
 
 ### [2026-07-23] T2909 Telos kit, responsive environment shelf, and first-run tutorial audit

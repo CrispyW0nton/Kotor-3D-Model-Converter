@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import copy
 from dataclasses import dataclass
 from typing import Any
 
@@ -98,7 +99,15 @@ def _preview_key(signature_rows: list[dict[str, object]]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
 
 
-def _mesh_node(md: Any, mesh: PrimitiveMesh, parent: Any, *, room_resref: str, role: str) -> Any:
+def _mesh_node(
+    md: Any,
+    mesh: PrimitiveMesh,
+    parent: Any,
+    *,
+    room_resref: str,
+    role: str,
+    stock_room_mesh: bool = False,
+) -> Any:
     vertices = [tuple(float(value) for value in point[:3]) for point in tuple(mesh.vertices or ())]
     faces = [tuple(int(value) for value in face[:3]) for face in tuple(mesh.faces or ())]
     normals = [tuple(float(value) for value in normal[:3]) for normal in tuple(mesh.normals or ())]
@@ -171,8 +180,514 @@ def _mesh_node(md: Any, mesh: PrimitiveMesh, parent: Any, *, room_resref: str, r
         _vec3(transform.get("pivot", (0.0, 0.0, 0.0))),
     )
     setattr(node, "_gr_map_studio_authored_mesh", True)
+    # Imported vanilla room surfaces are safe to compact only inside their own
+    # room header.  Their vertices are room-local and the header carries the
+    # magnet-snap placement; promoting them into a cross-room material batch
+    # can otherwise discard that spatial contract and produce floating doors,
+    # missing floors, or apparently warped rooms in PIE.
+    setattr(node, "_gr_map_studio_stock_mesh", bool(stock_room_mesh))
     node.compute_bounds()
     return node
+
+
+def _pie_static_batch_key(
+    node: Any,
+    *,
+    allow_flattened_stock_static: bool = False,
+) -> tuple[object, ...] | None:
+    """Return a strict render-state key for one batchable authored mesh.
+
+    The batch is deliberately PIE-only.  Edit mode keeps every primitive node
+    intact for selection, transforms, undo, and topology tools.
+    """
+
+    is_stock_mesh = bool(getattr(node, "_gr_map_studio_stock_mesh", False))
+    is_authored_mesh = bool(
+        getattr(node, "_gr_map_studio_authored_mesh", False)
+        and not is_stock_mesh
+    )
+    is_flattened_stock_mesh = bool(
+        allow_flattened_stock_static
+        and is_stock_mesh
+    )
+    if not is_authored_mesh and not is_flattened_stock_mesh:
+        return None
+    if bool(getattr(node, "_gr_map_studio_editor_preview_only", False)):
+        return None
+    if (
+        bool(getattr(node, "is_emitter", False))
+        or tuple(getattr(node, "controllers", ()) or ())
+        or tuple(getattr(node, "skin_data", ()) or ())
+        or tuple(getattr(node, "children", ()) or ())
+    ):
+        return None
+    if not tuple(getattr(node, "vertices", ()) or ()) or not tuple(getattr(node, "faces", ()) or ()):
+        return None
+    fields = (
+        "flags",
+        "position",
+        "rotation",
+        "texture",
+        "texture_names",
+        "lightmap",
+        "bump_map",
+        "diffuse",
+        "ambient",
+        "specular",
+        "shininess",
+        "alpha",
+        "has_shadow",
+        "render",
+        "selfillum",
+        "transparency_hint",
+        "has_lightmap",
+        "beaming",
+        "background_geometry",
+        "rotate_texture",
+        "animate_uv",
+        "uv_dir_x",
+        "uv_dir_y",
+        "uv_jitter",
+        "uv_jitter_speed",
+        "tex_count",
+        "txi_blending",
+        "txi_cube",
+        "txi_proceduretype",
+        "txi_numx",
+        "txi_numy",
+        "txi_fps",
+        "txi_envmaptexture",
+        "txi_bumpmaptexture",
+        "txi_bumpmapscaling",
+        "txi_rotate",
+        "txi_loop",
+        "txi_clamp_s",
+        "txi_clamp_t",
+        "txi_wateralpha",
+        "txi_decal",
+        "txi_isbumpmap",
+        "txi_islightmap",
+        "txi_specularcolour",
+        "txi_alpha_test",
+    )
+
+    def stable(value: object) -> object:
+        if isinstance(value, list):
+            return tuple(stable(item) for item in value)
+        if isinstance(value, tuple):
+            return tuple(stable(item) for item in value)
+        return value
+
+    return tuple(stable(getattr(node, field, None)) for field in fields) + (
+        bool(getattr(node, "_gr_map_studio_backdrop", False)),
+    )
+
+
+def _merge_pie_static_mesh_nodes(nodes: list[Any]) -> Any:
+    """Merge compatible local-space mesh nodes into the first copied node."""
+
+    merged = nodes[0]
+    vertices: list[tuple[float, float, float]] = []
+    normals: list[tuple[float, float, float]] = []
+    tangents: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    uvs_lm: list[tuple[float, float]] = []
+    uvs_2: list[tuple[float, float]] = []
+    uvs_3: list[tuple[float, float]] = []
+    faces: list[tuple[int, int, int]] = []
+    face_mats: list[int] = []
+    face_uvs: list[tuple[int, int, int]] = []
+    keep_tangents = all(len(tuple(getattr(node, "tangents", ()) or ())) == len(tuple(node.vertices or ())) for node in nodes)
+    keep_lm = all(len(tuple(getattr(node, "uvs_lm", ()) or ())) == len(tuple(node.vertices or ())) for node in nodes)
+    keep_uv2 = all(len(tuple(getattr(node, "uvs_2", ()) or ())) == len(tuple(node.vertices or ())) for node in nodes)
+    keep_uv3 = all(len(tuple(getattr(node, "uvs_3", ()) or ())) == len(tuple(node.vertices or ())) for node in nodes)
+    keep_face_uvs = all(len(tuple(getattr(node, "face_uvs", ()) or ())) == len(tuple(node.faces or ())) for node in nodes)
+
+    for node in nodes:
+        node_vertices = list(tuple(node.vertices or ()))
+        node_faces = list(tuple(node.faces or ()))
+        vertex_offset = len(vertices)
+        uv_offset = len(uvs)
+        vertices.extend(node_vertices)
+        node_normals = list(tuple(getattr(node, "normals", ()) or ()))
+        normals.extend(node_normals if len(node_normals) == len(node_vertices) else [(0.0, 0.0, 1.0)] * len(node_vertices))
+        node_uvs = list(tuple(getattr(node, "uvs", ()) or ()))
+        uvs.extend(node_uvs if len(node_uvs) == len(node_vertices) else [(0.0, 0.0)] * len(node_vertices))
+        if keep_tangents:
+            tangents.extend(tuple(getattr(node, "tangents", ()) or ()))
+        if keep_lm:
+            uvs_lm.extend(tuple(getattr(node, "uvs_lm", ()) or ()))
+        if keep_uv2:
+            uvs_2.extend(tuple(getattr(node, "uvs_2", ()) or ()))
+        if keep_uv3:
+            uvs_3.extend(tuple(getattr(node, "uvs_3", ()) or ()))
+        faces.extend(tuple(index + vertex_offset for index in face) for face in node_faces)
+        node_face_mats = list(tuple(getattr(node, "face_mats", ()) or ()))
+        face_mats.extend(node_face_mats if len(node_face_mats) == len(node_faces) else [0] * len(node_faces))
+        if keep_face_uvs:
+            face_uvs.extend(
+                tuple(index + uv_offset for index in face)
+                for face in tuple(getattr(node, "face_uvs", ()) or ())
+            )
+
+    merged.name = f"{str(getattr(merged.parent, 'name', '') or 'room')}_pie_static_batch_{str(merged.texture or 'material')}"
+    merged.vertices = vertices
+    merged.normals = normals
+    merged.tangents = tangents if keep_tangents else []
+    merged.uvs = uvs
+    merged.uvs_lm = uvs_lm if keep_lm else []
+    merged.uvs_2 = uvs_2 if keep_uv2 else []
+    merged.uvs_3 = uvs_3 if keep_uv3 else []
+    merged.faces = faces
+    merged.face_mats = face_mats
+    merged.face_uvs = face_uvs if keep_face_uvs else []
+    setattr(merged, "_gr_map_studio_mesh_role", "pie_static_batch")
+    setattr(merged, "_gr_map_studio_pie_batch_source_count", len(nodes))
+    setattr(
+        merged,
+        "_gr_map_studio_pie_batch_primitive_names",
+        tuple(str(getattr(node, "_gr_map_studio_primitive_name", "") or node.name) for node in nodes),
+    )
+    merged.compute_bounds()
+    return merged
+
+
+def batch_authored_preview_model_for_pie_in_place(
+    model: Any,
+    *,
+    preserve_room_boundaries: bool = True,
+) -> Any:
+    """Batch static authored surfaces on one disposable PIE preview.
+
+    Stock rooms, doors, creatures, placeables, animated nodes, and all original
+    authoring nodes stay untouched because callers may use this only on the
+    disposable runtime copy created for one PIE run.
+    """
+
+    if model is None:
+        return None
+    optimized = model
+    root = getattr(optimized, "root_node", None)
+    if root is None:
+        return optimized
+    source_count = 0
+    batch_count = 0
+    known_room_names = {
+        str(value or "").strip().lower()
+        for value in tuple(
+            getattr(optimized, "_gr_map_studio_pie_batched_room_names", ()) or ()
+        )
+        if str(value or "").strip()
+    }
+    stock_room_names = {
+        str(value or "").strip().lower()
+        for value in tuple(
+            getattr(optimized, "_gr_map_studio_pie_stock_room_names", ()) or ()
+        )
+        if str(value or "").strip()
+    }
+    for node in tuple(
+        optimized.all_nodes()
+        if callable(getattr(optimized, "all_nodes", None))
+        else (root,)
+    ):
+        if not bool(getattr(node, "_gr_map_studio_authored_room", False)):
+            continue
+        room_name = str(
+            getattr(node, "_gr_map_studio_room_resref", "")
+            or getattr(node, "name", "")
+            or ""
+        ).strip().lower()
+        if not room_name:
+            continue
+        known_room_names.add(room_name)
+        if bool(getattr(node, "_gr_map_studio_stock_room", False)):
+            stock_room_names.add(room_name)
+    setattr(
+        optimized,
+        "_gr_map_studio_pie_batched_room_names",
+        tuple(sorted(known_room_names)),
+    )
+    setattr(
+        optimized,
+        "_gr_map_studio_pie_stock_room_names",
+        tuple(sorted(stock_room_names)),
+    )
+    for parent in tuple(optimized.all_nodes() if callable(getattr(optimized, "all_nodes", None)) else (root,)):
+        children = list(tuple(getattr(parent, "children", ()) or ()))
+        parent_room_name = str(
+            getattr(parent, "_gr_map_studio_room_resref", "")
+            or getattr(parent, "name", "")
+            or ""
+        ).strip().lower()
+        known_room_parent = parent_room_name in known_room_names
+        rehydrated_room = (
+            known_room_parent
+            and not bool(getattr(parent, "_gr_map_studio_authored_room", False))
+        )
+        if known_room_parent:
+            setattr(parent, "_gr_map_studio_room_resref", parent_room_name)
+            setattr(parent, "_gr_map_studio_authored_room", True)
+            if rehydrated_room:
+                setattr(parent, "_gr_map_studio_pie_rehydrated_room", True)
+            setattr(
+                parent,
+                "_gr_map_studio_stock_room",
+                parent_room_name in stock_room_names,
+            )
+            for child in children:
+                if (
+                    tuple(getattr(child, "vertices", ()) or ())
+                    and tuple(getattr(child, "faces", ()) or ())
+                    and not bool(getattr(child, "_gr_map_studio_pie_actor", False))
+                ):
+                    setattr(child, "_gr_map_studio_authored_mesh", True)
+                    setattr(
+                        child,
+                        "_gr_map_studio_stock_mesh",
+                        parent_room_name in stock_room_names,
+                    )
+                    setattr(
+                        child,
+                        "_gr_map_studio_room_resref",
+                        parent_room_name,
+                    )
+        allow_flattened_stock_static = bool(
+            str(getattr(parent, "_gr_map_studio_placement_kind", "") or "").strip().lower()
+            == "door"
+            or getattr(parent, "_gr_map_studio_stock_room", False)
+        )
+        groups: dict[tuple[object, ...], list[Any]] = {}
+        for child in children:
+            key = _pie_static_batch_key(
+                child,
+                allow_flattened_stock_static=allow_flattened_stock_static,
+            )
+            if key is not None:
+                groups.setdefault(key, []).append(child)
+        if not groups:
+            continue
+        replacement_by_id: dict[int, Any] = {}
+        skipped_ids: set[int] = set()
+        for nodes in groups.values():
+            source_count += len(nodes)
+            if len(nodes) <= 1:
+                batch_count += 1
+                continue
+            merged = _merge_pie_static_mesh_nodes(nodes)
+            replacement_by_id[id(nodes[0])] = merged
+            skipped_ids.update(id(node) for node in nodes[1:])
+            batch_count += 1
+        rebuilt: list[Any] = []
+        for child in children:
+            if id(child) in skipped_ids:
+                continue
+            replacement = replacement_by_id.get(id(child), child)
+            replacement.parent = parent
+            rebuilt.append(replacement)
+        parent.children = rebuilt
+
+    # Generated room meshes live below one translated header per authored
+    # room.  Once the per-room pass above has reduced local primitive count,
+    # compatible material batches can be collapsed across those headers by
+    # baking their translation into vertices.  This remains PIE-only and is
+    # deliberately restricted to identity rotations; edit-mode selection and
+    # every non-translational room transform remain untouched.
+    room_nodes = tuple(
+        node
+        for node in tuple(
+            optimized.all_nodes()
+            if callable(getattr(optimized, "all_nodes", None))
+            else ()
+        )
+        if bool(getattr(node, "_gr_map_studio_authored_room", False))
+    )
+    known_room_names.update(
+        str(
+            getattr(room, "_gr_map_studio_room_resref", "")
+            or getattr(room, "name", "")
+            or ""
+        ).strip().lower()
+        for room in room_nodes
+    )
+    known_room_names.discard("")
+    known_room_names.update(
+        str(value or "").strip().lower()
+        for value in tuple(
+            getattr(optimized, "_gr_map_studio_pie_batched_room_names", ()) or ()
+        )
+        if str(value or "").strip()
+    )
+    setattr(
+        optimized,
+        "_gr_map_studio_pie_batched_room_names",
+        tuple(sorted(known_room_names)),
+    )
+
+    def identity_rotation(value: object) -> bool:
+        rotation = tuple(value or ())
+        return len(rotation) >= 4 and all(
+            abs(float(rotation[index]) - expected) <= 1.0e-7
+            for index, expected in enumerate((0.0, 0.0, 0.0, 1.0))
+        )
+
+    # Retail modules use VIS room groups.  Keep those boundaries in the normal
+    # PIE path so the runtime can hide distant rooms as the player crosses WOK
+    # portals.  The older cross-room material merge saved a few submissions in
+    # tiny synthetic scenes but made a whole authored district indivisible,
+    # forcing every Cantina, Sky Ramp, and stock-room surface to render at once.
+    if len(room_nodes) > 1 and not preserve_room_boundaries:
+        global_groups: dict[tuple[object, ...], list[tuple[Any, Any]]] = {}
+        for room in room_nodes:
+            if not identity_rotation(getattr(room, "rotation", ())):
+                continue
+            for child in tuple(getattr(room, "children", ()) or ()):
+                if not identity_rotation(getattr(child, "rotation", ())):
+                    continue
+                key = _pie_static_batch_key(child)
+                if key is not None:
+                    global_groups.setdefault(key, []).append((room, child))
+        for rows in global_groups.values():
+            parent_ids = {id(parent) for parent, _child in rows}
+            if len(rows) <= 1 or len(parent_ids) <= 1:
+                continue
+            baked_nodes: list[Any] = []
+            for parent, child in rows:
+                parent_position = tuple(
+                    float(value)
+                    for value in tuple(
+                        getattr(parent, "position", (0.0, 0.0, 0.0))
+                        or (0.0, 0.0, 0.0)
+                    )[:3]
+                )
+                child_position = tuple(
+                    float(value)
+                    for value in tuple(
+                        getattr(child, "position", (0.0, 0.0, 0.0))
+                        or (0.0, 0.0, 0.0)
+                    )[:3]
+                )
+                offset = tuple(
+                    parent_position[index] + child_position[index]
+                    for index in range(3)
+                )
+                child.vertices = [
+                    tuple(float(vertex[index]) + offset[index] for index in range(3))
+                    for vertex in tuple(child.vertices or ())
+                ]
+                child.position = (0.0, 0.0, 0.0)
+                baked_nodes.append(child)
+                parent.children = [
+                    candidate
+                    for candidate in tuple(parent.children or ())
+                    if candidate is not child
+                ]
+            merged = _merge_pie_static_mesh_nodes(baked_nodes)
+            merged.parent = root
+            root.children.append(merged)
+            batch_count -= len(rows) - 1
+    # A queued viewport/resource refresh can republish the authored room
+    # headers while PIE is being assembled, after the material batches above
+    # were already promoted to the runtime root.  Those rehydrated headers are
+    # useful transform/light containers but their mesh payload is now a second
+    # complete copy of geometry already represented by the root batches.
+    # Hide only those room-descendant meshes on this disposable PIE model;
+    # lights and hierarchy transforms remain intact.
+    root_batches = tuple(
+        node
+        for node in tuple(getattr(root, "children", ()) or ())
+        if str(getattr(node, "_gr_map_studio_mesh_role", "") or "")
+        == "pie_static_batch"
+    )
+    batch_name_marker = "_pie_static_batch_"
+    known_room_names.update(
+        str(getattr(node, "name", "") or "").strip().lower().split(
+            batch_name_marker,
+            1,
+        )[0]
+        for node in root_batches
+        if batch_name_marker in str(getattr(node, "name", "") or "").strip().lower()
+    )
+    setattr(
+        optimized,
+        "_gr_map_studio_pie_batched_room_names",
+        tuple(sorted(name for name in known_room_names if name)),
+    )
+    suppressed_rehydrated_meshes = 0
+    if root_batches:
+        # The room headers collected above are the live source of every mesh
+        # that was *not* eligible for a cross-room material batch.  Their
+        # eligible children were already removed while being promoted, so
+        # suppressing the remaining children here erased unique stock-room
+        # floors, ceilings, and dressing whenever any unrelated global batch
+        # existed.  Only headers re-published after the batching pass lack the
+        # current authored-room identity and need duplicate suppression.
+        suppression_rooms: list[Any] = []
+        suppression_room_ids: set[int] = set()
+        original_room_ids = {id(room) for room in room_nodes}
+        for child in tuple(getattr(root, "children", ()) or ()):
+            child_name = str(getattr(child, "name", "") or "").strip().lower()
+            child_resref = str(
+                getattr(child, "_gr_map_studio_room_resref", "") or ""
+            ).strip().lower()
+            if (
+                (
+                    id(child) not in original_room_ids
+                    or bool(
+                        getattr(
+                            child,
+                            "_gr_map_studio_pie_rehydrated_room",
+                            False,
+                        )
+                    )
+                )
+                and id(child) not in suppression_room_ids
+                and (child_name in known_room_names or child_resref in known_room_names)
+                and str(getattr(child, "_gr_map_studio_mesh_role", "") or "")
+                != "pie_static_batch"
+            ):
+                suppression_rooms.append(child)
+                suppression_room_ids.add(id(child))
+        for room in suppression_rooms:
+            retained_children: list[Any] = []
+            for node in tuple(getattr(room, "children", ()) or ()):
+                if (
+                    str(getattr(node, "_gr_map_studio_mesh_role", "") or "")
+                    != "pie_static_batch"
+                    and tuple(getattr(node, "vertices", ()) or ())
+                    and tuple(getattr(node, "faces", ()) or ())
+                    and not bool(getattr(node, "_gr_map_studio_pie_rehydrated_hidden", False))
+                ):
+                    setattr(node, "_gr_hidden", True)
+                    setattr(node, "_gr_map_studio_pie_rehydrated_hidden", True)
+                    suppressed_rehydrated_meshes += 1
+                    continue
+                retained_children.append(node)
+            room.children = retained_children
+    source_count += suppressed_rehydrated_meshes
+    try:
+        optimized.compute_bounds()
+    except Exception:
+        pass
+    setattr(
+        optimized,
+        "_gr_map_studio_pie_static_batch_summary",
+        {
+            "source_meshes": int(source_count),
+            "runtime_batches": int(batch_count),
+            "draw_calls_saved": max(0, int(source_count) - int(batch_count)),
+            "rehydrated_meshes_suppressed": int(suppressed_rehydrated_meshes),
+        },
+    )
+    return optimized
+
+
+def optimize_authored_preview_model_for_pie(model: Any) -> Any:
+    """Return a copied preview with static authored surfaces batched for PIE."""
+
+    if model is None:
+        return None
+    return batch_authored_preview_model_for_pie_in_place(copy.deepcopy(model))
 
 
 def _source_room_light_rows(room: AuthoredRoomSpec) -> tuple[dict[str, object], ...]:
@@ -583,6 +1098,8 @@ def build_authored_module_preview_model(
     mesh_count = 0
     source_room_light_count = 0
     playable_points: list[tuple[float, float, float]] = []
+    authored_room_resrefs: list[str] = []
+    stock_room_resrefs: list[str] = []
 
     backdrop_room_resrefs: list[str] = []
     hidden_backdrop_surface_count = 0
@@ -630,9 +1147,26 @@ def build_authored_module_preview_model(
         setattr(room_node, "_gr_map_studio_room_resref", compiled_resref)
         setattr(room_node, "_gr_map_studio_authored_room", True)
         setattr(room_node, "_gr_map_studio_backdrop", room_backdrop_only)
+        primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
+        stock_room = bool(
+            primitive_metadata.get("imported_from")
+            or primitive_metadata.get("environment_kit_source_room")
+            or type(getattr(room, "primitive", None)).__name__ == "ImportedMeshRoomPrimitive"
+        )
+        setattr(room_node, "_gr_map_studio_stock_room", stock_room)
+        authored_room_resrefs.append(compiled_resref)
+        if stock_room:
+            stock_room_resrefs.append(compiled_resref)
         for index, mesh, surface_backdrop in visible_mesh_rows:
             role = "render" if index == 0 else str(getattr(mesh, "metadata", {}).get("role", "") or f"helper_{index}")
-            mesh_node = _mesh_node(md, mesh, room_node, room_resref=compiled_resref, role=role)
+            mesh_node = _mesh_node(
+                md,
+                mesh,
+                room_node,
+                room_resref=compiled_resref,
+                role=role,
+                stock_room_mesh=stock_room,
+            )
             setattr(mesh_node, "_gr_map_studio_backdrop", surface_backdrop)
             room_node.children.append(mesh_node)
             mesh_count += 1
@@ -739,6 +1273,20 @@ def build_authored_module_preview_model(
     key = _preview_key(signature_rows)
     setattr(model, "_gr_map_studio_preview_model", True)
     setattr(model, "_gr_map_studio_preview_key", key)
+    # Keep room identity on the model as well as the live node wrappers.
+    # Viewport resource publication may recreate room headers without carrying
+    # dynamic Python attributes.  PIE can then rehydrate the headers by name
+    # before its first batching pass instead of submitting every wall panel.
+    setattr(
+        model,
+        "_gr_map_studio_pie_batched_room_names",
+        tuple(sorted({str(value).strip().lower() for value in authored_room_resrefs if str(value).strip()})),
+    )
+    setattr(
+        model,
+        "_gr_map_studio_pie_stock_room_names",
+        tuple(sorted({str(value).strip().lower() for value in stock_room_resrefs if str(value).strip()})),
+    )
     setattr(model, "_gr_map_studio_world_lighting_preview", dict(world_lighting_preview))
     setattr(
         model,

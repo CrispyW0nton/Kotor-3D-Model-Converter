@@ -49,6 +49,87 @@ class FiveFaceSkyboxTextures:
 
 
 @dataclass(frozen=True)
+class KotorSkyboxPreset:
+    """One measured retail sky texture set exposed to Map Studio authors."""
+
+    preset_id: str
+    label: str
+    game: str
+    source_module: str
+    source_room: str
+    textures: FiveFaceSkyboxTextures
+    half_extent: float = 500.0
+    bottom_z: float = -180.0
+    top_z: float = 320.0
+
+
+_KOTOR_SKYBOX_PRESETS = (
+    KotorSkyboxPreset(
+        preset_id="k2_onderon_iziz_daylight",
+        label="Onderon — Iziz Daylight (502OND)",
+        game="K2",
+        source_module="502ond",
+        source_room="502ondd",
+        # 502ONDD's retail backdrop meshes are Side02/01/04/03 plus
+        # Top.  Map Studio remaps those inward-facing sectors into its
+        # documented north/east/south/west/top order.
+        textures=FiveFaceSkyboxTextures(
+            north="ond_sky1",
+            east="ond_sky2",
+            south="ond_sky3",
+            west="ond_sky4",
+            top="ond_sky5",
+        ),
+        half_extent=420.0,
+        bottom_z=-140.0,
+        top_z=280.0,
+    ),
+    KotorSkyboxPreset(
+        preset_id="k2_onderon_sky_ramp",
+        label="Onderon — Sky Ramp Horizon (504OND)",
+        game="K2",
+        source_module="504ond",
+        source_room="504ondg",
+        textures=FiveFaceSkyboxTextures(
+            north="ond_sb01",
+            east="ond_sb02",
+            south="ond_sb03",
+            west="ond_sb04",
+            top="ond_sb05",
+        ),
+        half_extent=520.0,
+        bottom_z=-180.0,
+        top_z=340.0,
+    ),
+)
+
+
+def available_kotor_skybox_presets(game: str = "") -> tuple[KotorSkyboxPreset, ...]:
+    """Return retail sky recipes without copying any game texture bytes."""
+
+    wanted = str(game or "").strip().upper()
+    return tuple(
+        preset
+        for preset in _KOTOR_SKYBOX_PRESETS
+        if not wanted or preset.game == wanted
+    )
+
+
+def kotor_skybox_preset(preset_id: str) -> KotorSkyboxPreset | None:
+    """Resolve one stable preset identifier."""
+
+    wanted = str(preset_id or "").strip().lower()
+    return next(
+        (
+            preset
+            for preset in _KOTOR_SKYBOX_PRESETS
+            if preset.preset_id.lower() == wanted
+        ),
+        None,
+    )
+
+
+@dataclass(frozen=True)
 class FiveFaceSkyboxSpec:
     """Editable intent for a visual-only, five-sector sky-dome room.
 
@@ -284,12 +365,15 @@ __all__ = [
     "FiveFaceSkyboxSpec",
     "FiveFaceSkyboxTextures",
     "FiveFaceSkyboxValidation",
+    "KotorSkyboxPreset",
     "SKYBOX_AUTHORING_KIND",
     "SKYBOX_DOME_SUBDIVISIONS",
     "SKYBOX_FACE_ORDER",
     "SKYBOX_ROOM_ROLE",
     "SKYBOX_SURFACE_ROLE",
+    "available_kotor_skybox_presets",
     "build_empty_skybox_wok",
     "build_five_face_skybox_room",
+    "kotor_skybox_preset",
     "validate_five_face_skybox_spec",
 ]

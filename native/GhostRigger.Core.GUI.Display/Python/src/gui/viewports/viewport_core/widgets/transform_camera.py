@@ -110,9 +110,65 @@ class ViewportTransformCameraMixin:
         else:
             self._renderer.gimbal_mode = 1
 
+    @staticmethod
+    def _is_navigation_backdrop(node) -> bool:
+        """Return whether a node belongs to visual-only sky/background geometry."""
+
+        current = node
+        visited = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            if bool(getattr(current, "_gr_map_studio_backdrop", False)):
+                return True
+            current = getattr(current, "parent", None)
+        return False
+
+    def _navigation_render_bounds(self):
+        """Frame editable/playable content without letting a sky dome dominate."""
+
+        model = getattr(self, "model", None)
+        if model is None:
+            return None
+        points = []
+        try:
+            nodes = tuple(model.all_nodes())
+        except Exception:
+            nodes = ()
+        for node in nodes:
+            vertices = tuple(getattr(node, "vertices", ()) or ())
+            if (
+                not vertices
+                or self._is_navigation_backdrop(node)
+                or int(getattr(node, "vertex_space", 0) or 0) == 2
+                or not bool(getattr(node, "is_mesh", False) or getattr(node, "is_skin", False))
+            ):
+                continue
+            if int(getattr(node, "vertex_space", 0) or 0) == 1:
+                points.extend(tuple(float(value) for value in vertex[:3]) for vertex in vertices)
+                continue
+            try:
+                position, orientation = node.world_transform()
+                for vertex in vertices:
+                    rotated = rotate_vector(orientation, vertex)
+                    points.append(
+                        (
+                            float(rotated[0]) + float(position[0]),
+                            float(rotated[1]) + float(position[1]),
+                            float(rotated[2]) + float(position[2]),
+                        )
+                    )
+            except Exception:
+                continue
+        if not points:
+            return self._renderer._get_render_bounds()
+        return (
+            tuple(min(point[axis] for point in points) for axis in range(3)),
+            tuple(max(point[axis] for point in points) for axis in range(3)),
+        )
+
     def frame_all(self) -> None:
         if self.model:
-            bb_min, bb_max = self._renderer._get_render_bounds()
+            bb_min, bb_max = self._navigation_render_bounds()
             self.camera.frame_bounds(bb_min, bb_max)
         if self.is_camera_view_active():
             self.update_camera_from_view()
@@ -132,7 +188,7 @@ class ViewportTransformCameraMixin:
     def reset_camera(self) -> None:
         self.camera.__init__()
         if self.model:
-            bb_min, bb_max = self._renderer._get_render_bounds()
+            bb_min, bb_max = self._navigation_render_bounds()
             self.camera.frame_bounds(bb_min, bb_max, reset_view=True)
         if self.is_camera_view_active():
             self.update_camera_from_view()

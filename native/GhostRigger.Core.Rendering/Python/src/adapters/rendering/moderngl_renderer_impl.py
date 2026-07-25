@@ -2516,8 +2516,66 @@ class GpuRenderer:
                 cutout_nodes = _without_culled_actors(cutout_nodes)
                 transparent_nodes = _without_culled_actors(transparent_nodes)
 
+            # Opaque submission order does not affect compositing.  Group it by
+            # material/sampler state so the exact uniform cache and texture-unit
+            # cache below can suppress redundant Python→OpenGL calls.  Keep
+            # transparent geometry on its required back-to-front path.
+            def _opaque_submission_sort_key(node):
+                return (
+                    str(getattr(node, "texture", "") or "").strip().lower(),
+                    str(getattr(node, "lightmap", "") or "").strip().lower(),
+                    str(getattr(node, "txi_envmaptexture", "") or "").strip().lower(),
+                    str(getattr(node, "txi_specularcolour", "") or "").strip().lower(),
+                    str(
+                        getattr(node, "txi_bumpmaptexture", "")
+                        or getattr(node, "bump_map", "")
+                        or ""
+                    ).strip().lower(),
+                    int(getattr(node, "txi_blending", 0) or 0),
+                    bool(getattr(node, "txi_clamp_s", False)),
+                    bool(getattr(node, "txi_clamp_t", False)),
+                    tuple(float(value) for value in tuple(getattr(node, "diffuse", ()) or ())[:3]),
+                    tuple(float(value) for value in tuple(getattr(node, "selfillum", ()) or ())[:3]),
+                    float(getattr(node, "shininess", 0.0) or 0.0),
+                    id(node),
+                )
+
+            opaque_nodes = sorted(opaque_nodes, key=_opaque_submission_sort_key)
+            cutout_nodes = sorted(cutout_nodes, key=_opaque_submission_sort_key)
+
             _culled_rigid_meshes = 0
             _draw_call_count = 0
+            _drawn_node_names: list[str] = []
+            _bound_texture_units: dict[int, int] = {}
+            _texture_sampler_states: dict[int, tuple[object, ...]] = {}
+
+            def _bind_texture_exact(texture, location: int) -> None:
+                """Bind only when a texture unit does not already name this object."""
+
+                texture_id = id(texture)
+                if _bound_texture_units.get(int(location)) == texture_id:
+                    return
+                texture.use(location=int(location))
+                _bound_texture_units[int(location)] = texture_id
+
+            def _set_texture_sampler_exact(
+                texture,
+                *,
+                repeat_x: bool,
+                repeat_y: bool,
+                filter_value=None,
+            ) -> None:
+                """Avoid re-submitting identical sampler state for shared materials."""
+
+                texture_id = id(texture)
+                desired = (bool(repeat_x), bool(repeat_y), filter_value)
+                if _texture_sampler_states.get(texture_id) == desired:
+                    return
+                texture.repeat_x = desired[0]
+                texture.repeat_y = desired[1]
+                if filter_value is not None:
+                    texture.filter = filter_value
+                _texture_sampler_states[texture_id] = desired
 
             def _draw_node(node, tex_name_override: str = '',
                            pass_name: str = 'opaque',
@@ -2853,10 +2911,15 @@ class GpuRenderer:
                 # palette, and uniform work.
                 _rigid_outside_frustum = False
                 _uploaded_bounds = getattr(gm, "uploaded_bounds", None)
+                _actor_root = _pie_actor_root_for_node(node)
+                _allow_rigid_actor_mesh_cull = bool(
+                    _actor_root is not None
+                    and getattr(_actor_root, "_gr_map_studio_pie_rigid_actor", False)
+                )
                 if (
                     override_vao is None
                     and _frustum_planes is not None
-                    and _pie_actor_root_for_node(node) is None
+                    and (_actor_root is None or _allow_rigid_actor_mesh_cull)
                     and not (_nd_is_skin and _skin_anim_pose is not None)
                     and _uploaded_bounds is not None
                 ):
@@ -3167,16 +3230,19 @@ class GpuRenderer:
                         # opposite atlas edge along armor-panel UV borders.
                         _node_clamp_s = True
                         _node_clamp_t = True
-                    gl_diff.repeat_x = not _node_clamp_s
-                    gl_diff.repeat_y = not _node_clamp_t
-                    gl_diff.use(location=0)
+                    _set_texture_sampler_exact(
+                        gl_diff,
+                        repeat_x=not _node_clamp_s,
+                        repeat_y=not _node_clamp_t,
+                    )
+                    _bind_texture_exact(gl_diff, 0)
                     _u['u_tex'].value = 0
                     _u['u_has_tex'].value = 1
                 else:
                     if self._white_tex is None:
                         self._white_tex = ctx.texture((1, 1), 4,
                                                        bytes([255, 255, 255, 255]))
-                    self._white_tex.use(location=0)
+                    _bind_texture_exact(self._white_tex, 0)
                     _u['u_tex'].value = 0
                     _u['u_has_tex'].value = 0
 
@@ -3208,10 +3274,13 @@ class GpuRenderer:
                     # Cross-ref: KotOR.js ShaderOdysseyModel.ts lightMap sampling;
                     # xoreos model_kotor.cpp — lightmap uses CLAMP_TO_EDGE wrap;
                     # KotorBlender — lightmap UV is always in [0,1] range.
-                    gl_lm.repeat_x = False  # GL_CLAMP_TO_EDGE
-                    gl_lm.repeat_y = False  # GL_CLAMP_TO_EDGE
-                    gl_lm.filter = (moderngl.LINEAR, moderngl.LINEAR)
-                    gl_lm.use(location=1)
+                    _set_texture_sampler_exact(
+                        gl_lm,
+                        repeat_x=False,
+                        repeat_y=False,
+                        filter_value=(moderngl.LINEAR, moderngl.LINEAR),
+                    )
+                    _bind_texture_exact(gl_lm, 1)
                     _u['u_lm_tex'].value = 1
                     _u['u_has_lm'].value = 1
                     _u['u_lm_shade'].value = 1 if _gpu_is_module else 0
@@ -3266,7 +3335,7 @@ class GpuRenderer:
                                 self._grey_env_tex = ctx.texture((1, 1), 4,
                                                                   bytes([128, 128, 128, 255]))
                             gl_env = self._grey_env_tex
-                    gl_env.use(location=2)
+                    _bind_texture_exact(gl_env, 2)
                     _u['u_env_tex'].value = 2
                     _u['u_has_env'].value = 1
                 else:
@@ -3285,7 +3354,7 @@ class GpuRenderer:
                     spec_img = textures.get(spec_name)
                     gl_spec  = self._tex_cache.get(spec_img) if spec_img else None
                     if gl_spec is not None:
-                        gl_spec.use(location=3)
+                        _bind_texture_exact(gl_spec, 3)
                         _u['u_spec_tex'].value = 3
                         _u['u_has_spec'].value = 1
                     else:
@@ -3302,7 +3371,7 @@ class GpuRenderer:
                     bump_img = textures.get(bump_name)
                     gl_bump = self._tex_cache.get(bump_img) if bump_img else None
                     if gl_bump is not None:
-                        gl_bump.use(location=4)
+                        _bind_texture_exact(gl_bump, 4)
                         _u['u_bump_tex'].value = 4
                         _u['u_has_bump'].value = 1
                     else:
@@ -3477,6 +3546,9 @@ class GpuRenderer:
                     ctx.disable(moderngl.CULL_FACE)
                     _blade_cull_disabled = True
                 _use_vao.render(moderngl.TRIANGLES)
+                _drawn_node_names.append(
+                    f"{str(pass_name or 'opaque')}:{str(getattr(node, 'name', '') or '<unnamed>')}"
+                )
                 if _blade_cull_disabled:
                     ctx.enable(moderngl.CULL_FACE)
                 total_tris += _use_tris
@@ -3621,6 +3693,7 @@ class GpuRenderer:
             self.perf['draw_ms'] = (time.perf_counter() - t_draw) * 1000
             self.perf['tri_count'] = total_tris
             self.perf['draw_calls'] = _draw_call_count
+            self.perf['drawn_node_names'] = tuple(_drawn_node_names)
             self.perf['culled_actor_meshes'] = _culled_actor_meshes
             self.perf['culled_meshes'] = _culled_actor_meshes + _culled_rigid_meshes
             self.perf['visible_meshes'] = max(

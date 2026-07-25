@@ -202,6 +202,707 @@ def test_pie_runtime_player_replaces_and_restores_complete_player_start_preview(
     assert harness._map_studio_pie_hidden_player_start_groups == []
 
 
+def test_pie_runtime_upload_publishes_closed_door_pose_before_player_approaches() -> None:
+    """Animated doors must be resident on the first PIE frame, not proximity-spawned."""
+
+    _configure_native_python_roots()
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    class _Viewport:
+        def __init__(self) -> None:
+            self.loaded = []
+            self.runtime_rows = []
+
+        def load_model(self, model, *, extra_texture_dirs=()):
+            self.loaded.append((model, tuple(extra_texture_dirs)))
+
+        def set_animation_playback_active(self, *_args):
+            return None
+
+        def update_runtime_character_frames(self, rows, **_kwargs):
+            self.runtime_rows = list(rows)
+
+    class _Preview:
+        def compute_bounds(self):
+            return None
+
+    pose = SimpleNamespace()
+    door_root = object()
+    door_actor = SimpleNamespace(
+        root_node=door_root,
+        actor_id="__map_studio_pie_door__:authored:door:1",
+        source_model=SimpleNamespace(name="dor_ond01"),
+    )
+    closed_animation = SimpleNamespace(name="closed", length=1.0)
+    door_engine = SimpleNamespace(
+        current_animation=closed_animation,
+        current_time=0.0,
+        evaluate=lambda: pose,
+    )
+    viewport = _Viewport()
+    harness = SimpleNamespace(
+        viewport_panel=SimpleNamespace(viewport=viewport, _project_texture_dirs=[]),
+        _map_studio_pie_actor=None,
+        _map_studio_pie_animation_engine=None,
+        _map_studio_pie_animation_name="",
+        _map_studio_pie_creature_entries=[],
+        _map_studio_pie_door_entries=[{"actor": door_actor, "engine": door_engine}],
+    )
+
+    warning = ModuleEditorWindow._activate_map_studio_pie_runtime_actors(harness, _Preview())
+
+    assert warning == ""
+    assert len(viewport.runtime_rows) == 1
+    assert viewport.runtime_rows[0][0] is door_root
+    assert viewport.runtime_rows[0][1] == door_actor.actor_id
+    assert viewport.runtime_rows[0][2] is pose
+    assert viewport.runtime_rows[0][3] == "closed"
+    assert getattr(pose, "_gr_animation_scene_object_id") == door_actor.actor_id
+
+
+def test_pie_exploration_lod_hides_only_close_facial_layers() -> None:
+    """Exploration keeps the visible head/eyes while deferring mouth close-ups."""
+
+    _configure_native_python_roots()
+    from types import SimpleNamespace
+
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    def node(name: str):
+        return SimpleNamespace(name=name, children=[], _gr_hidden=False)
+
+    head = node("head")
+    eye = node("eyeLA")
+    teeth = node("teethUa")
+    tongue = node("tongue")
+    lid = node("eyeLlid")
+    root = node("root")
+    root.children = [head, eye, teeth, tongue, lid]
+    preview = SimpleNamespace(_gr_classification_revision=0)
+    harness = SimpleNamespace(
+        _map_studio_pie_actor=SimpleNamespace(root_node=root),
+        _map_studio_pie_runtime_preview_model=preview,
+    )
+
+    ModuleEditorWindow._set_map_studio_pie_player_facial_detail_visible(harness, False)
+
+    assert head._gr_hidden is False
+    assert eye._gr_hidden is True
+    assert teeth._gr_hidden is True
+    assert tongue._gr_hidden is True
+    assert lid._gr_hidden is True
+    assert preview._gr_classification_revision == 1
+
+    ModuleEditorWindow._set_map_studio_pie_player_facial_detail_visible(harness, True)
+
+    assert all(node._gr_hidden is False for node in (head, eye, teeth, tongue, lid))
+    assert preview._gr_classification_revision == 2
+
+
+def test_pie_static_batch_reduces_authored_draw_nodes_without_mutating_edit_model() -> None:
+    """Compatible architecture batches in PIE while edit-mode primitives stay separate."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import optimize_authored_preview_model_for_pie
+
+    def mesh(name: str, texture: str, x_offset: float):
+        node = md.ModelNode(
+            name=name,
+            flags=int(md.NodeFlags.MESH),
+            vertices=[
+                (x_offset + 0.0, 0.0, 0.0),
+                (x_offset + 1.0, 0.0, 0.0),
+                (x_offset + 0.0, 1.0, 0.0),
+            ],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture=texture,
+            texture_names=[texture],
+        )
+        setattr(node, "_gr_map_studio_authored_mesh", True)
+        setattr(node, "_gr_map_studio_primitive_name", name)
+        return node
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="room", flags=int(md.NodeFlags.HEADER), parent=root)
+    wall_a = mesh("wall_a", "ond_wall", 0.0)
+    wall_b = mesh("wall_b", "ond_wall", 1.0)
+    trim = mesh("trim", "ond_trim", 2.0)
+    for node in (wall_a, wall_b, trim):
+        node.parent = room
+    room.children = [wall_a, wall_b, trim]
+    root.children = [room]
+    source = md.KotorModel(name="source", root_node=root)
+
+    optimized = optimize_authored_preview_model_for_pie(source)
+    optimized_room = optimized.root_node.children[0]
+    summary = getattr(optimized, "_gr_map_studio_pie_static_batch_summary")
+
+    assert len(source.root_node.children[0].children) == 3
+    assert [node.name for node in source.root_node.children[0].children] == ["wall_a", "wall_b", "trim"]
+    assert len(optimized_room.children) == 2
+    assert summary == {
+        "source_meshes": 3,
+        "runtime_batches": 2,
+        "draw_calls_saved": 1,
+        "rehydrated_meshes_suppressed": 0,
+    }
+    wall_batch = next(node for node in optimized_room.children if node.texture == "ond_wall")
+    assert len(wall_batch.vertices) == 6
+    assert wall_batch.faces == [(0, 1, 2), (3, 4, 5)]
+    assert getattr(wall_batch, "_gr_map_studio_pie_batch_source_count") == 2
+
+
+def test_pie_static_batch_preserves_flattened_placeable_meshes_for_culling() -> None:
+    """UTP pieces stay separate so their small bounds can be culled independently."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    placeable = md.ModelNode(
+        name="placeable_console",
+        flags=int(md.NodeFlags.HEADER),
+        parent=root,
+    )
+    setattr(placeable, "_gr_map_studio_placement_kind", "placeable")
+
+    meshes = []
+    for index in range(3):
+        node = md.ModelNode(
+            name=f"console_part_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=placeable,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture="plc_console",
+            texture_names=["plc_console"],
+        )
+        setattr(node, "_gr_map_studio_stock_mesh", True)
+        meshes.append(node)
+    meshes[-1].controllers = [{"type": "position"}]
+    placeable.children = meshes
+    root.children = [placeable]
+    source = md.KotorModel(name="source", root_node=root)
+
+    optimized = optimize_authored_preview_model_for_pie(source)
+    optimized_meshes = optimized.root_node.children[0].children
+
+    assert len(source.root_node.children[0].children) == 3
+    assert len(optimized_meshes) == 3
+    assert [node.name for node in optimized_meshes] == [
+        "console_part_0",
+        "console_part_1",
+        "console_part_2",
+    ]
+    assert optimized._gr_map_studio_pie_static_batch_summary == {
+        "source_meshes": 0,
+        "runtime_batches": 0,
+        "draw_calls_saved": 0,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
+def test_pie_static_batch_compacts_closed_door_proxy_only() -> None:
+    """Closed stock doors batch by material while animated panels stay separate."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    door = md.ModelNode(
+        name="door_proxy",
+        flags=int(md.NodeFlags.HEADER),
+        parent=root,
+    )
+    setattr(door, "_gr_map_studio_placement_kind", "door")
+    meshes = []
+    for index in range(3):
+        node = md.ModelNode(
+            name=f"door_part_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=door,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture="ond_door",
+            texture_names=["ond_door"],
+        )
+        setattr(node, "_gr_map_studio_stock_mesh", True)
+        meshes.append(node)
+    meshes[-1].controllers = [{"type": "position"}]
+    door.children = meshes
+    root.children = [door]
+    source = md.KotorModel(name="source", root_node=root)
+
+    optimized = optimize_authored_preview_model_for_pie(source)
+    optimized_meshes = optimized.root_node.children[0].children
+
+    assert len(source.root_node.children[0].children) == 3
+    assert len(optimized_meshes) == 2
+    static_batch = next(
+        node
+        for node in optimized_meshes
+        if getattr(node, "_gr_map_studio_pie_batch_source_count", 0) == 2
+    )
+    assert len(static_batch.faces) == 2
+    assert any(tuple(getattr(node, "controllers", ()) or ()) for node in optimized_meshes)
+    assert optimized._gr_map_studio_pie_static_batch_summary == {
+        "source_meshes": 2,
+        "runtime_batches": 1,
+        "draw_calls_saved": 1,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
+def test_pie_stock_room_batches_remain_below_their_room_transforms() -> None:
+    """Vanilla room meshes compact locally but never cross room headers."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    rooms = []
+    for room_index, room_x in enumerate((0.0, 24.0)):
+        room = md.ModelNode(
+            name=f"stock_room_{room_index}",
+            flags=int(md.NodeFlags.HEADER),
+            parent=root,
+            position=(room_x, 0.0, 0.0),
+        )
+        setattr(room, "_gr_map_studio_authored_room", True)
+        setattr(room, "_gr_map_studio_stock_room", True)
+        meshes = []
+        for mesh_index in range(2):
+            node = md.ModelNode(
+                name=f"stock_wall_{room_index}_{mesh_index}",
+                flags=int(md.NodeFlags.MESH),
+                parent=room,
+                vertices=[
+                    (float(mesh_index), 0.0, 0.0),
+                    (float(mesh_index + 1), 0.0, 0.0),
+                    (float(mesh_index), 1.0, 0.0),
+                ],
+                normals=[(0.0, 0.0, 1.0)] * 3,
+                uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+                faces=[(0, 1, 2)],
+                texture="ond_stock_wall",
+                texture_names=["ond_stock_wall"],
+            )
+            setattr(node, "_gr_map_studio_authored_mesh", True)
+            setattr(node, "_gr_map_studio_stock_mesh", True)
+            meshes.append(node)
+        room.children = meshes
+        rooms.append(room)
+    root.children = rooms
+
+    optimized = optimize_authored_preview_model_for_pie(
+        md.KotorModel(name="source", root_node=root)
+    )
+
+    assert not any(
+        bool(getattr(node, "_gr_map_studio_stock_mesh", False))
+        for node in optimized.root_node.children
+    )
+    optimized_rooms = [
+        node
+        for node in optimized.root_node.children
+        if bool(getattr(node, "_gr_map_studio_stock_room", False))
+    ]
+    assert [room.position for room in optimized_rooms] == [
+        (0.0, 0.0, 0.0),
+        (24.0, 0.0, 0.0),
+    ]
+    assert [len(room.children) for room in optimized_rooms] == [1, 1]
+    assert all(
+        bool(getattr(room.children[0], "_gr_map_studio_stock_mesh", False))
+        and len(room.children[0].faces) == 2
+        for room in optimized_rooms
+    )
+    assert optimized._gr_map_studio_pie_static_batch_summary == {
+        "source_meshes": 4,
+        "runtime_batches": 2,
+        "draw_calls_saved": 2,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
+def test_pie_static_batch_preserves_room_boundaries_for_runtime_visibility() -> None:
+    """Compatible materials stay room-local so PIE can cull distant rooms."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    rooms = []
+    for index, x in enumerate((0.0, 12.0)):
+        room = md.ModelNode(
+            name=f"room_{index}",
+            flags=int(md.NodeFlags.HEADER),
+            parent=root,
+            position=(x, 0.0, 0.0),
+        )
+        setattr(room, "_gr_map_studio_authored_room", True)
+        mesh = md.ModelNode(
+            name=f"wall_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture="ond_wall",
+            texture_names=["ond_wall"],
+        )
+        setattr(mesh, "_gr_map_studio_authored_mesh", True)
+        room.children = [mesh]
+        rooms.append(room)
+    root.children = rooms
+    source = md.KotorModel(name="source", root_node=root)
+
+    optimized = optimize_authored_preview_model_for_pie(source)
+    optimized_rooms = optimized.root_node.children
+    assert [room.name for room in optimized_rooms] == ["room_0", "room_1"]
+    assert [len(room.children) for room in optimized_rooms] == [1, 1]
+    assert [room.position for room in optimized_rooms] == [
+        (0.0, 0.0, 0.0),
+        (12.0, 0.0, 0.0),
+    ]
+    assert source.root_node.children[1].position == (12.0, 0.0, 0.0)
+    assert source.root_node.children[1].children[0].vertices[0] == (0.0, 0.0, 0.0)
+    assert getattr(optimized, "_gr_map_studio_pie_static_batch_summary") == {
+        "source_meshes": 2,
+        "runtime_batches": 2,
+        "draw_calls_saved": 0,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
+def test_pie_room_visibility_keeps_current_connected_and_nearby_rooms_only() -> None:
+    """PIE room culling follows WOK/VIS boundaries without dropping thresholds."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.map_studio_pie import (
+        apply_map_studio_pie_room_visibility,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    rooms = []
+    for name, x in (("current", 0.0), ("threshold", 10.0), ("distant", 100.0)):
+        room = md.ModelNode(
+            name=name,
+            flags=int(md.NodeFlags.HEADER),
+            parent=root,
+            position=(x, 0.0, 0.0),
+        )
+        setattr(room, "_gr_map_studio_authored_room", True)
+        setattr(room, "_gr_map_studio_room_resref", name)
+        mesh = md.ModelNode(
+            name=f"{name}_mesh",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[
+                (0.0, 0.0, 0.0),
+                (2.0, 0.0, 0.0),
+                (0.0, 2.0, 0.0),
+            ],
+            faces=[(0, 1, 2)],
+            texture="ond_wall",
+        )
+        room.children = [mesh]
+        rooms.append(room)
+    root.children = rooms
+    model = md.KotorModel(name="rooms", root_node=root)
+
+    first = apply_map_studio_pie_room_visibility(
+        model,
+        active_room_resref="current",
+        connected_room_resrefs=("threshold",),
+        player_position=(1.0, 1.0, 0.0),
+        nearby_distance=2.0,
+    )
+
+    assert first.visible_room_resrefs == ("current", "threshold")
+    assert first.hidden_room_resrefs == ("distant",)
+    assert not bool(getattr(rooms[0].children[0], "_gr_hidden", False))
+    assert not bool(getattr(rooms[1].children[0], "_gr_hidden", False))
+    assert rooms[2].children[0]._gr_hidden is True
+
+    second = apply_map_studio_pie_room_visibility(
+        model,
+        active_room_resref="distant",
+        player_position=(101.0, 1.0, 0.0),
+        nearby_distance=2.0,
+    )
+
+    assert second.visible_room_resrefs == ("distant",)
+    assert rooms[0].children[0]._gr_hidden is True
+    assert rooms[1].children[0]._gr_hidden is True
+    assert not bool(getattr(rooms[2].children[0], "_gr_hidden", False))
+
+
+def test_pie_global_batch_retains_unique_stock_room_surfaces() -> None:
+    """A shared-material batch must not erase unrelated room surfaces."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    rooms = []
+    unique_floor = None
+    for index, x in enumerate((0.0, 12.0)):
+        room = md.ModelNode(
+            name=f"room_{index}",
+            flags=int(md.NodeFlags.HEADER),
+            parent=root,
+            position=(x, 0.0, 0.0),
+        )
+        setattr(room, "_gr_map_studio_authored_room", True)
+        shared = md.ModelNode(
+            name=f"shared_wall_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture="ond_wall",
+            texture_names=["ond_wall"],
+        )
+        setattr(shared, "_gr_map_studio_authored_mesh", True)
+        room.children = [shared]
+        if index == 1:
+            unique_floor = md.ModelNode(
+                name="stock_floor",
+                flags=int(md.NodeFlags.MESH),
+                parent=room,
+                vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)],
+                normals=[(0.0, 0.0, 1.0)] * 3,
+                uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+                faces=[(0, 1, 2)],
+                face_mats=[0],
+                texture="ond_unique_floor",
+                texture_names=["ond_unique_floor"],
+            )
+            setattr(unique_floor, "_gr_map_studio_authored_mesh", True)
+            room.children.append(unique_floor)
+        rooms.append(room)
+    root.children = rooms
+
+    optimized = optimize_authored_preview_model_for_pie(
+        md.KotorModel(name="source", root_node=root)
+    )
+    optimized_floor = next(
+        node
+        for node in optimized.all_nodes()
+        if str(getattr(node, "name", "")) == "stock_floor"
+    )
+
+    assert optimized_floor.texture == "ond_unique_floor"
+    assert optimized_floor.faces == [(0, 1, 2)]
+    assert not bool(getattr(optimized_floor, "_gr_hidden", False))
+    assert optimized_floor in optimized.root_node.children[1].children
+
+
+def test_pie_final_batch_hides_rehydrated_room_mesh_duplicate() -> None:
+    """A queued room refresh cannot redraw geometry already promoted to batches."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        batch_authored_preview_model_for_pie_in_place,
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="room", flags=int(md.NodeFlags.HEADER), parent=root)
+    setattr(room, "_gr_map_studio_authored_room", True)
+    meshes = []
+    for index in range(2):
+        node = md.ModelNode(
+            name=f"wall_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            texture="ond_wall",
+            texture_names=["ond_wall"],
+        )
+        setattr(node, "_gr_map_studio_authored_mesh", True)
+        meshes.append(node)
+    room.children = meshes
+    root.children = [room]
+    optimized = optimize_authored_preview_model_for_pie(
+        md.KotorModel(name="source", root_node=root)
+    )
+
+    runtime_room = optimized.root_node.children[0]
+    promoted_batch = runtime_room.children.pop()
+    promoted_batch.parent = optimized.root_node
+    optimized.root_node.children.append(promoted_batch)
+    # Resource publication recreates room headers without preserving dynamic
+    # Python marker attributes.  The PIE model must retain room identity
+    # independently so that a final batching pass still recognizes this node.
+    delattr(runtime_room, "_gr_map_studio_authored_room")
+    rehydrated = md.ModelNode(
+        name="rehydrated_wall",
+        flags=int(md.NodeFlags.MESH),
+        parent=runtime_room,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+        texture="ond_wall",
+    )
+    runtime_room.children.append(rehydrated)
+    batch_authored_preview_model_for_pie_in_place(optimized)
+
+    assert rehydrated._gr_hidden is True
+    assert rehydrated._gr_map_studio_pie_rehydrated_hidden is True
+    assert rehydrated not in runtime_room.children
+    assert optimized._gr_map_studio_pie_static_batch_summary[
+        "rehydrated_meshes_suppressed"
+    ] == 1
+
+
+def test_pie_final_batch_recompacts_rehydrated_room_without_global_batch() -> None:
+    """A queued room refresh remains room-local and is compacted before upload."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        batch_authored_preview_model_for_pie_in_place,
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="room", flags=int(md.NodeFlags.HEADER), parent=root)
+    setattr(room, "_gr_map_studio_authored_room", True)
+    setattr(room, "_gr_map_studio_room_resref", "room")
+    room.children = []
+    for index in range(2):
+        mesh = md.ModelNode(
+            name=f"wall_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[
+                (float(index), 0.0, 0.0),
+                (float(index) + 1.0, 0.0, 0.0),
+                (float(index), 1.0, 0.0),
+            ],
+            faces=[(0, 1, 2)],
+            texture="ond_wall",
+        )
+        setattr(mesh, "_gr_map_studio_authored_mesh", True)
+        room.children.append(mesh)
+    root.children = [room]
+    optimized = optimize_authored_preview_model_for_pie(
+        md.KotorModel(name="source", root_node=root)
+    )
+    runtime_room = optimized.root_node.children[0]
+    assert len(runtime_room.children) == 1
+
+    delattr(runtime_room, "_gr_map_studio_authored_room")
+    delattr(runtime_room, "_gr_map_studio_room_resref")
+    runtime_room.children = []
+    for index in range(2):
+        refreshed = md.ModelNode(
+            name=f"refreshed_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=runtime_room,
+            vertices=[
+                (float(index), 0.0, 0.0),
+                (float(index) + 1.0, 0.0, 0.0),
+                (float(index), 1.0, 0.0),
+            ],
+            faces=[(0, 1, 2)],
+            texture="ond_wall",
+        )
+        runtime_room.children.append(refreshed)
+
+    batch_authored_preview_model_for_pie_in_place(optimized)
+
+    assert runtime_room._gr_map_studio_authored_room is True
+    assert runtime_room._gr_map_studio_room_resref == "room"
+    assert len(runtime_room.children) == 1
+    assert len(runtime_room.children[0].faces) == 2
+    assert optimized._gr_map_studio_pie_static_batch_summary == {
+        "source_meshes": 2,
+        "runtime_batches": 1,
+        "draw_calls_saved": 1,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
+def test_pie_first_batch_rehydrates_room_identity_from_model_manifest() -> None:
+    """The initial PIE pass survives viewport wrappers losing node-only tags."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="gronderon_room", flags=int(md.NodeFlags.HEADER), parent=root)
+    room.children = []
+    for index in range(96):
+        mesh = md.ModelNode(
+            name=f"wall_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            texture="ond_wall",
+            texture_names=["ond_wall"],
+        )
+        room.children.append(mesh)
+    root.children = [room]
+    source = md.KotorModel(name="source", root_node=root)
+    setattr(source, "_gr_map_studio_pie_batched_room_names", ("gronderon_room",))
+    setattr(source, "_gr_map_studio_pie_stock_room_names", ())
+
+    optimized = optimize_authored_preview_model_for_pie(source)
+    optimized_room = optimized.root_node.children[0]
+
+    assert bool(getattr(optimized_room, "_gr_map_studio_authored_room", False))
+    assert len(optimized_room.children) == 1
+    assert getattr(optimized, "_gr_map_studio_pie_static_batch_summary") == {
+        "source_meshes": 96,
+        "runtime_batches": 1,
+        "draw_calls_saved": 95,
+        "rehydrated_meshes_suppressed": 0,
+    }
+
+
 def test_prewarm_is_deferred_and_guarded() -> None:
     _configure_native_python_roots()
     source = (ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py").read_text(encoding="utf-8")

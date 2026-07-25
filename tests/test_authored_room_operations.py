@@ -6686,3 +6686,538 @@ def test_t2909_telos_citadel_individual_prop_recipes_extract_real_uv_meshes() ->
         assert all(len(surface.uvs) == len(surface.vertices) for surface in primitive.surfaces)
         assert primitive.wok is not None and not primitive.wok.faces
         assert primitive.metadata["visual_only"] is True
+
+
+def test_t2909_onderon_styles_expose_distinct_area_contours_and_tiled_geometry() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="gronderon", game="K2")
+    styles = {row["style_id"]: row for row in controller.available_map_studio_building_styles()}
+    expected = {
+        "architecture:k2_onderon_city": (
+            "onderon_city",
+            "exterior",
+            {"merchant_courtyard", "western_square", "spaceport"},
+        ),
+        "architecture:k2_onderon_cantina": (
+            "onderon_cantina",
+            "interior",
+            {"cantina_gallery", "cantina_lounge"},
+        ),
+        "architecture:k2_onderon_sky_ramp": (
+            "onderon_sky_ramp",
+            "exterior",
+            {"ramp_court", "tower_terrace"},
+        ),
+        "architecture:k2_onderon_palace": (
+            "onderon_palace",
+            "interior",
+            {"palace_gallery", "state_hall", "museum"},
+        ),
+    }
+    for style_id, (profile, kind, archetype_ids) in expected.items():
+        row = styles[style_id]
+        assert row["architecture_profile"] == profile
+        assert row["environment_kind"] == kind
+        assert {value["archetype_id"] for value in row["architecture_archetypes"]} == archetype_ids
+        assert len(tuple(row["evidence_rooms"])) >= 5
+
+    room_resrefs = []
+    cases = (
+        ("architecture:k2_onderon_city", "merchant_courtyard", 8.50, False),
+        ("architecture:k2_onderon_cantina", "cantina_gallery", 7.70, True),
+        ("architecture:k2_onderon_sky_ramp", "ramp_court", 12.70, False),
+        ("architecture:k2_onderon_palace", "palace_gallery", 6.00, True),
+    )
+    for index, (style_id, archetype, height, ceiling) in enumerate(cases):
+        x0 = float(index * 24)
+        room_resrefs.append(
+            controller.add_map_studio_building_room(
+                points=((x0, 0.0), (x0 + 18.0, 0.0), (x0 + 18.0, 14.0), (x0, 14.0)),
+                wall_height=height,
+                style_id=style_id,
+                architecture_archetype=archetype,
+                include_ceiling=ceiling,
+                building_kind="interior" if ceiling else "exterior",
+            )
+        )
+
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    expected_roles = {
+        "onderon_city": {"iziz_battered_stone_dado", "iziz_stepped_parapet_crown"},
+        "onderon_cantina": {"cantina_recessed_booth_field", "cantina_ceiling_coffer"},
+        "onderon_sky_ramp": {"sky_ramp_fortified_base", "sky_ramp_stepped_parapet"},
+        "onderon_palace": {"palace_recessed_relief_panel", "palace_coffered_vault"},
+    }
+    for room in authored.rooms:
+        geometry = compile_floor_plan_room_geometry(room.primitive)
+        profile = str(room.primitive.metadata["architecture_profile"])
+        roles = {str(mesh.metadata.get("architecture_role") or "") for mesh in geometry.helper_meshes}
+        assert expected_roles[profile] <= roles
+        assert "onderon_beveled_relief_bay" in roles
+        assert geometry.room_mesh.faces
+        assert geometry.wok.faces
+        assert all(len(mesh.uvs) == len(mesh.vertices) for mesh in geometry.helper_meshes)
+        assert all(
+            max((abs(value) for uv in mesh.uvs for value in uv), default=0.0) < 10000.0
+            for mesh in geometry.helper_meshes
+        )
+
+
+def test_t2909_onderon_door_families_generate_solid_reveals_and_runtime_utds() -> None:
+    _install_native_payload_paths()
+
+    from pykotor.resource.generics.utd import read_utd
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.map_studio_pascal_building import pascal_architecture_runtime_resources
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    cases = (
+        ("architecture:k2_onderon_city", "merchant_courtyard", 8.50, "dor_ond06", 108, "gr_onddoor"),
+        ("architecture:k2_onderon_cantina", "cantina_gallery", 7.70, "dor_ond01", 95, "gr_ondcdoor"),
+        ("architecture:k2_onderon_sky_ramp", "ramp_court", 12.70, "dor_ond02", 96, "gr_ondsdoor"),
+        ("architecture:k2_onderon_palace", "palace_gallery", 6.00, "dor_ond03", 105, "gr_ondpdoor"),
+    )
+    for index, (style_id, archetype, height, model, appearance, template) in enumerate(cases):
+        controller = ModuleEditorController()
+        controller.new_project(name=f"grondoor{index}", game="K2")
+        room_resref = controller.add_map_studio_building_room(
+            points=((0.0, 0.0), (16.0, 0.0), (16.0, 12.0), (0.0, 12.0)),
+            wall_height=height,
+            style_id=style_id,
+            architecture_archetype=archetype,
+            include_ceiling="city" not in style_id and "sky_ramp" not in style_id,
+        )
+        controller.set_map_studio_building_opening(
+            room_resref=room_resref,
+            edge_index=2,
+            opening_kind="door",
+            center_fraction=0.5,
+            width=2.0,
+            height=2.2,
+            bottom=0.0,
+        )
+        authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+        opening = authored.rooms[0].primitive.openings[0]
+        assert opening.metadata["door_model_resref"] == model
+        assert opening.metadata["door_appearance_id"] == appearance
+        assert authored.placements.doors[0].template_resref == template
+        geometry = compile_floor_plan_room_geometry(authored.rooms[0].primitive)
+        reveal_parts = {
+            str(mesh.metadata.get("door_frame_part") or "")
+            for mesh in geometry.helper_meshes
+            if mesh.metadata.get("sealed_transition_reveal")
+        }
+        assert {"left", "right", "lintel"} <= reveal_parts
+        assert "threshold" not in reveal_parts
+        assert opening.height == pytest.approx(2.989 if model == "dor_ond06" else 2.925)
+        assert opening.metadata["door_outer_height_m"] == pytest.approx(
+            2.989 if model == "dor_ond06" else 2.925
+        )
+        roles = {str(mesh.metadata.get("architecture_role") or "") for mesh in geometry.helper_meshes}
+        assert "onderon_door_portal" in roles
+        assert "onderon_door_structural_return" in roles
+        structural_returns = [
+            mesh
+            for mesh in geometry.helper_meshes
+            if mesh.metadata.get("architecture_role") == "onderon_door_structural_return"
+        ]
+        assert structural_returns
+        assert all(mesh.metadata.get("closed_geometry") for mesh in structural_returns)
+        assert all(float(mesh.metadata.get("door_wall_depth_m") or 0.0) >= 0.98 for mesh in structural_returns)
+        resources = pascal_architecture_runtime_resources(authored)
+        payload = next(data for resref, restype, data in resources if (resref, restype) == (template, "utd"))
+        assert read_utd(payload).appearance_id == appearance
+
+
+def test_t2909_onderon_browser_standardizes_rooms_buildings_and_small_props() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_environment_kits import (
+        environment_kit_builder_style_id,
+        environment_kit_collection_rows,
+        environment_kit_piece_rows,
+    )
+
+    assert environment_kit_builder_style_id("K2", "501ond") == "architecture:k2_onderon_city"
+    assert environment_kit_builder_style_id("K2", "503ond") == "architecture:k2_onderon_cantina"
+    assert environment_kit_builder_style_id("K2", "504ond") == "architecture:k2_onderon_sky_ramp"
+    assert environment_kit_builder_style_id("K2", "506ond") == "architecture:k2_onderon_palace"
+
+    collections = {
+        row["collection_id"]: row
+        for row in environment_kit_collection_rows(game="K2")
+        if str(row["collection_id"]).startswith("k2_onderon_")
+    }
+    assert {
+        "k2_onderon_city_environment",
+        "k2_onderon_cantina_environment",
+        "k2_onderon_sky_ramp_environment",
+        "k2_onderon_palace_environment",
+    } <= set(collections)
+    rows = tuple(
+        row
+        for row in environment_kit_piece_rows(game="K2")
+        if str(row["collection_id"]).startswith("k2_onderon_")
+    )
+    buildings = tuple(row for row in rows if str(row["class_id"]).startswith("building:"))
+    props = tuple(row for row in rows if str(row["class_id"]).startswith("dressing:"))
+    assert len(buildings) >= 8
+    assert len(props) >= 8
+    assert all(row["role"] == "dressing" for row in rows)
+    assert any("external building" in tuple(row["tags"]) for row in buildings)
+    assert {"floor", "wall"} <= {row["anchor_mode"] for row in props}
+
+
+def test_t2909_onderon_curated_assets_extract_from_installed_k2_with_original_uvs() -> None:
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K2 retail corpus is required for the Onderon environment-piece proof.")
+    resources = ResourceManager()
+    assert resources.set_k2_dir(str(game_dir))
+    controller = ModuleEditorController()
+    controller.new_project(name="grondetail", game="K2")
+    proof_pieces = (
+        "k2_onderon_city_environment_market_pavilion",
+        "k2_onderon_city_environment_cantina_sign",
+        "k2_onderon_cantina_environment_cantina_chair",
+        "k2_onderon_palace_environment_royal_statue",
+    )
+    placed = []
+    for index, piece_id in enumerate(proof_pieces):
+        assert controller.map_studio_environment_kit_preview_model(
+            piece_id,
+            resource_manager=resources,
+        ) is not None
+        placed.append(
+            controller.add_authored_environment_kit_piece(
+                piece_id=piece_id,
+                position=(float(index * 50), 0.0, 0.0),
+                resource_manager=resources,
+            )
+        )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    placed_rooms = tuple(room for room in authored.rooms if room.normalised_resref() in set(placed))
+    assert len(placed_rooms) == len(proof_pieces)
+    for room in placed_rooms:
+        primitive = room.primitive
+        assert primitive.surfaces
+        assert all(surface.faces for surface in primitive.surfaces)
+        assert all(len(surface.uvs) == len(surface.vertices) for surface in primitive.surfaces)
+        assert primitive.wok is not None and not primitive.wok.faces
+        assert primitive.metadata["visual_only"] is True
+
+
+def test_t2909_onderon_palace_stock_room_faces_outward_and_keeps_walkmesh() -> None:
+    """The two threshold-aligned rotations must choose the room body outside the authored wall."""
+
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_module_walkmesh import compile_authored_room_connection_walkmeshes
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K2 retail corpus is required for the Onderon palace snap proof.")
+    resources = ResourceManager()
+    assert resources.set_k2_dir(str(game_dir))
+    controller = ModuleEditorController()
+    controller.new_project(name="gronorient", game="K2")
+    authored_room = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (18.0, 0.0), (18.0, 14.0), (0.0, 14.0)),
+        wall_height=6.0,
+        style_id="architecture:k2_onderon_palace",
+        architecture_archetype="palace_gallery",
+        include_ceiling=True,
+    )
+    stock_room = controller.add_authored_environment_kit_piece(
+        piece_id="k2_506ond_506ondo",
+        position=(9.0, 14.0, 0.0),
+        resource_manager=resources,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    stock = next(room for room in authored.rooms if room.normalised_resref() == stock_room)
+    trim = dict(stock.primitive.metadata["environment_kit_connection_trim"])
+    assert trim["render_faces_before"] > 0
+    assert trim["render_faces_after"] > 0
+    build = compile_authored_room_connection_walkmeshes(authored)
+    assert build.ready is True
+    assert len(build.portals) == 1
+    assert build.portals[0].midpoint_gap <= 1.0e-5
+    assert {build.portals[0].source_room_resref, build.portals[0].target_room_resref} == {
+        authored_room,
+        stock_room,
+    }
+
+
+def test_t2909_onderon_cantina_snap_uses_the_door_adjacent_walkmesh_side() -> None:
+    """Off-centre render decoration must not flip the stock room through its doorway."""
+
+    _install_native_payload_paths()
+
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_module_layout import authored_room_connection_hooks
+    from src.core.modules.authored_module_walkmesh import combine_authored_module_walkmesh
+    from src.core.modules.map_studio_pie import MapStudioPIESession
+    from src.core.modules.map_studio_pie_entities import build_pie_entity_registry
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    game_dir = Path(r"C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II")
+    if not (game_dir / "chitin.key").is_file():
+        pytest.skip("The installed K2 retail corpus is required for the Onderon Cantina snap proof.")
+    resources = ResourceManager()
+    assert resources.set_k2_dir(str(game_dir))
+    controller = ModuleEditorController()
+    controller.new_project(name="groncantwalk", game="K2")
+    authored_room = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (22.0, 0.0), (22.0, 16.0), (0.0, 16.0)),
+        wall_height=7.2,
+        style_id="architecture:k2_onderon_cantina",
+        architecture_archetype="cantina_gallery",
+        include_ceiling=True,
+    )
+    stock_room = controller.add_authored_environment_kit_piece(
+        piece_id="k2_503ond_503onde",
+        position=(11.0, 16.0, 0.0),
+        resource_manager=resources,
+    )
+    authored = authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    )
+    hook = next(
+        item
+        for item in authored_room_connection_hooks(authored)
+        if item.room_resref == authored_room and item.connected_room_resref == stock_room
+    )
+    stock = next(room for room in authored.rooms if room.normalised_resref() == stock_room)
+    source_magnet = str(stock.metadata["environment_kit_source_magnet_id"])
+    source_portal = next(
+        row
+        for row in stock.primitive.metadata["walkmesh_portals"]
+        if str(row["magnet_id"]) == source_magnet
+    )
+    face = stock.primitive.wok.faces[int(source_portal["source_face_index"])]
+    adjacent_vertices = tuple(
+        stock.primitive.wok.verts[index]
+        for index in (face.v1, face.v2, face.v3)
+    )
+    adjacent_center = (
+        float(stock.position[0])
+        + sum(float(vertex[0]) for vertex in adjacent_vertices) / 3.0,
+        float(stock.position[1])
+        + sum(float(vertex[1]) for vertex in adjacent_vertices) / 3.0,
+    )
+    adjacent_side = (
+        (adjacent_center[0] - float(hook.position[0])) * float(hook.outward[0])
+        + (adjacent_center[1] - float(hook.position[1])) * float(hook.outward[1])
+    )
+    assert adjacent_side > 0.05
+
+    combined = combine_authored_module_walkmesh(authored)
+    assert not combined.blocking_issues
+    session = MapStudioPIESession(
+        combined.wok,
+        game="K2",
+        spawn_position=(
+            float(hook.position[0]) - float(hook.outward[0]) * 1.5,
+            float(hook.position[1]) - float(hook.outward[1]) * 1.5,
+            float(hook.position[2]) + 0.05,
+        ),
+    )
+    session.entity_registry = build_pie_entity_registry(authored)
+    camera_azimuth = math.degrees(
+        math.atan2(-float(hook.outward[1]), -float(hook.outward[0]))
+    )
+    session.set_move_input(1.0, 0.0, camera_azimuth_degrees=camera_azimuth, run=True)
+    crossed = False
+    for _index in range(1200):
+        session.advance(1.0 / 30.0)
+        distance = (
+            (float(session.state.position[0]) - float(hook.position[0]))
+            * float(hook.outward[0])
+            + (float(session.state.position[1]) - float(hook.position[1]))
+            * float(hook.outward[1])
+        )
+        if distance > 1.0:
+            crossed = True
+            break
+    assert crossed
+
+
+def test_t2909_onderon_vanilla_sky_presets_author_a_visual_only_dome() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_skybox import available_kotor_skybox_presets
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    presets = {preset.preset_id: preset for preset in available_kotor_skybox_presets("K2")}
+    iziz = presets["k2_onderon_iziz_daylight"]
+    assert iziz.source_module == "502ond"
+    assert iziz.source_room == "502ondd"
+    assert {texture for _face, texture in iziz.textures.ordered_items()} == {
+        "ond_sky1",
+        "ond_sky2",
+        "ond_sky3",
+        "ond_sky4",
+        "ond_sky5",
+    }
+
+    controller = ModuleEditorController()
+    controller.new_project(name="gronsky", game="K2")
+    room = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (18.0, 0.0), (18.0, 14.0), (0.0, 14.0)),
+        wall_height=8.5,
+        style_id="architecture:k2_onderon_city",
+        architecture_archetype="merchant_courtyard",
+        include_ceiling=False,
+        building_kind="exterior",
+    )
+    sky, _message = controller.create_authored_five_face_skybox(
+        room_resref="gronskydome",
+        north_texture=iziz.textures.north,
+        east_texture=iziz.textures.east,
+        south_texture=iziz.textures.south,
+        west_texture=iziz.textures.west,
+        top_texture=iziz.textures.top,
+        half_extent=iziz.half_extent,
+        bottom_z=iziz.bottom_z,
+        top_z=iziz.top_z,
+        visible_rooms=(room,),
+        authoring_metadata={
+            "skybox_preset_id": iziz.preset_id,
+            "skybox_source_module": iziz.source_module,
+            "skybox_source_room": iziz.source_room,
+        },
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    sky_room = next(candidate for candidate in authored.rooms if candidate.normalised_resref() == sky.normalised_resref())
+    assert sky_room.primitive.wok is not None and not sky_room.primitive.wok.faces
+    assert sky_room.metadata["skybox_preset_id"] == "k2_onderon_iziz_daylight"
+    assert all(surface.backdrop for surface in sky_room.primitive.surfaces)
+
+
+def test_t2909_environment_room_occupancy_rejects_crossing_walkable_volume() -> None:
+    """Solid kit rooms cannot silently intersect an unrelated authored room."""
+
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.map_studio_environment_kits import (
+        audit_environment_kit_room_occupancy,
+    )
+
+    candidate = FloorPlanRoomPrimitive(
+        room_resref="grcandidate",
+        points=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+    )
+    occupied = AuthoredRoomSpec(
+        room_resref="groccupied",
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="groccupied",
+            points=((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+        ),
+        position=(3.0, 0.0, 0.0),
+    )
+
+    blocked = audit_environment_kit_room_occupancy(
+        candidate,
+        position=(0.0, 0.0, 0.0),
+        rooms=(occupied,),
+    )
+    assert blocked["ok"] is False
+    assert blocked["policy"] == "retail_wok_overlap_rejected"
+    assert blocked["conflicts"][0]["room_resref"] == "groccupied"
+    assert blocked["conflicts"][0]["overlap_area_m2"] >= 0.04
+
+    clear = audit_environment_kit_room_occupancy(
+        candidate,
+        position=(-5.0, 0.0, 0.0),
+        rooms=(occupied,),
+    )
+    ignored = audit_environment_kit_room_occupancy(
+        candidate,
+        position=(0.0, 0.0, 0.0),
+        rooms=(occupied,),
+        ignored_room_resrefs=("groccupied",),
+    )
+    assert clear["ok"] is True
+    assert ignored["ok"] is True
+
+
+def test_t2909_environment_render_overlap_is_trimmed_to_existing_room_boundary() -> None:
+    """A stock render shell cannot continue through an already-authored room."""
+
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_imported_mesh import (
+        ImportedMeshRoomPrimitive,
+        ImportedMeshSurface,
+    )
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.map_studio_environment_kits import (
+        trim_environment_kit_room_volume_overlap,
+    )
+
+    surface = ImportedMeshSurface(
+        name="crossing_wall",
+        texture="ond_wall",
+        vertices=((-1.0, 1.0, 0.0), (3.0, 1.0, 0.0), (-1.0, 3.0, 0.0)),
+        faces=((0, 1, 2),),
+        face_mats=(4,),
+        uvs=((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+        normals=((0.0, 0.0, 1.0),) * 3,
+        uvs_lm=((0.1, 0.1), (0.9, 0.1), (0.1, 0.9)),
+    )
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="grcandidate",
+        surfaces=(surface,),
+    )
+    occupied = AuthoredRoomSpec(
+        room_resref="groccupied",
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="groccupied",
+            points=((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)),
+        ),
+    )
+
+    trimmed = trim_environment_kit_room_volume_overlap(
+        primitive,
+        position=(0.0, 0.0, 0.0),
+        rooms=(occupied,),
+    )
+    assert trimmed.surfaces
+    result = trimmed.surfaces[0]
+    assert len(result.uvs) == len(result.vertices)
+    assert len(result.normals) == len(result.vertices)
+    assert len(result.uvs_lm) == len(result.vertices)
+    assert set(result.face_mats) == {4}
+    for face in result.faces:
+        centroid = tuple(
+            sum(float(result.vertices[index][axis]) for index in face) / 3.0
+            for axis in range(2)
+        )
+        assert not (
+            0.002 < centroid[0] < 1.998
+            and 0.002 < centroid[1] < 1.998
+        )
+    audit = trimmed.metadata["environment_kit_room_volume_trim"]
+    assert audit["rooms"] == ["groccupied"]
+    assert audit["uv_policy"] == "interpolated_without_rescaling"

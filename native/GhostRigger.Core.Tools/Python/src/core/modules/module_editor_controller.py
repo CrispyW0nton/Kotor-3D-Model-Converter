@@ -200,6 +200,7 @@ from .map_studio_terrain_kit import (
 )
 from .map_studio_environment_kits import (
     EnvironmentKitWallTarget,
+    audit_environment_kit_room_occupancy,
     environment_kit_builder_style_id,
     environment_kit_collection_rows,
     environment_kit_piece,
@@ -211,6 +212,7 @@ from .map_studio_environment_kits import (
     scan_vanilla_environment_kits,
     seal_environment_kit_exterior_bounds,
     trim_environment_kit_connection_overlap,
+    trim_environment_kit_room_volume_overlap,
     vanilla_environment_kit_collections,
     write_vanilla_environment_kit_catalog,
 )
@@ -227,6 +229,15 @@ from .map_studio_pascal_building import (
     set_pascal_building_opening as set_pascal_building_opening_in_project,
     vanilla_pascal_building_styles,
     write_vanilla_pascal_style_catalog,
+)
+from .map_studio_spatial_design import (
+    SpatialDesignPlan,
+    audit_spatial_design,
+    combine_marker_geometry,
+    read_authored_spatial_design,
+    spatial_design_marker_geometry,
+    spatial_design_placement_ledger,
+    write_authored_spatial_design,
 )
 from .map_studio_texture_paint import suggest_kotor_texture_resref, validate_kotor_texture_resref
 from .map_studio_tool_belt_preferences import (
@@ -4011,6 +4022,11 @@ class ModuleEditorController:
         piece = environment_kit_piece(str(piece_id or ""))
         if piece is None or piece.role not in {"room_tile", "exterior_tile", "dressing"}:
             raise ValueError("Choose a trained vanilla room, exterior tile, or dressing piece.")
+        if piece.placement_quality != "verified":
+            raise ValueError(
+                piece.placement_quality_message
+                or f"{piece.label} is awaiting geometry review and cannot be placed."
+            )
         if resource_manager is None:
             raise ValueError(f"Connect the {piece.game} game installation before placing {piece.label}.")
         game = str(getattr(self.project, "game", "K1") or "K1").upper()
@@ -4208,12 +4224,11 @@ class ModuleEditorController:
                 def angular_distance(value: float) -> float:
                     return abs((value - preview_angle + math.pi) % (2.0 * math.pi) - math.pi)
 
-                rotation_degrees_z = math.degrees(min(candidates, key=angular_distance)) % 360.0
-                physical_portal_aligned = True
                 target_length = math.hypot(
                     float(target_end[0]) - float(target_start[0]),
                     float(target_end[1]) - float(target_start[1]),
                 )
+                target_outward: tuple[float, float] | None = None
                 if target_length > 1.0e-8:
                     target_area_twice = sum(
                         (float(point[0]) * float(target_points[(index + 1) % len(target_points)][1]))
@@ -4228,7 +4243,82 @@ class ModuleEditorController:
                         else ((float(target_end[1]) - float(target_start[1])) / target_length,
                               -(float(target_end[0]) - float(target_start[0])) / target_length)
                     )
-                    connection_outward_normal = (-target_inward[0], -target_inward[1])
+                    target_outward = (-target_inward[0], -target_inward[1])
+
+                # Aligning the threshold edge leaves two valid rotations 180
+                # degrees apart.  Cursor-facing alone can choose the one whose
+                # room body points back through the authored wall (506OND is a
+                # concrete example), after which overlap trimming removes the
+                # entire imported room.  Resolve the ambiguity from geometry:
+                # the stock room's render-bounds centre must land on the
+                # authored wall's outward side.
+                source_vertices = tuple(
+                    vertex
+                    for surface in tuple(getattr(primitive, "surfaces", ()) or ())
+                    if bool(getattr(surface, "render", True))
+                    and not bool(getattr(surface, "backdrop", False))
+                    and not bool(getattr(surface, "background_geometry", False))
+                    for vertex in tuple(getattr(surface, "vertices", ()) or ())
+                )
+                portal_midpoint = (
+                    (portal_start[0] + portal_end[0]) * 0.5,
+                    (portal_start[1] + portal_end[1]) * 0.5,
+                )
+                body_delta: tuple[float, float] | None = None
+                source_wok = getattr(primitive, "wok", None)
+                source_faces = tuple(getattr(source_wok, "faces", ()) or ())
+                source_wok_vertices = tuple(getattr(source_wok, "verts", ()) or ())
+                try:
+                    source_face_index = int(
+                        untransformed_source_portal.get("source_face_index", -1)
+                    )
+                except (TypeError, ValueError):
+                    source_face_index = -1
+                if 0 <= source_face_index < len(source_faces):
+                    source_face = source_faces[source_face_index]
+                    indices = (
+                        int(getattr(source_face, "v1", -1)),
+                        int(getattr(source_face, "v2", -1)),
+                        int(getattr(source_face, "v3", -1)),
+                    )
+                    if all(0 <= index < len(source_wok_vertices) for index in indices):
+                        adjacent = tuple(source_wok_vertices[index] for index in indices)
+                        body_delta = (
+                            (sum(float(vertex[0]) for vertex in adjacent) / 3.0)
+                            - portal_midpoint[0],
+                            (sum(float(vertex[1]) for vertex in adjacent) / 3.0)
+                            - portal_midpoint[1],
+                        )
+                if body_delta is None and source_vertices:
+                    xs = tuple(float(vertex[0]) for vertex in source_vertices)
+                    ys = tuple(float(vertex[1]) for vertex in source_vertices)
+                    body_delta = (
+                        ((min(xs) + max(xs)) * 0.5) - portal_midpoint[0],
+                        ((min(ys) + max(ys)) * 0.5) - portal_midpoint[1],
+                    )
+
+                if body_delta is not None and target_outward is not None:
+                    def outward_score(value: float) -> float:
+                        cosine = math.cos(value)
+                        sine = math.sin(value)
+                        rotated = (
+                            (body_delta[0] * cosine) - (body_delta[1] * sine),
+                            (body_delta[0] * sine) + (body_delta[1] * cosine),
+                        )
+                        return (
+                            (rotated[0] * target_outward[0])
+                            + (rotated[1] * target_outward[1])
+                        )
+
+                    rotation_radians = max(
+                        candidates,
+                        key=lambda value: (outward_score(value), -angular_distance(value)),
+                    )
+                else:
+                    rotation_radians = min(candidates, key=angular_distance)
+                rotation_degrees_z = math.degrees(rotation_radians) % 360.0
+                physical_portal_aligned = True
+                connection_outward_normal = target_outward
         primitive = transform_terrain_kit_primitive(
             primitive,
             rotation_degrees_z=rotation_degrees_z,
@@ -4362,6 +4452,48 @@ class ModuleEditorController:
                     # Keep the retail door-hook height but place the actual WOK
                     # threshold exactly on the adjoining generated floor.
                     point = (point[0], point[1], point[2] - (portal_midpoint[2] - hook_position[2]))
+
+        if piece.role in {"room_tile", "exterior_tile"}:
+            primitive = trim_environment_kit_room_volume_overlap(
+                primitive,
+                position=point,
+                rooms=tuple(authored.rooms or ()),
+            )
+            target_key = normalise_resref(
+                str(placement.get("target_room_resref") or "")
+            )
+            occupancy = audit_environment_kit_room_occupancy(
+                primitive,
+                position=point,
+                rooms=tuple(authored.rooms or ()),
+                ignored_room_resrefs=((target_key,) if target_key else ()),
+            )
+            if not bool(occupancy.get("ok", False)):
+                conflicts = tuple(
+                    dict(row or {})
+                    for row in tuple(occupancy.get("conflicts") or ())
+                )
+                labels = ", ".join(
+                    f"{str(row.get('room_resref') or 'room')} "
+                    f"({float(row.get('overlap_area_m2', 0.0)):.2f} m²)"
+                    for row in conflicts
+                )
+                raise ValueError(
+                    f"{piece.label} would pass through occupied room volume: {labels}. "
+                    f"Its selected doorway target is {target_key or 'none'}. "
+                    f"Candidate XY bounds are {tuple(occupancy.get('candidate_bounds') or ())}; "
+                    f"occupied bounds are "
+                    f"{tuple(tuple(row.get('occupied_bounds') or ()) for row in conflicts)}. "
+                    "Move the connected room farther away or choose another free doorway; "
+                    "Map Studio will not cut a retail walkmesh and leave broken collision."
+                )
+            primitive = replace(
+                primitive,
+                metadata={
+                    **dict(primitive.metadata or {}),
+                    "environment_kit_occupancy_audit": occupancy,
+                },
+            )
 
         target_opening_name = ""
         if bool(placement.get("target_is_authored_wall", False)):
@@ -6071,6 +6203,9 @@ class ModuleEditorController:
         source_room_resref: str,
         world_delta: Any,
         snap_distance: float = 2.5,
+        target_room_resref: str = "",
+        target_edge_index: int = -1,
+        target_opening_name: str = "",
     ) -> dict[str, object]:
         """Resolve a disposable doorway magnet for one whole-room drag."""
 
@@ -6086,6 +6221,9 @@ class ModuleEditorController:
             source_room_resref=source_room_resref,
             world_delta=tuple(world_delta or ()),
             snap_distance=float(snap_distance),
+            target_room_resref=str(target_room_resref or ""),
+            target_edge_index=int(target_edge_index),
+            target_opening_name=str(target_opening_name or ""),
         )
         return preview.as_payload()
 
@@ -7173,13 +7311,46 @@ class ModuleEditorController:
 
         gameplay = authored_gameplay_marker_geometry(self.authored_gameplay_fallback_preview_markers())
         traffic = self.authored_sky_traffic_marker_geometry()
-        return AuthoredGameplayMarkerGeometry(
-            marker_count=int(gameplay.marker_count) + int(traffic.marker_count),
-            lines=tuple(gameplay.lines) + tuple(traffic.lines),
-            footprints=tuple(gameplay.footprints) + tuple(traffic.footprints),
-            icons=tuple(gameplay.icons) + tuple(traffic.icons),
-            warnings=tuple(gameplay.warnings) + tuple(traffic.warnings),
+        return combine_marker_geometry(gameplay, traffic)
+
+    def map_studio_spatial_design(self) -> SpatialDesignPlan | None:
+        """Return the purpose-led grid plan stored with the current KMAP."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        return read_authored_spatial_design(authored) if authored is not None else None
+
+    def set_map_studio_spatial_design(self, plan: SpatialDesignPlan | None):
+        """Persist a spatial plan and return its immediately useful audit."""
+
+        authored = self._load_authored_project_or_raise()
+        self._store_authored_project(write_authored_spatial_design(authored, plan))
+        return audit_spatial_design(plan)
+
+    def audit_map_studio_spatial_design(self):
+        """Audit zones, routes, clearances, grid alignment, and placement intent."""
+
+        return audit_spatial_design(self.map_studio_spatial_design())
+
+    def map_studio_spatial_design_placement_ledger(self):
+        """Return exact coordinates and rationale rows for Map Studio UI/proofs."""
+
+        return spatial_design_placement_ledger(self.map_studio_spatial_design())
+
+    def map_studio_spatial_design_marker_geometry(self):
+        """Return world-space zone, route, and placement guides for the viewport."""
+
+        return spatial_design_marker_geometry(self.map_studio_spatial_design())
+
+    def authored_editor_marker_geometry(self, *, include_spatial_design: bool = True):
+        """Compose ordinary authored markers with the optional spatial plan."""
+
+        gameplay = self.authored_gameplay_fallback_marker_geometry()
+        spatial = (
+            self.map_studio_spatial_design_marker_geometry()
+            if bool(include_spatial_design)
+            else AuthoredGameplayMarkerGeometry()
         )
+        return combine_marker_geometry(gameplay, spatial)
 
     def authored_room_outline_geometry(self):
         """Return renderer-ready outlines for authored Map Studio rooms."""
@@ -7274,7 +7445,32 @@ class ModuleEditorController:
 
         self.last_map_studio_preview_cache_hit = False
         authored = self.authored_room_preview_model(include_backdrops=include_backdrops)
-        rooms = tuple(getattr(self.project, "rooms", ()) or ())
+        # Authored-room previews already contain both generated Pascal geometry
+        # and converted stock-room surfaces.  The synchronized KMAP room table
+        # carries those same resrefs for LYT/VIS/export ownership; feeding them
+        # back through the stock preview loader draws a second complete copy on
+        # top of the authored one (z-fighting, apparent wall clipping, and
+        # hundreds of avoidable PIE submissions).
+        try:
+            authored_room_resrefs = {
+                room.normalised_resref()
+                for room in self._map_studio_authored_project_snapshot().rooms
+            }
+        except Exception:
+            authored_room_resrefs = set()
+
+        def _preview_room_resref(room: object) -> str:
+            return normalise_resref(
+                getattr(room, "model_resref", "")
+                or getattr(room, "name", "")
+                or getattr(room, "room_id", "")
+            )
+
+        rooms = tuple(
+            room
+            for room in tuple(getattr(self.project, "rooms", ()) or ())
+            if _preview_room_resref(room) not in authored_room_resrefs
+        )
         placements = ((entry_point_row,) if entry_point_row is not None else ()) + tuple(
             self.authored_gameplay_placements() or ()
         ) + tuple(

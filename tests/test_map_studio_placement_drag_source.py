@@ -201,3 +201,41 @@ def test_palette_auto_tag_tracks_assets_but_preserves_a_custom_tag_and_empty_sel
         tab.close()
         tab.deleteLater()
         app.processEvents()
+
+
+def test_large_placeable_library_only_materializes_one_searchable_page() -> None:
+    module = _placement_module()
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    tab = module.PlacementTab()
+    try:
+        entries = tuple(
+            {
+                "game": "K2",
+                "kind": "placeable",
+                "template_resref": f"plc_asset_{index:05d}",
+                "label": f"Placeable Asset {index:05d}",
+                "category": "Placeables / Test",
+            }
+            for index in range(12_000)
+        )
+        tab.set_placement_kinds(("placeable",))
+        tab.set_palette_entries(entries)
+
+        assert len(tab._palette_entries) == 12_000
+        assert tab._asset_model.rowCount() == tab._asset_page_limit
+        assert tab._asset_proxy_model.rowCount() == tab._asset_page_limit
+        assert "12,000" in tab.asset_result_label.text()
+
+        tab.search_edit.setText("11999")
+        app.processEvents()
+        assert tab._asset_proxy_model.rowCount() == 1
+        assert (
+            tab._asset_proxy_model.index(0, 0).data(module._PLACEMENT_ENTRY_ROLE)["template_resref"]
+            == "plc_asset_11999"
+        )
+    finally:
+        tab.close()
+        tab.deleteLater()
+        app.processEvents()

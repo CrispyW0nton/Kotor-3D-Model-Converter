@@ -272,11 +272,15 @@ class PlacementTab(QtWidgets.QWidget):
         super().__init__(parent)
         self.setObjectName("mapStudioPlacementTab")
         self._palette_entries: list[object] = []
+        self._filtered_palette_entries: list[object] = []
         self._placements: dict[str, object] = {}
         self._auto_tag_value = ""
+        self._asset_page_limit = 192
+        self._placeholder_icon_cache: dict[str, QtGui.QIcon] = {}
         self._thumbnail_timer = QtCore.QTimer(self)
         self._thumbnail_timer.setSingleShot(True)
         self._thumbnail_timer.timeout.connect(self._request_next_visible_thumbnail)
+        self._thumbnail_auto_budget = 0
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
@@ -295,6 +299,9 @@ class PlacementTab(QtWidgets.QWidget):
         self.search_edit = QtWidgets.QLineEdit(asset_box)
         self.search_edit.setObjectName("mapStudioPlacementSearchLineEdit")
         self.search_edit.setPlaceholderText("Search by name, resref, category, or library…")
+        self.asset_result_label = QtWidgets.QLabel("", asset_box)
+        self.asset_result_label.setObjectName("mapStudioPlacementAssetResultLabel")
+        self.asset_result_label.setWordWrap(True)
         self._asset_model = QtGui.QStandardItemModel(self)
         self._asset_proxy_model = _PlacementAssetFilterModel(self)
         self._asset_proxy_model.setSourceModel(self._asset_model)
@@ -315,6 +322,7 @@ class PlacementTab(QtWidgets.QWidget):
         self.tag_edit.setPlaceholderText("Instance tag (optional)")
         asset_layout.addRow("Type", self.kind_combo)
         asset_layout.addRow("Find", self.search_edit)
+        asset_layout.addRow(self.asset_result_label)
         asset_layout.addRow("Assets", self.asset_list)
         self.asset_thumbnail_label = QtWidgets.QLabel("3D previews load for visible assets", asset_box)
         self.asset_thumbnail_label.setObjectName("mapStudioPlacementAssetThumbnailLabel")
@@ -508,9 +516,7 @@ class PlacementTab(QtWidgets.QWidget):
 
     def set_palette_entries(self, entries) -> None:
         self._palette_entries = list(entries or ())
-        self._rebuild_asset_model()
         self._apply_palette_filter()
-        self._queue_visible_thumbnails()
 
     def set_placements(self, placements) -> None:
         selected_id = self.selected_placement_id()
@@ -570,25 +576,44 @@ class PlacementTab(QtWidgets.QWidget):
     def _apply_palette_filter(self) -> None:
         kind = str(self.kind_combo.currentData() or "").lower()
         needle = self.search_edit.text().strip().lower()
-        self._asset_proxy_model.set_kind(kind)
-        self._asset_proxy_model.set_query(needle)
-        blocked = self.palette_combo.blockSignals(True)
-        self.palette_combo.clear()
+        matches: list[object] = []
         for entry in self._palette_entries:
             entry_kind = str(self._value(entry, "kind", "")).lower()
             entry_family = str(self._value(entry, "authoring_family", entry_kind)).lower()
             if kind and entry_kind != kind and entry_family != kind:
                 continue
-            haystack = " ".join(str(self._value(entry, field, "")) for field in ("label", "template_resref", "category", "source")).lower()
+            haystack = " ".join(
+                str(self._value(entry, field, ""))
+                for field in ("label", "template_resref", "category", "source", "game")
+            ).lower()
             if needle and needle not in haystack:
                 continue
+            matches.append(entry)
+        self._filtered_palette_entries = matches[: self._asset_page_limit]
+        self._rebuild_asset_model()
+        # The source model already contains only the current result page.  Keep
+        # the proxy unfiltered so switching into Place mode never asks Qt to
+        # re-evaluate thousands of hidden rows.
+        self._asset_proxy_model.set_kind("")
+        self._asset_proxy_model.set_query("")
+        shown = len(self._filtered_palette_entries)
+        total = len(matches)
+        if total > shown:
+            self.asset_result_label.setText(
+                f"Showing {shown:,} of {total:,} matches. Type a name or resref to narrow the list."
+            )
+        else:
+            self.asset_result_label.setText(f"{total:,} matching asset{'s' if total != 1 else ''}.")
+        blocked = self.palette_combo.blockSignals(True)
+        self.palette_combo.clear()
+        for entry in self._filtered_palette_entries:
             label = str(self._value(entry, "label") or self._value(entry, "template_resref") or "Unnamed resource")
             self.palette_combo.addItem(label, entry)
         if self.palette_combo.count() == 0:
             self.palette_combo.addItem("No matching game resources", None)
         self.palette_combo.blockSignals(blocked)
         self._use_current_palette_entry()
-        self._queue_visible_thumbnails()
+        self._queue_visible_thumbnails(delay_ms=180)
 
     def _placeholder_thumbnail(self, kind: str, label: str) -> QtGui.QIcon:
         """Create a theme-aware tile while the real model preview is loading."""
@@ -639,7 +664,7 @@ class PlacementTab(QtWidgets.QWidget):
 
     def _rebuild_asset_model(self) -> None:
         self._asset_model.clear()
-        for entry in self._palette_entries:
+        for entry in self._filtered_palette_entries:
             label = str(self._value(entry, "label") or self._value(entry, "template_resref") or "Unnamed resource")
             kind = str(self._value(entry, "kind", "") or "").strip().lower()
             family = str(self._value(entry, "authoring_family", kind) or kind).strip().lower()
@@ -655,7 +680,12 @@ class PlacementTab(QtWidgets.QWidget):
             item.setData(family, _PLACEMENT_FAMILY_ROLE)
             item.setData(search_text, _PLACEMENT_SEARCH_ROLE)
             item.setData("placeholder", _PLACEMENT_THUMBNAIL_STATE_ROLE)
-            item.setIcon(self._placeholder_thumbnail(kind, label))
+            placeholder_key = kind or family or "asset"
+            icon = self._placeholder_icon_cache.get(placeholder_key)
+            if icon is None:
+                icon = self._placeholder_thumbnail(placeholder_key, "")
+                self._placeholder_icon_cache[placeholder_key] = icon
+            item.setIcon(icon)
             details = [value for value in (game, kind.upper(), template, category, source) if value]
             item.setToolTip(" · ".join(details) + "\nDrag into the viewport to place this resource.")
             self._asset_model.appendRow(item)
@@ -708,8 +738,16 @@ class PlacementTab(QtWidgets.QWidget):
             self.asset_list.scrollTo(proxy_index)
             return
 
-    def _queue_visible_thumbnails(self, _value: object = None) -> None:
-        self._thumbnail_timer.start(0)
+    def _queue_visible_thumbnails(
+        self,
+        _value: object = None,
+        *,
+        delay_ms: int = 120,
+    ) -> None:
+        # One preview per user-visible interaction keeps GPU model loading from
+        # turning a tab switch or scrollbar move into a long synchronous burst.
+        self._thumbnail_auto_budget = 1
+        self._thumbnail_timer.start(max(0, int(delay_ms)))
 
     def _request_clicked_thumbnail(self, index: QtCore.QModelIndex) -> None:
         self._request_thumbnail_for_index(index)
@@ -729,14 +767,20 @@ class PlacementTab(QtWidgets.QWidget):
         return True
 
     def _request_next_visible_thumbnail(self) -> None:
+        if not self.isVisible() or self._thumbnail_auto_budget <= 0:
+            return
         viewport_rect = self.asset_list.viewport().rect()
         for row in range(self._asset_proxy_model.rowCount()):
             proxy_index = self._asset_proxy_model.index(row, 0)
             item_rect = self.asset_list.visualRect(proxy_index)
             if item_rect.isValid() and item_rect.intersects(viewport_rect):
                 if self._request_thumbnail_for_index(proxy_index):
-                    self._thumbnail_timer.start(40)
+                    self._thumbnail_auto_budget -= 1
                     return
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:  # noqa: N802 - Qt API
+        super().showEvent(event)
+        self._queue_visible_thumbnails(delay_ms=180)
 
     def set_asset_thumbnail(
         self,

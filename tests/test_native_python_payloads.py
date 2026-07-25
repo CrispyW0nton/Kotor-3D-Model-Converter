@@ -142,9 +142,11 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # The production Head Builder UI adds one GUI Display workspace, one Core
     # Tools controller, and the Tools-side namespace initializer used to join
     # that controller to the canonical Qt controller package.
-    # Stock face/eyes/eyelids/hair recipes add one Core Workflow inventory
-    # and assembly owner plus one Core Math named-space rebase helper.
-    assert len(payload_files) == 1408
+        # Stock face/eyes/eyelids/hair recipes add one Core Workflow inventory
+        # and assembly owner plus one Core Math named-space rebase helper.
+        # Purpose-led Map Studio spatial plans ship through Scene and the
+        # embedded Tools consumer, adding two byte-identical payload rows.
+    assert len(payload_files) == 1410
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

@@ -76,6 +76,10 @@ def test_placement_browser_uses_thumbnail_tiles_and_one_shot_drag_payload() -> N
         tab.resize(520, 720)
         tab.show()
         app.processEvents()
+        # Thumbnail work is intentionally deferred until after the browser is
+        # visible so opening Place mode remains responsive.
+        QtCore.QThread.msleep(220)
+        app.processEvents()
 
         assert tab.asset_list.viewMode() == QtWidgets.QListView.ViewMode.IconMode
         assert tab.asset_list.dragEnabled() is True
@@ -303,6 +307,94 @@ def test_map_studio_content_browser_workflow_is_floatable_and_redockable() -> No
         window.addDockWidget(QtCore.Qt.DockWidgetArea.BottomDockWidgetArea, dock)
         app.processEvents()
         assert dock.isFloating() is False
+    finally:
+        window.close()
+        window.deleteLater()
+        app.processEvents()
+
+
+def test_unverified_onderon_building_clips_are_visible_but_not_placeable() -> None:
+    _configure_native_python_roots()
+    import pytest
+
+    from src.core.modules.map_studio_environment_kits import (
+        environment_kit_drag_payload,
+        environment_kit_piece_rows,
+    )
+
+    rows = tuple(
+        row
+        for row in environment_kit_piece_rows(game="K2")
+        if row["building_style_id"] == "architecture:k2_onderon_city"
+    )
+    candidate = next(
+        row for row in rows if str(row["class_id"]).startswith("building:")
+    )
+    assert candidate["placement_quality"] == "needs_review"
+    assert candidate["placement_ready"] is False
+    assert "visual review" in str(candidate["placement_quality_message"]).lower()
+    with pytest.raises(ValueError, match="visual review"):
+        environment_kit_drag_payload(str(candidate["piece_id"]))
+
+
+def test_onderon_builder_presents_clear_tools_and_switches_open_vs_enclosed_shells() -> None:
+    """Area style selection must configure a useful construction state, not just change textures."""
+
+    _configure_native_python_roots()
+    from PySide6 import QtWidgets
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.project.game = "K2"
+        window.builder_tab.set_building_styles(window.controller.available_map_studio_building_styles())
+        tools = window.builder_tab.buildingToolButtons
+        assert {key: button.text() for key, button in tools.items()} == {
+            "select": "Select",
+            "walls": "Draw Room",
+            "door": "Add Door",
+            "window": "Add Window",
+        }
+        assert all(not button.icon().isNull() for button in tools.values())
+        assert all(button.accessibleDescription() for button in tools.values())
+        assert "Choose Interior or Exterior" in window.builder_tab.buildingWorkflowStepsLabel.text()
+
+        assert window.builder_tab.select_building_style(
+            "architecture:k2_onderon_city",
+            "exterior",
+        )
+        assert window.builder_tab.buildingCeilingCheckBox.isChecked() is False
+        assert window.builder_tab.buildingRoofTypeComboBox.currentData() == "none"
+        assert "open-city kit" in window.builder_tab.buildingStatusLabel.text()
+
+        assert window.builder_tab.select_building_style(
+            "architecture:k2_onderon_palace",
+            "interior",
+        )
+        assert window.builder_tab.buildingCeilingCheckBox.isChecked() is True
+        assert window.builder_tab.buildingRoofTypeComboBox.currentData() == "none"
+        assert "interior kit" in window.builder_tab.buildingStatusLabel.text()
+
+        window.environment_tab.set_skybox_context(
+            module_root="gronderon",
+            game="K2",
+            room_resrefs=("gronderonr001",),
+        )
+        preset_index = window.environment_tab.sky_preset_combo.findData(
+            "k2_onderon_iziz_daylight"
+        )
+        assert preset_index >= 0
+        window.environment_tab.sky_preset_combo.setCurrentIndex(preset_index)
+        assert {
+            edit.text()
+            for edit in window.environment_tab.sky_texture_edits.values()
+        } == {"ond_sky1", "ond_sky2", "ond_sky3", "ond_sky4", "ond_sky5"}
+        assert (
+            window.environment_tab.sky_group.parentWidget()
+            is window.builder_tab.skyboxBuildingPage
+        )
+        assert "one-click KOTOR dome" in window.builder_tab.skyboxBuildGuideLabel.text()
     finally:
         window.close()
         window.deleteLater()

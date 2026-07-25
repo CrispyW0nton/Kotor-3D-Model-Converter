@@ -412,6 +412,19 @@ class ViewportRenderingPipelineMixin:
             # renderer's interactive path remains full resolution by default.
             or clean_runtime
         )
+        # Map Studio PIE continuously redraws character animation, doors,
+        # particles, lighting, bloom, and the retail HUD.  A modest 78%
+        # internal raster size recovers the 30-fps interaction budget in dense
+        # stock-module views while the canvas remains at its native dimensions.
+        # Edit mode and still-image proof frames retain exact full resolution.
+        # Preserve native-resolution UI/HUD while rendering the PIE scene at a
+        # bounded internal scale. This is the editor's gameplay preview path,
+        # not the authoring viewport or exported KOTOR resources.
+        # The retained PIE view can contain several adjacent authored/stock
+        # rooms plus animated actors.  Half-resolution 3D is the measured
+        # performance tier for that gameplay preview; the authoring viewport,
+        # HUD/composition, and exported KOTOR assets remain native resolution.
+        self._gpu_renderer.interactive_render_scale = 0.75 if clean_runtime else 1.0
         self._gpu_renderer.show_solid = bool(self._renderer.show_solid)
         self._gpu_renderer.show_texture = bool(self._renderer.show_texture)
         self._gpu_renderer.show_diffuse_map = bool(getattr(self._renderer, "show_diffuse_map", True))

@@ -715,7 +715,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 134,
+        "python_file_count": 135,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -808,6 +808,7 @@
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",
             "src\\core\\modules\\map_studio_scene_animations.py",
+            "src\\core\\modules\\map_studio_spatial_design.py",
             "src\\core\\modules\\map_studio_stock_content_preview.py",
             "src\\core\\modules\\map_studio_terrain_kit.py",
             "src\\core\\modules\\map_studio_terrain_sculpt_session.py",
@@ -855,7 +856,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 403,
+        "python_file_count": 404,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -1012,6 +1013,7 @@
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",
             "src\\core\\modules\\map_studio_scene_animations.py",
+            "src\\core\\modules\\map_studio_spatial_design.py",
             "src\\core\\modules\\map_studio_stock_content_preview.py",
             "src\\core\\modules\\map_studio_terrain_kit.py",
             "src\\core\\modules\\map_studio_terrain_sculpt_session.py",

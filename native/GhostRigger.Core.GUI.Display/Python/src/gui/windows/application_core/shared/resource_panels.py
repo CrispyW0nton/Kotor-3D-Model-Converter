@@ -1518,11 +1518,17 @@ def _map_studio_renderer_performance_snapshot(viewport: object) -> dict[str, Any
         "gpu_frame_ms": round(float(renderer_perf.get("last_frame_ms", 0.0) or 0.0), 3),
         "gpu_upload_ms": round(float(renderer_perf.get("gpu_upload_ms", 0.0) or 0.0), 3),
         "gpu_draw_ms": round(float(renderer_perf.get("draw_ms", 0.0) or 0.0), 3),
+        "gpu_bloom_ms": round(float(renderer_perf.get("bloom_ms", 0.0) or 0.0), 3),
         "gpu_readback_ms": round(float(renderer_perf.get("readback_ms", 0.0) or 0.0), 3),
         "draw_calls": int(renderer_perf.get("draw_calls", 0) or 0),
+        "drawn_node_names": list(tuple(renderer_perf.get("drawn_node_names", ()) or ())),
         "triangles": int(renderer_perf.get("tri_count", 0) or 0),
         "visible_meshes": int(renderer_perf.get("visible_meshes", 0) or 0),
         "culled_meshes": int(renderer_perf.get("culled_meshes", 0) or 0),
+        "uniform_writes": int(renderer_perf.get("uniform_writes", 0) or 0),
+        "uniform_skips": int(renderer_perf.get("uniform_skips", 0) or 0),
+        "blend_state_writes": int(renderer_perf.get("blend_state_writes", 0) or 0),
+        "blend_state_skips": int(renderer_perf.get("blend_state_skips", 0) or 0),
     }
 
 
@@ -2715,6 +2721,99 @@ class ResourcePanelsMixin:
         if not pie_started:
             blockers.append("PIE start returned without a live simulation session.")
             return _finish()
+        runtime_model = getattr(window, "_map_studio_pie_runtime_preview_model", None)
+        panel_model = getattr(panel, "_room_preview_model", None)
+        viewport_model = getattr(viewport, "model", None)
+        runtime_nodes = (
+            list(runtime_model.all_nodes())
+            if runtime_model is not None and hasattr(runtime_model, "all_nodes")
+            else []
+        )
+        result["runtime_model_probe"] = {
+            "runtime_model_present": runtime_model is not None,
+            "panel_uses_runtime_model": panel_model is runtime_model,
+            "viewport_uses_runtime_model": viewport_model is runtime_model,
+            "runtime_node_count": len(runtime_nodes),
+            "static_batch_summary": dict(
+                getattr(runtime_model, "_gr_map_studio_pie_static_batch_summary", {}) or {}
+            ),
+        }
+        runtime_actor_rows: list[dict[str, Any]] = []
+        runtime_root_rows: list[dict[str, Any]] = []
+        runtime_root = getattr(runtime_model, "root_node", None)
+        for actor_root in tuple(getattr(runtime_root, "children", ()) or ()):
+            stack = [actor_root]
+            actor_nodes: list[Any] = []
+            visited: set[int] = set()
+            while stack:
+                actor_node = stack.pop()
+                if id(actor_node) in visited:
+                    continue
+                visited.add(id(actor_node))
+                actor_nodes.append(actor_node)
+                stack.extend(tuple(getattr(actor_node, "children", ()) or ()))
+            row = {
+                "name": str(getattr(actor_root, "name", "") or ""),
+                "actor_id": str(getattr(actor_root, "_gr_scene_object_id", "") or ""),
+                "placement_kind": str(getattr(actor_root, "_gr_map_studio_placement_kind", "") or ""),
+                "mesh_role": str(getattr(actor_root, "_gr_map_studio_mesh_role", "") or ""),
+                "position": [
+                    round(float(value), 4)
+                    for value in tuple(getattr(actor_root, "position", (0.0, 0.0, 0.0)))[:3]
+                ],
+                "node_count": len(actor_nodes),
+                "mesh_count": sum(
+                    bool(getattr(node, "vertices", None) and getattr(node, "faces", None))
+                    for node in actor_nodes
+                ),
+            }
+            runtime_root_rows.append(row)
+            if bool(getattr(actor_root, "_gr_map_studio_pie_actor", False)):
+                runtime_actor_rows.append(row)
+        result["runtime_model_probe"]["actor_breakdown"] = runtime_actor_rows
+        result["runtime_model_probe"]["root_breakdown"] = runtime_root_rows
+        # Measure the ordinary freshly-started PIE scene before the diagnostic
+        # probes below attach companions, hostile actors, and other temporary
+        # verification content.  Those probes are useful coverage but are not
+        # representative of the map's normal interactive frame rate.
+        baseline_samples: list[dict[str, Any]] = []
+        for _sample_index in range(6):
+            _settle_map_studio_visual_proof(100)
+            baseline_samples.append(_map_studio_renderer_performance_snapshot(viewport))
+        baseline_frame_ms = [
+            float(row.get("viewport_frame_ms") or 0.0)
+            for row in baseline_samples
+            if float(row.get("viewport_frame_ms") or 0.0) > 0.0
+        ]
+        baseline_gpu_ms = [
+            float(row.get("gpu_frame_ms") or 0.0)
+            for row in baseline_samples
+            if float(row.get("gpu_frame_ms") or 0.0) > 0.0
+        ]
+        baseline_draws = [
+            int(row.get("draw_calls") or 0)
+            for row in baseline_samples
+            if int(row.get("draw_calls") or 0) > 0
+        ]
+        baseline_frame_median = float(median(baseline_frame_ms)) if baseline_frame_ms else None
+        baseline_gpu_median = float(median(baseline_gpu_ms)) if baseline_gpu_ms else None
+        result["baseline_performance"] = {
+            "sample_count": len(baseline_samples),
+            "viewport_frame_median_ms": round(baseline_frame_median, 3)
+            if baseline_frame_median is not None
+            else None,
+            "viewport_estimated_fps": round(1000.0 / baseline_frame_median, 2)
+            if baseline_frame_median is not None and baseline_frame_median > 0.0
+            else None,
+            "gpu_frame_median_ms": round(baseline_gpu_median, 3)
+            if baseline_gpu_median is not None
+            else None,
+            "gpu_estimated_fps": round(1000.0 / baseline_gpu_median, 2)
+            if baseline_gpu_median is not None and baseline_gpu_median > 0.0
+            else None,
+            "draw_calls_median": int(median(baseline_draws)) if baseline_draws else None,
+            "samples": baseline_samples,
+        }
 
         # Drive the live window dialogue-camera method with real registry
         # entities and confirm it reframes the actual viewport camera through the

@@ -1247,6 +1247,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_desired_camera_distance = 3.2
         self._map_studio_pie_last_resolved_camera_distance: float | None = None
         self._map_studio_pie_status_bucket = -1
+        self._map_studio_pie_active_room_resref = ""
         self._map_studio_pie_scope_text = ""
         self._map_studio_pie_control_states: list[tuple[Any, bool]] = []
         self._map_studio_pie_actor: Any = None
@@ -1265,6 +1266,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_hidden_creature_groups: list[tuple[int, Any]] = []
         self._map_studio_pie_door_entries: list[dict[str, Any]] = []
         self._map_studio_pie_hidden_door_groups: list[tuple[int, Any]] = []
+        self._map_studio_pie_authoring_preview_model: Any | None = None
+        self._map_studio_pie_runtime_preview_model: Any | None = None
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -2089,6 +2092,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.buildingLevelCreateRequested.connect(self._add_map_studio_building_level)
         self.builder_tab.buildingLevelViewChanged.connect(self._apply_map_studio_level_presentation)
         self.builder_tab.browseVanillaRoomKitsRequested.connect(self._add_room_from_module)
+        self.builder_tab.spatialPlanVisibilityChanged.connect(
+            self._refresh_map_studio_spatial_design_overlay
+        )
+        self.builder_tab.spatialPlanAuditRequested.connect(
+            self._audit_map_studio_spatial_design
+        )
         for combo_name in ("terrainRoomComboBox", "terrainBrushComboBox"):
             combo = getattr(self.builder_tab, combo_name, None)
             if combo is not None:
@@ -8804,6 +8813,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 "Room Building: draw closed wall loops, add doors/windows, and organize levels"
             )
 
+    def _refresh_map_studio_spatial_design_overlay(self, _visible: bool | None = None) -> None:
+        """Refresh only the purposeful grid plan layered over authored markers."""
+
+        placements = tuple(self.controller.authored_gameplay_placements() or ())
+        geometry = self.controller.authored_editor_marker_geometry(
+            include_spatial_design=self.builder_tab.spatial_plan_overlay_enabled()
+        )
+        self.viewport_panel.set_authored_gameplay_markers(
+            placements,
+            self.controller.authored_gameplay_fallback_preview_markers(),
+            geometry,
+        )
+
+    def _audit_map_studio_spatial_design(self) -> None:
+        """Expose a concise designer-facing audit without hiding it in export text."""
+
+        audit = self.controller.audit_map_studio_spatial_design()
+        ledger = self.controller.map_studio_spatial_design_placement_ledger()
+        self.builder_tab.set_spatial_design_context(audit, ledger)
+        if audit.ok:
+            message = audit.summary()
+        else:
+            first = next(iter(audit.blocking_issues), "Create a spatial plan for this map.")
+            message = f"{audit.summary()} · {first}"
+        self.workflow_panel.set_active_authoring_context(message)
+        self._log(message)
+
     def show_map_studio_lighting_tools(self) -> None:
         """Focus Environment's authored and ARE lighting controls."""
 
@@ -11761,6 +11797,52 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         head_resref = str(player_settings.get("head_resref") or "pmhc01").strip().lower()
         return body_resref, head_resref
 
+    def _set_map_studio_pie_player_facial_detail_visible(self, visible: bool) -> None:
+        """Use retail-distance facial LOD outside close dialogue framing."""
+
+        actor = self._map_studio_pie_actor
+        root = getattr(actor, "root_node", None)
+        if root is None:
+            return
+        # These internal mouth, eyelid, and separate eyeball layers are
+        # sub-pixel at the DEFAULT
+        # exploration-camera distance but each costs a complete animated draw.
+        # Preserve the complete head skin and restore every close facial layer
+        # as soon as dialogue framing begins.
+        detail_names = {
+            "tongue",
+            "teethua",
+            "teethla",
+            "eyellid",
+            "eyerlid",
+            "eyela",
+            "eyera",
+        }
+        changed = False
+        stack = [root]
+        visited: set[int] = set()
+        while stack:
+            node = stack.pop()
+            if id(node) in visited:
+                continue
+            visited.add(id(node))
+            stack.extend(tuple(getattr(node, "children", ()) or ()))
+            if str(getattr(node, "name", "") or "").strip().lower() not in detail_names:
+                continue
+            wanted_hidden = not bool(visible)
+            if bool(getattr(node, "_gr_hidden", False)) != wanted_hidden:
+                setattr(node, "_gr_hidden", wanted_hidden)
+                changed = True
+            setattr(node, "_gr_map_studio_pie_facial_detail_lod", True)
+        if changed:
+            preview_model = self._map_studio_pie_runtime_preview_model
+            if preview_model is not None:
+                setattr(
+                    preview_model,
+                    "_gr_classification_revision",
+                    int(getattr(preview_model, "_gr_classification_revision", 0) or 0) + 1,
+                )
+
     @staticmethod
     def _map_studio_pie_resource_revision(manager: Any) -> int:
         """Return a stable non-negative revision for cache keying."""
@@ -11996,6 +12078,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if not engine.play("pause1", loop=True, blend=False):
                 engine.play("idlepose", loop=True, blend=False)
             self._map_studio_pie_actor = actor
+            self._set_map_studio_pie_player_facial_detail_visible(False)
             self._map_studio_pie_animation_engine = engine
             self._map_studio_pie_animation_name = str(
                 getattr(getattr(engine, "current_animation", None), "name", "") or ""
@@ -12546,6 +12629,39 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                         float(getattr(getattr(creature_engine, "current_animation", None), "length", 0.0) or 0.0),
                     )
                 )
+            # Door actors replace their static authoring groups before this
+            # first retained-actor upload.  Publish the closed hold pose in the
+            # same transaction as the player and creatures; otherwise a door
+            # has no skinned runtime frame until proximity changes its state,
+            # which makes it appear to pop into existence near the player.
+            from src.core.modules.map_studio_pie_doors import (
+                apply_map_studio_pie_door_vertical_pose_policy,
+            )
+
+            for entry in self._map_studio_pie_door_entries:
+                door_actor = entry["actor"]
+                door_engine = entry["engine"]
+                door_animation_name = str(
+                    getattr(getattr(door_engine, "current_animation", None), "name", "") or ""
+                )
+                pose = _stamp_map_studio_pie_actor_pose(
+                    apply_map_studio_pie_door_vertical_pose_policy(
+                        door_engine.evaluate(),
+                        entry.get("vertical_pose_policy"),
+                    ),
+                    door_actor,
+                    door_animation_name,
+                )
+                runtime_rows.append(
+                    (
+                        door_actor.root_node,
+                        door_actor.actor_id,
+                        pose,
+                        door_animation_name,
+                        float(getattr(door_engine, "current_time", 0.0) or 0.0),
+                        float(getattr(getattr(door_engine, "current_animation", None), "length", 0.0) or 0.0),
+                    )
+                )
             if runtime_rows:
                 viewport.set_animation_playback_active(True, "Map Studio PIE retained actors")
                 viewport.update_runtime_character_frames(
@@ -12709,9 +12825,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
             from src.core.modules.map_studio_pie import attach_map_studio_pie_actor
             from src.core.modules.map_studio_pie_doors import (
+                build_map_studio_pie_door_vertical_pose_policy,
                 build_map_studio_pie_door_plan,
                 door_state_clip_candidates,
+                map_studio_pie_door_visual_nodes,
                 play_map_studio_pie_door_clip,
+                set_map_studio_pie_door_visuals_hidden,
             )
             from src.core.modules.map_studio_stock_content_preview import load_stock_kotor_model
 
@@ -12732,8 +12851,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 if str(getattr(node, "_gr_map_studio_placement_kind", "") or "").lower() == "door"
             ]
             model_cache: dict[str, Any] = {}
-            hidden_nodes: set[int] = set()
-            hidden_groups: list[tuple[int, Any]] = []
+            claimed_static_groups: set[int] = set()
             entries: list[dict[str, Any]] = []
             failures: list[str] = []
             for spec in specs:
@@ -12761,7 +12879,49 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     if actor is None:
                         failures.append(f"{spec.tag or spec.door_id}: actor hierarchy could not be retained")
                         continue
+                    # Door panels are rigid animated meshes. Their stock MDL
+                    # headers use deliberately loose (-5..10 m) bounds, which
+                    # are appropriate for collision but keep several occluded
+                    # doors in the render queue. Let the renderer use each
+                    # panel's exact uploaded bounds after the whole-actor test.
+                    setattr(actor.root_node, "_gr_map_studio_pie_rigid_actor", True)
+                    # Aurora door MDLs commonly include an animated ``trans``
+                    # collision/transition volume with NULL material.  It is
+                    # runtime data, not visible door geometry; drawing it was
+                    # the dark plane users saw clipping through an open portal.
+                    actor_stack = [actor.root_node]
+                    actor_visited: set[int] = set()
+                    while actor_stack:
+                        actor_node = actor_stack.pop()
+                        if id(actor_node) in actor_visited:
+                            continue
+                        actor_visited.add(id(actor_node))
+                        actor_stack.extend(tuple(getattr(actor_node, "children", ()) or ()))
+                        if (
+                            str(getattr(actor_node, "name", "") or "").strip().lower() == "trans"
+                            and str(getattr(actor_node, "texture", "") or "").strip().lower()
+                            in {"", "null", "none"}
+                        ):
+                            setattr(actor_node, "_gr_hidden", True)
+                            setattr(actor_node, "_gr_map_studio_pie_transition_helper", True)
                     engine = AnimationEngine(actor_model)
+                    vertical_pose_policy = build_map_studio_pie_door_vertical_pose_policy(
+                        actor_model,
+                        None,
+                    )
+                    if play_map_studio_pie_door_clip(
+                        engine,
+                        door_state_clip_candidates(is_open=True, transitioning=True),
+                        loop=False,
+                    ):
+                        opening_animation = getattr(engine, "current_animation", None)
+                        open_pose = engine.evaluate(
+                            float(getattr(opening_animation, "length", 0.0) or 0.0)
+                        )
+                        vertical_pose_policy = build_map_studio_pie_door_vertical_pose_policy(
+                            actor_model,
+                            open_pose,
+                        )
                     play_map_studio_pie_door_clip(
                         engine, door_state_clip_candidates(is_open=False, transitioning=False), loop=True
                     )
@@ -12769,21 +12929,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                         (
                             node
                             for node in door_groups
-                            if id(node) not in hidden_nodes
+                            if id(node) not in claimed_static_groups
                             and str(getattr(node, "_gr_map_studio_placement_id", "") or "") == spec.door_id
                         ),
                         None,
                     )
                     nearest = exact or min(
-                        (node for node in door_groups if id(node) not in hidden_nodes),
+                        (node for node in door_groups if id(node) not in claimed_static_groups),
                         key=lambda node: sum(
                             (float(getattr(node, "position", (0, 0, 0))[i]) - spec.position[i]) ** 2 for i in range(3)
                         ),
                         default=None,
                     )
+                    actor_visual_nodes = map_studio_pie_door_visual_nodes(actor.root_node)
+                    proxy_visual_nodes = map_studio_pie_door_visual_nodes(nearest)
+                    animated_visual_active = nearest is None
                     if nearest is not None:
-                        hidden_nodes.add(id(nearest))
-                        hidden_groups.append((original_children.index(nearest), nearest))
+                        claimed_static_groups.add(id(nearest))
+                        # Keep the already-resident flattened door as the
+                        # closed-state proxy. It renders immediately on PIE
+                        # load and is compacted to one draw by the final
+                        # door-only static batching pass. The full source MDL
+                        # becomes visible only while it actually animates.
+                        set_map_studio_pie_door_visuals_hidden(actor_visual_nodes, True)
+                        set_map_studio_pie_door_visuals_hidden(proxy_visual_nodes, False)
                     entries.append(
                         {
                             "actor": actor,
@@ -12791,17 +12960,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                             "spec": spec,
                             "is_open": False,
                             "transitioning": False,
+                            "vertical_pose_policy": vertical_pose_policy,
+                            "proxy_group": nearest,
+                            "actor_visual_nodes": actor_visual_nodes,
+                            "proxy_visual_nodes": proxy_visual_nodes,
+                            "animated_visual_active": animated_visual_active,
                         }
                     )
                 except Exception as exc:
                     failures.append(f"{spec.tag or spec.door_id}: {exc}")
 
             wrappers = [entry["actor"].root_node for entry in entries]
-            root.children = [node for node in original_children if id(node) not in hidden_nodes] + wrappers
+            root.children = list(original_children) + wrappers
             for node in tuple(root.children or ()):
                 node.parent = root
             self._map_studio_pie_door_entries = entries
-            self._map_studio_pie_hidden_door_groups = sorted(hidden_groups, key=lambda item: item[0])
+            self._map_studio_pie_hidden_door_groups = []
             if failures:
                 return "Animated door preview skipped " + "; ".join(failures[:4])
             return ""
@@ -12813,13 +12987,51 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._map_studio_pie_hidden_door_groups = []
             return f"Animated door setup failed: {exc}"
 
+    def _set_map_studio_pie_door_animated_visual(
+        self,
+        entry: dict[str, Any],
+        animated: bool,
+    ) -> None:
+        """Atomically swap one closed proxy with its animated source model."""
+
+        wanted = bool(animated)
+        if bool(entry.get("animated_visual_active", False)) == wanted:
+            return
+        from src.core.modules.map_studio_pie_doors import (
+            set_map_studio_pie_door_visuals_hidden,
+        )
+
+        changed = set_map_studio_pie_door_visuals_hidden(
+            entry.get("actor_visual_nodes"),
+            not wanted,
+        )
+        changed = (
+            set_map_studio_pie_door_visuals_hidden(
+                entry.get("proxy_visual_nodes"),
+                wanted,
+            )
+            or changed
+        )
+        entry["animated_visual_active"] = wanted
+        if changed:
+            preview_model = self._map_studio_pie_runtime_preview_model
+            if preview_model is not None:
+                setattr(
+                    preview_model,
+                    "_gr_classification_revision",
+                    int(getattr(preview_model, "_gr_classification_revision", 0) or 0) + 1,
+                )
+
     def _update_map_studio_pie_door_actors(self, frame: Any, delta_time: float) -> tuple[tuple[Any, ...], ...]:
         """Play each door's opening/opened/closing/closed clips from its state."""
 
         entries = self._map_studio_pie_door_entries
         if not entries:
             return ()
-        from src.core.modules.map_studio_pie_doors import advance_map_studio_pie_door_animation
+        from src.core.modules.map_studio_pie_doors import (
+            advance_map_studio_pie_door_animation,
+            apply_map_studio_pie_door_vertical_pose_policy,
+        )
 
         states = {str(getattr(state, "entity_id", "")): bool(getattr(state, "is_open", False)) for state in tuple(getattr(frame, "door_states", ()) or ())}
         rows: list[tuple[Any, ...]] = []
@@ -12837,6 +13049,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             # once more when it lands on the final held pose.
             if bool(wanted_open) == current_open and not transitioning:
                 continue
+            # Swap before evaluating the first transition frame so the proxy
+            # and source panel are never drawn together.
+            self._set_map_studio_pie_door_animated_visual(entry, True)
             animation_step = advance_map_studio_pie_door_animation(
                 engine,
                 wanted_open=wanted_open,
@@ -12846,7 +13061,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
             entry["is_open"] = animation_step.is_open
             entry["transitioning"] = animation_step.transitioning
-            pose = engine.evaluate()
+            pose = apply_map_studio_pie_door_vertical_pose_policy(
+                engine.evaluate(),
+                entry.get("vertical_pose_policy"),
+            )
             setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
             setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
             rows.append(
@@ -12859,6 +13077,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
                 )
             )
+            if not animation_step.is_open and not animation_step.transitioning:
+                self._set_map_studio_pie_door_animated_visual(entry, False)
         return tuple(rows)
 
     def _remove_map_studio_pie_runtime_actors(self) -> None:
@@ -12876,6 +13096,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             + [entry["actor"] for entry in door_entries]
         )
         preview_model = next((actor.preview_model for actor in actors if actor is not None), None)
+        if preview_model is None:
+            preview_model = self._map_studio_pie_runtime_preview_model
         viewport = getattr(self.viewport_panel, "viewport", None)
         if viewport is not None:
             try:
@@ -12904,15 +13126,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             # The entry-point group was removed before creature/door statics,
             # so restore it last to recover the original authored child order.
             self._restore_map_studio_pie_player_start_preview(preview_model)
-        if preview_model is not None:
+        reload_model = self._map_studio_pie_authoring_preview_model or preview_model
+        self.viewport_panel._room_preview_model = reload_model
+        if reload_model is not None:
             try:
-                preview_model.compute_bounds()
+                reload_model.compute_bounds()
             except Exception:
                 pass
             if viewport is not None:
                 try:
                     texture_dirs = list(getattr(self.viewport_panel, "_project_texture_dirs", ()) or ())
-                    viewport.load_model(preview_model, extra_texture_dirs=texture_dirs)
+                    viewport.load_model(reload_model, extra_texture_dirs=texture_dirs)
                 except Exception:
                     pass
         self._map_studio_pie_actor = None
@@ -12925,6 +13149,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_hidden_creature_groups = []
         self._map_studio_pie_door_entries = []
         self._map_studio_pie_hidden_door_groups = []
+        self._map_studio_pie_authoring_preview_model = None
+        self._map_studio_pie_runtime_preview_model = None
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -13208,6 +13434,26 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 "Fix these Map Studio readiness issues before simulating:\n\n" + detail,
             )
             return
+        self._map_studio_pie_authoring_preview_model = preview_model
+        try:
+            from src.core.modules.authored_module_preview_model import optimize_authored_preview_model_for_pie
+
+            runtime_preview_model = optimize_authored_preview_model_for_pie(preview_model)
+        except Exception as exc:
+            runtime_preview_model = preview_model
+            self._log(f"Simulation static batching warning: {exc}")
+        self._map_studio_pie_runtime_preview_model = runtime_preview_model
+        preview_model = runtime_preview_model
+        batch_summary = dict(
+            getattr(preview_model, "_gr_map_studio_pie_static_batch_summary", {}) or {}
+        )
+        if batch_summary:
+            self._log(
+                "Simulation static architecture batching: "
+                f"{batch_summary.get('source_meshes', 0)} authored meshes -> "
+                f"{batch_summary.get('runtime_batches', 0)} material batches "
+                f"({batch_summary.get('draw_calls_saved', 0)} draw submissions removed)."
+            )
         camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
         if camera is None:
             self._set_map_studio_pie_command_active(False)
@@ -13244,6 +13490,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_last_time = perf_counter()
         self._map_studio_pie_last_resolved_camera_distance = None
         self._map_studio_pie_status_bucket = -1
+        self._map_studio_pie_active_room_resref = ""
         self._map_studio_pie_camera_turn_input = 0.0
         self._map_studio_pie_camera_turn_velocity = 0.0
         self._map_studio_pie_player_action_state = {}
@@ -13260,6 +13507,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_scope_text = self.map_studio_scope_label.text()
         self._set_map_studio_pie_authoring_enabled(False)
         self._set_map_studio_pie_command_active(True)
+        # Keep the panel's resident-model owner aligned with the viewport while
+        # PIE is active.  The panel is consulted by delayed preview/resource
+        # refreshes, so leaving the authoring model here can silently replace
+        # the batched runtime model after its first upload.
+        self.viewport_panel._room_preview_model = runtime_preview_model
         self.viewport_panel.set_map_studio_pie_active(True)
         self._map_studio_pie_actor_warning = self._create_map_studio_pie_player_actor(session, preview_model, game)
         self._hide_map_studio_pie_player_start_preview(preview_model)
@@ -13268,6 +13520,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if party_warning:
             self._log(f"Simulation party companions: {party_warning}")
         door_warning = self._create_map_studio_pie_door_actors(preview_model, game)
+        # The viewport's authored-room wrappers may be republished while Play
+        # is being assembled (for example by a queued resource refresh).
+        # Compact the final disposable runtime DAG once more after every
+        # transient actor swap and before its single renderer upload.  This
+        # prevents the original per-panel room meshes and their material
+        # batches from being submitted together.
+        try:
+            from src.core.modules.authored_module_preview_model import (
+                batch_authored_preview_model_for_pie_in_place,
+            )
+
+            batch_authored_preview_model_for_pie_in_place(preview_model)
+        except Exception as exc:
+            self._log(f"Simulation final static batching warning: {exc}")
+        self._sync_map_studio_pie_room_visibility(force=True)
         runtime_actor_warning = self._activate_map_studio_pie_runtime_actors(preview_model)
         audio_warning = self._start_map_studio_pie_ambient_audio(session, game)
         dialogue_audio_warning = self._start_map_studio_pie_dialogue_audio(game)
@@ -13345,6 +13612,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_session = None
         self._map_studio_pie_camera_snapshot = None
         self._map_studio_pie_last_resolved_camera_distance = None
+        self._map_studio_pie_active_room_resref = ""
         self._map_studio_pie_actor_warning = ""
         self._map_studio_pie_camera_turn_input = 0.0
         self._map_studio_pie_camera_turn_velocity = 0.0
@@ -13724,6 +13992,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         dialogue = getattr(gameplay, "dialogue", None)
         if mode != "dialogue" or dialogue is None:
             if self._map_studio_pie_gameplay_mode == "dialogue":
+                self._set_map_studio_pie_player_facial_detail_visible(False)
                 snapshot = self._map_studio_pie_dialogue_camera_snapshot
                 if snapshot is not None:
                     camera.azimuth, camera.elevation, camera.distance, camera.fov = snapshot
@@ -13752,6 +14021,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         camera_height_offset = float(getattr(dialogue, "camera_height_offset", 0.0) or 0.0)
         entering_dialogue = self._map_studio_pie_gameplay_mode != "dialogue"
         if entering_dialogue:
+            self._set_map_studio_pie_player_facial_detail_visible(True)
             self._map_studio_pie_dialogue_camera_snapshot = (
                 float(camera.azimuth),
                 float(camera.elevation),
@@ -13837,6 +14107,45 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         else:
             self.statusBar().showMessage("Simulation route rejected: destination is outside clearance or disconnected.", 5000)
 
+    def _sync_map_studio_pie_room_visibility(self, *, force: bool = False) -> None:
+        """Apply KOTOR-style room visibility when the player crosses a WOK seam."""
+
+        session = self._map_studio_pie_session
+        preview_model = self._map_studio_pie_runtime_preview_model
+        if session is None or preview_model is None:
+            return
+        current_room = str(
+            getattr(session, "current_room_resref", lambda: "")() or ""
+        ).strip().lower()
+        if not current_room:
+            return
+        if not force and current_room == self._map_studio_pie_active_room_resref:
+            return
+        from src.core.modules.map_studio_pie import (
+            apply_map_studio_pie_room_visibility,
+        )
+
+        result = apply_map_studio_pie_room_visibility(
+            preview_model,
+            active_room_resref=current_room,
+            connected_room_resrefs=getattr(
+                session,
+                "visible_room_resrefs",
+                lambda: (current_room,),
+            )(),
+            player_position=tuple(
+                getattr(getattr(session, "state", None), "position", ())
+                or (0.0, 0.0, 0.0)
+            ),
+        )
+        self._map_studio_pie_active_room_resref = current_room
+        if result.changed_node_count:
+            self._log(
+                "Simulation room visibility: "
+                f"{current_room} + {max(0, len(result.visible_room_resrefs) - 1)} "
+                f"threshold/nearby room(s); {len(result.hidden_room_resrefs)} distant room(s) culled."
+            )
+
     def _tick_map_studio_pie(self) -> None:
         """Advance fixed-step simulation without rebuilding or reloading the renderer."""
 
@@ -13847,6 +14156,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         delta_time = max(0.0, now - self._map_studio_pie_last_time)
         self._map_studio_pie_last_time = now
         frame = session.advance(delta_time)
+        self._sync_map_studio_pie_room_visibility()
         gameplay = getattr(frame, "gameplay", None)
         for event in tuple(getattr(frame, "events", ()) or ()):
             if str(getattr(event, "animation_role", "") or ""):
@@ -15606,7 +15916,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.viewport_panel.set_authored_gameplay_markers(
                 placements,
                 self.controller.authored_gameplay_fallback_preview_markers(),
-                self.controller.authored_gameplay_fallback_marker_geometry(),
+                self.controller.authored_editor_marker_geometry(
+                    include_spatial_design=self.builder_tab.spatial_plan_overlay_enabled()
+                ),
             )
         self.viewport_panel.update_authored_scene_rows(
             placements,
@@ -15681,7 +15993,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             include_backdrops=bool(getattr(self, "_map_studio_show_skybox", False)),
         )
         authored_markers = self.controller.authored_gameplay_fallback_preview_markers()
-        authored_marker_geometry = self.controller.authored_gameplay_fallback_marker_geometry()
+        authored_marker_geometry = self.controller.authored_editor_marker_geometry(
+            include_spatial_design=self.builder_tab.spatial_plan_overlay_enabled()
+        )
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         self._log_map_studio_stock_preview_warnings()
         authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
@@ -15724,6 +16038,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 str(building_style_context.get("environment_kind") or ""),
             )
         self.builder_tab.set_building_levels(self.controller.map_studio_building_levels())
+        self.builder_tab.set_spatial_design_context(
+            self.controller.audit_map_studio_spatial_design(),
+            self.controller.map_studio_spatial_design_placement_ledger(),
+        )
         self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())
         self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)
         self.walkmesh_tab.set_room_surface_choices(authored_walkmesh_room_surfaces)

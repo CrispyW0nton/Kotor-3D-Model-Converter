@@ -477,9 +477,9 @@ def test_map_studio_viewport_owns_world_preview_renderer_state() -> None:
         assert state["sun_ambient"] == [12, 34, 56]
         assert state["sun_diffuse"] == [78, 90, 123]
         assert state["dynamic_ambient"] == [32, 48, 64]
-        assert renderer.scene_ambient == 0.0
+        assert math.isclose(renderer.scene_ambient, 0.08, rel_tol=0.0, abs_tol=1.0e-9)
         assert gpu_renderer.map_studio_world_lighting_preview == state
-        assert gpu_renderer.scene_ambient == 0.0
+        assert math.isclose(gpu_renderer.scene_ambient, 0.08, rel_tol=0.0, abs_tol=1.0e-9)
         assert panel.viewport.property("_gr_map_studio_world_lighting_preview_active") is True
         assert panel._room_preview_model_key == model._gr_map_studio_preview_key
 

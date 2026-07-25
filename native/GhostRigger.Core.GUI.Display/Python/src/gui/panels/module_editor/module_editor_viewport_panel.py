@@ -1629,6 +1629,41 @@ class _MapStudioPIEExplorationChrome(QtWidgets.QWidget):
             ),
         )
 
+    def _draw_player_coordinates(self, painter: QtGui.QPainter) -> None:
+        """Keep exact PIE world coordinates visible beside the minimap."""
+
+        scale = max(0.35, float(self.height()) / 600.0)
+        rect = QtCore.QRectF(
+            6.0 * scale,
+            143.0 * scale,
+            max(220.0, 280.0 * scale),
+            max(20.0, 28.0 * scale),
+        )
+        palette = self.palette()
+        background = QtGui.QColor(palette.color(QtGui.QPalette.ColorRole.Window))
+        background.setAlpha(214)
+        foreground = QtGui.QColor(
+            palette.color(QtGui.QPalette.ColorRole.WindowText)
+        )
+        border = QtGui.QColor(
+            palette.color(QtGui.QPalette.ColorRole.Highlight)
+        )
+        border.setAlpha(220)
+        painter.setBrush(background)
+        painter.setPen(QtGui.QPen(border, max(1.0, scale)))
+        painter.drawRoundedRect(rect, 3.0 * scale, 3.0 * scale)
+        font = QtGui.QFont(painter.font())
+        font.setPixelSize(max(9, int(round(12.0 * scale))))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(foreground)
+        x, y, z = self._player_position
+        painter.drawText(
+            rect.adjusted(7.0 * scale, 0.0, -5.0 * scale, 0.0),
+            QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft,
+            f"PLAYER  X {x:.2f}   Y {y:.2f}   Z {z:.2f}",
+        )
+
     def _paint_chrome(self, painter: QtGui.QPainter) -> None:
         """Paint non-interactive retail chrome into the current presentation target."""
 
@@ -1637,6 +1672,7 @@ class _MapStudioPIEExplorationChrome(QtWidgets.QWidget):
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform, True)
         self._draw_minimap(painter)
+        self._draw_player_coordinates(painter)
         self._draw_gui_panel(painter, "action_well", (4.0, 528.0, 252.0, 68.0), "left")
         self._draw_gui_panel(painter, "menu_background", (536.0, 4.0, 260.0, 36.0), "right")
         menu_fallbacks = {
@@ -10234,9 +10270,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         """Expose the preview recipe to this viewport and remove studio ambient.
 
         World colors are rendered by preview-only LIGHT nodes attached to the
-        authored model.  Clearing the renderer's generic gray ambient prevents
-        that fallback from washing out the authored RGB values.  The previous
-        value is restored when the Map Studio preview model is removed.
+        authored model.  A small scalar safety floor remains active so a
+        bounded light upload or locally unlit relighted stock surface cannot
+        collapse into a black void.  The colored Odyssey ambient node remains
+        authoritative; this floor is deliberately capped and the previous
+        renderer value is restored when the preview model is removed.
         """
 
         viewport = getattr(self, "viewport", None)
@@ -10256,7 +10294,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         "_gr_map_studio_previous_scene_ambient",
                         float(getattr(target, "scene_ambient", 0.06) or 0.0),
                     )
-                setattr(target, "scene_ambient", 0.0)
+                ambient_rgb = tuple(state.get("dynamic_ambient_rgb", ()) or ())
+                try:
+                    ambient_average = sum(float(channel) for channel in ambient_rgb[:3]) / 3.0
+                except (TypeError, ValueError):
+                    ambient_average = 0.15
+                # The preview LIGHT supplies the authored RGB.  This scalar is
+                # only a visibility fail-safe and must not wash out the scene.
+                ambient_floor = max(0.08, min(0.12, ambient_average * 0.40))
+                setattr(target, "scene_ambient", ambient_floor)
             elif getattr(target, "_gr_map_studio_previous_scene_ambient", None) is not None:
                 setattr(target, "scene_ambient", float(getattr(target, "_gr_map_studio_previous_scene_ambient")))
                 # Renderer factory proxies forward __setattr__ but not

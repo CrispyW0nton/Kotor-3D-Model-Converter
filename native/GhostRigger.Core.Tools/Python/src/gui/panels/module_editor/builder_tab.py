@@ -6,6 +6,8 @@ import math
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from .map_studio_modeling_shelf import map_studio_modeling_icon
+
 
 class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
@@ -56,6 +58,8 @@ class BuilderTab(QtWidgets.QWidget):
     buildingLevelCreateRequested = QtCore.Signal(object)
     buildingLevelViewChanged = QtCore.Signal(object)
     browseVanillaRoomKitsRequested = QtCore.Signal()
+    spatialPlanVisibilityChanged = QtCore.Signal(bool)
+    spatialPlanAuditRequested = QtCore.Signal()
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -71,6 +75,7 @@ class BuilderTab(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._gameplay_palette_entries: list[object] = []
+        self._gameplay_palette_page_limit = 192
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.buildSectionTabs = QtWidgets.QTabWidget(self)
@@ -137,41 +142,69 @@ class BuilderTab(QtWidgets.QWidget):
         self.builderGuideLabel.setToolTip(self.builderGuideLabel.text())
         self.builderGuideLabel.setVisible(False)
         self._legacyToolsLayout.addWidget(self.builderGuideLabel)
-        building_box = QtWidgets.QGroupBox("Pascal Building")
+        building_box = QtWidgets.QGroupBox("Vanilla Environment Builder")
         building_box.setObjectName("mapStudioDirectBuildingGroup")
         building_layout = QtWidgets.QVBoxLayout(building_box)
         self.buildingGuideLabel = QtWidgets.QLabel(
-            "Choose a vanilla module style, then draw connected walls directly in the viewport or drag a trained room piece below. "
-            "Endpoints, closed loops, openings, levels, and compatible doorway magnets behave as one construction workflow."
+            "Choose an area kit, draw a room or open courtyard, then drag matching vanilla rooms, buildings, and props from the shelf. "
+            "Doorway magnets create the opening, transition door, and continuous walkmesh."
         )
         self.buildingGuideLabel.setObjectName("mapStudioDirectBuildingGuide")
         self.buildingGuideLabel.setWordWrap(True)
         building_layout.addWidget(self.buildingGuideLabel)
+        self.buildingWorkflowStepsLabel = QtWidgets.QLabel(
+            "1  Choose Interior or Exterior     2  Pick the area style     3  Draw, connect, then dress"
+        )
+        self.buildingWorkflowStepsLabel.setObjectName("mapStudioBuildingWorkflowSteps")
+        self.buildingWorkflowStepsLabel.setWordWrap(True)
+        self.buildingWorkflowStepsLabel.setAccessibleName("Environment builder workflow")
+        building_layout.addWidget(self.buildingWorkflowStepsLabel)
         tool_row = QtWidgets.QHBoxLayout()
+        tool_row.setContentsMargins(0, 4, 0, 4)
         self.buildingToolButtonGroup = QtWidgets.QButtonGroup(self)
         self.buildingToolButtonGroup.setExclusive(True)
         self.buildingToolButtons: dict[str, QtWidgets.QToolButton] = {}
-        for label, key in (
-            ("Select", "select"),
-            ("Draw Walls", "walls"),
-            ("Door", "door"),
-            ("Window", "window"),
+        for label, key, icon_key, description in (
+            (
+                "Select",
+                "select",
+                "select_quads",
+                "Select and transform rooms, buildings, props, and openings.",
+            ),
+            (
+                "Draw Room",
+                "walls",
+                "quad_draw",
+                "Click successive floor points; click the first point to close and build the room.",
+            ),
+            (
+                "Add Door",
+                "door",
+                "make_hole",
+                "Click a wall to add a style-correct transition opening and door.",
+            ),
+            (
+                "Add Window",
+                "window",
+                "extrude",
+                "Click a wall to add a framed window opening.",
+            ),
         ):
             button = QtWidgets.QToolButton(building_box)
             button.setText(label)
+            button.setIcon(map_studio_modeling_icon(icon_key, button.palette(), 28))
+            button.setIconSize(QtCore.QSize(28, 28))
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             button.setCheckable(True)
             button.setAutoRaise(False)
+            button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
             button.setObjectName(f"mapStudioBuilding{key.title()}ToolButton")
-            button.setToolTip(
-                "Click a room wall to insert this opening."
-                if key in {"door", "window"}
-                else "Click successive floor points; click the first point to close the room."
-                if key == "walls"
-                else "Return to normal viewport selection."
-            )
+            button.setAccessibleName(label)
+            button.setAccessibleDescription(description)
+            button.setToolTip(description)
             self.buildingToolButtonGroup.addButton(button)
             self.buildingToolButtons[key] = button
-            tool_row.addWidget(button)
+            tool_row.addWidget(button, 1)
         self.buildingToolButtons["select"].setChecked(True)
         building_layout.addLayout(tool_row)
         building_form = QtWidgets.QFormLayout()
@@ -223,10 +256,12 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.buildingKindComboBox = QtWidgets.QComboBox(building_box)
         self.buildingKindComboBox.setObjectName("mapStudioBuildingKindComboBox")
-        self.buildingKindComboBox.addItem("Interior rooms", "interior")
-        self.buildingKindComboBox.addItem("Exterior buildings", "exterior")
-        self.buildingKindComboBox.addItem("All module styles", "")
-        self.buildingKindComboBox.setToolTip("Choose whether the style list comes from interior or exterior vanilla modules.")
+        self.buildingKindComboBox.addItem("Interior — enclosed rooms", "interior")
+        self.buildingKindComboBox.addItem("Exterior — open courtyards", "exterior")
+        self.buildingKindComboBox.addItem("All environment kits", "")
+        self.buildingKindComboBox.setToolTip(
+            "Interior kits create ceilings. Exterior kits create open courtyards and expose matching freestanding buildings."
+        )
         self.browseVanillaRoomKitsButton = QtWidgets.QPushButton("Browse Vanilla Room Kits…", building_box)
         self.browseVanillaRoomKitsButton.setObjectName("mapStudioBrowseVanillaRoomKitsButton")
         self.browseVanillaRoomKitsButton.setToolTip(
@@ -284,9 +319,9 @@ class BuilderTab(QtWidgets.QWidget):
         )
         building_form.addRow("Level:", level_row)
         building_form.addRow("Level view:", self.buildingLevelViewComboBox)
-        building_form.addRow("Build type:", self.buildingKindComboBox)
-        building_form.addRow("Module style:", self.buildingStyleComboBox)
-        building_form.addRow("Room shape:", self.buildingArchetypeComboBox)
+        building_form.addRow("Environment:", self.buildingKindComboBox)
+        building_form.addRow("Area style:", self.buildingStyleComboBox)
+        building_form.addRow("Architecture:", self.buildingArchetypeComboBox)
         building_layout.addLayout(building_form)
         self.buildingStyleSummaryLabel = QtWidgets.QLabel("Neutral Blockout · interior/exterior preview palette", building_box)
         self.buildingStyleSummaryLabel.setObjectName("mapStudioBuildingStyleSummaryLabel")
@@ -321,11 +356,53 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingSettingsContainer.setVisible(False)
         building_layout.addWidget(self.buildingSettingsContainer)
         self.buildingStatusLabel = QtWidgets.QLabel(
-            "Select Draw Walls and click the floor, or drag a typed vanilla piece from the kit browser below."
+            "Choose Draw Room and close a footprint, or drag a matching vanilla room or building from the shelf below."
         )
         self.buildingStatusLabel.setObjectName("mapStudioBuildingStatusLabel")
         self.buildingStatusLabel.setWordWrap(True)
         building_layout.addWidget(self.buildingStatusLabel)
+        spatial_box = QtWidgets.QGroupBox("Spatial Intent", building_box)
+        spatial_box.setObjectName("mapStudioSpatialIntentGroup")
+        spatial_layout = QtWidgets.QVBoxLayout(spatial_box)
+        self.spatialDesignSummaryLabel = QtWidgets.QLabel(
+            "No spatial plan yet · define districts, routes, landmarks, and why each object belongs where it is.",
+            spatial_box,
+        )
+        self.spatialDesignSummaryLabel.setObjectName("mapStudioSpatialDesignSummaryLabel")
+        self.spatialDesignSummaryLabel.setWordWrap(True)
+        self.spatialDesignSummaryLabel.setAccessibleName("Spatial design status")
+        spatial_layout.addWidget(self.spatialDesignSummaryLabel)
+        spatial_controls = QtWidgets.QHBoxLayout()
+        self.spatialDesignOverlayCheckBox = QtWidgets.QCheckBox("Show plan on grid", spatial_box)
+        self.spatialDesignOverlayCheckBox.setObjectName("mapStudioSpatialDesignOverlayCheckBox")
+        self.spatialDesignOverlayCheckBox.setChecked(True)
+        self.spatialDesignOverlayCheckBox.setToolTip(
+            "Show named zones, circulation routes, landmarks, and planned object footprints in the viewport."
+        )
+        self.auditSpatialDesignButton = QtWidgets.QPushButton("Audit Layout", spatial_box)
+        self.auditSpatialDesignButton.setObjectName("mapStudioAuditSpatialDesignButton")
+        self.auditSpatialDesignButton.setToolTip(
+            "Check player clearance, grid alignment, zone membership, overlapping props, and unexplained placement."
+        )
+        spatial_controls.addWidget(self.spatialDesignOverlayCheckBox)
+        spatial_controls.addStretch(1)
+        spatial_controls.addWidget(self.auditSpatialDesignButton)
+        spatial_layout.addLayout(spatial_controls)
+        self.spatialDesignLedger = QtWidgets.QTreeWidget(spatial_box)
+        self.spatialDesignLedger.setObjectName("mapStudioSpatialDesignLedger")
+        self.spatialDesignLedger.setHeaderLabels(("Object", "Grid position", "Zone", "Purpose"))
+        self.spatialDesignLedger.setRootIsDecorated(False)
+        self.spatialDesignLedger.setAlternatingRowColors(True)
+        self.spatialDesignLedger.setUniformRowHeights(True)
+        self.spatialDesignLedger.setToolTip(
+            "Exact placement ledger: every object has a coordinate, district, purpose, and location rationale."
+        )
+        spatial_layout.addWidget(self.spatialDesignLedger)
+        building_layout.addWidget(spatial_box)
+        self.spatialDesignOverlayCheckBox.toggled.connect(self.spatialPlanVisibilityChanged.emit)
+        self.auditSpatialDesignButton.clicked.connect(
+            lambda _checked=False: self.spatialPlanAuditRequested.emit()
+        )
         self.buildingSettingsToggle.toggled.connect(
             lambda visible: (
                 self.buildingSettingsContainer.setVisible(bool(visible)),
@@ -1190,6 +1267,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplayPaletteSearchLineEdit = QtWidgets.QLineEdit()
         self.gameplayPaletteSearchLineEdit.setObjectName("mapStudioGameplayPaletteSearchLineEdit")
         self.gameplayPaletteSearchLineEdit.setPlaceholderText("Search game-library templates or models")
+        self.gameplayPaletteResultLabel = QtWidgets.QLabel()
+        self.gameplayPaletteResultLabel.setObjectName("mapStudioGameplayPaletteResultLabel")
+        self.gameplayPaletteResultLabel.setWordWrap(True)
         self.gameplayPaletteComboBox = QtWidgets.QComboBox()
         self.gameplayPaletteComboBox.setObjectName("mapStudioGameplayPaletteComboBox")
         self.gameplayPaletteComboBox.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -1229,6 +1309,7 @@ class BuilderTab(QtWidgets.QWidget):
         placement_layout.addRow("Kind:", self.gameplayPlacementKindComboBox)
         placement_layout.addRow(self.gameplayKindDetailLabel)
         placement_layout.addRow("Search:", self.gameplayPaletteSearchLineEdit)
+        placement_layout.addRow(self.gameplayPaletteResultLabel)
         placement_layout.addRow("Library:", self.gameplayPaletteComboBox)
         placement_layout.addRow(self.useGameplayPaletteButton)
         placement_layout.addRow(self.gameplayPaletteHintLabel)
@@ -1578,6 +1659,53 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.buildingStatusLabel.setText(f"Adding {name} at {floor_z:.2f} m…")
 
+    def spatial_plan_overlay_enabled(self) -> bool:
+        return bool(self.spatialDesignOverlayCheckBox.isChecked())
+
+    def set_spatial_design_context(self, audit, placement_ledger) -> None:
+        """Show the shared scene audit and exact placement ledger."""
+
+        summary = str(getattr(audit, "summary", lambda: "")() or "")
+        blocking = tuple(getattr(audit, "blocking_issues", ()) or ())
+        warnings = tuple(getattr(audit, "warnings", ()) or ())
+        if not summary:
+            summary = "No spatial plan yet · define districts, routes, landmarks, and placement purpose."
+        self.spatialDesignSummaryLabel.setText(summary)
+        details = tuple(blocking) + tuple(warnings)
+        self.spatialDesignSummaryLabel.setToolTip("\n".join(details) if details else summary)
+        self.auditSpatialDesignButton.setText("Layout Ready" if bool(getattr(audit, "ok", False)) else "Audit Layout")
+        self.spatialDesignLedger.clear()
+        for row in tuple(placement_ledger or ()):
+            values = dict(row or {})
+            position = tuple(values.get("position") or (0.0, 0.0, 0.0))
+            position_text = (
+                f"{float(position[0]):.2f}, {float(position[1]):.2f}, {float(position[2]):.2f}"
+            )
+            item = QtWidgets.QTreeWidgetItem(
+                (
+                    str(values.get("label") or values.get("asset_ref") or ""),
+                    position_text,
+                    str(values.get("zone") or ""),
+                    str(values.get("purpose") or ""),
+                )
+            )
+            item.setToolTip(
+                0,
+                (
+                    f"Asset: {str(values.get('asset_ref') or '')}\n"
+                    f"Facing: {float(values.get('bearing') or 0.0):.2f} rad\n"
+                    f"Why here: {str(values.get('rationale') or '')}"
+                ),
+            )
+            if bool(values.get("landmark", False)):
+                item.setText(0, f"★ {item.text(0)}")
+            self.spatialDesignLedger.addTopLevelItem(item)
+        header = self.spatialDesignLedger.header()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Stretch)
+
     def set_building_styles(self, styles) -> None:
         preserve = bool(self._buildingStyleRows)
         current = str(dict(self.buildingStyleComboBox.currentData() or {}).get("style_id", "")) if preserve else ""
@@ -1752,8 +1880,13 @@ class BuilderTab(QtWidgets.QWidget):
             self.buildingFloorToFloorSpinBox.setValue(recommended_floor)
             self.buildingOpeningWidthSpinBox.setValue(float(row.get("recommended_door_width_m") or 1.25))
             self.buildingOpeningHeightSpinBox.setValue(float(row.get("recommended_door_height_m") or 2.2))
-            if architecture_profile == "shadowlands":
+            if architecture_profile in {"shadowlands", "onderon_city", "onderon_sky_ramp"}:
                 self.buildingCeilingCheckBox.setChecked(False)
+                roof_index = self.buildingRoofTypeComboBox.findData("none")
+                if roof_index >= 0:
+                    self.buildingRoofTypeComboBox.setCurrentIndex(roof_index)
+            elif architecture_profile in {"onderon_cantina", "onderon_palace"}:
+                self.buildingCeilingCheckBox.setChecked(True)
                 roof_index = self.buildingRoofTypeComboBox.findData("none")
                 if roof_index >= 0:
                     self.buildingRoofTypeComboBox.setCurrentIndex(roof_index)
@@ -1775,13 +1908,17 @@ class BuilderTab(QtWidgets.QWidget):
             (
                 f"{world} organic terrain kit selected. Draw a clearing or path boundary; Ghost Studio builds irregular earth strata, ancient-root buttresses, and hanging vegetation from {source} evidence, while the terrain shelf exposes Upper and Lower Shadowlands pieces; "
                 if architecture_profile == "shadowlands"
-                else f"{world} {archetype_label.lower()} selected. Draw Walls sweeps the {shell_profile.replace('_', ' ')} contour, then adds measured bays, supports, relief, trims, and openings from {source} evidence; "
+                else f"{world} open-city kit selected. Draw Room creates a roofless {archetype_label.lower()} with beveled Iziz wall sections; the matching shelf exposes complete vanilla buildings, street pieces, props, and magnet-ready rooms; "
+                if architecture_profile in {"onderon_city", "onderon_sky_ramp"}
+                else f"{world} interior kit selected. Draw Room creates a fully enclosed {archetype_label.lower()} with measured relief, trim, columns, and ceiling contour; the shelf exposes matching vanilla rooms and individual environment props; "
+                if architecture_profile in {"onderon_cantina", "onderon_palace"}
+                else f"{world} {archetype_label.lower()} selected. Draw Room sweeps the {shell_profile.replace('_', ' ')} contour, then adds measured bays, supports, relief, trims, and openings from {source} evidence; "
                 if archetype_id
-                else f"{world} architecture kit selected. Draw Walls sweeps the {shell_profile.replace('_', ' ')} room contour, then adds bays, ribs, trims, and lights from {source} evidence; "
+                else f"{world} architecture kit selected. Draw Room sweeps the {shell_profile.replace('_', ' ')} room contour, then adds bays, ribs, trims, and lights from {source} evidence; "
                 if shell_profile
-                else f"{world} architecture kit selected. Draw Walls generates profiled bays, ribs, trims, and lights from {source} evidence; "
+                else f"{world} architecture kit selected. Draw Room generates profiled bays, ribs, trims, and lights from {source} evidence; "
                 if architecture_profile
-                else f"{world} {kind_label.lower()} style selected. Draw Walls uses the {source} palette; "
+                else f"{world} {kind_label.lower()} style selected. Draw Room uses the {source} palette; "
             )
             + (
                 f"the closed footprint will include a {str(self.buildingRoofTypeComboBox.currentText()).lower()}."
@@ -1866,8 +2003,8 @@ class BuilderTab(QtWidgets.QWidget):
             )
             group.show()
         self.skyboxBuildGuideLabel.setText(
-            "Create a KOTOR visual-only sky dome from five engine textures, or choose an HDR/panorama and let "
-            "Ghost Studio project and tone-map it into the game-compatible texture set."
+            "Choose a measured vanilla sky style for a one-click KOTOR dome, enter five existing engine textures, "
+            "or import an HDR/panorama and let Ghost Studio project and tone-map the game-compatible texture set."
         )
 
     def set_modeling_component_modes(self, modes) -> None:
@@ -3759,7 +3896,7 @@ class BuilderTab(QtWidgets.QWidget):
         needle = self.gameplayPaletteSearchLineEdit.text().strip().lower()
         self.gameplayPaletteComboBox.blockSignals(True)
         self.gameplayPaletteComboBox.clear()
-        count = 0
+        matches: list[object] = []
         for entry in self._gameplay_palette_entries:
             entry_kind = self._entry_value(entry, "kind").lower()
             entry_family = self._entry_value(entry, "authoring_family", entry_kind).lower()
@@ -3771,12 +3908,23 @@ class BuilderTab(QtWidgets.QWidget):
                 continue
             if needle and needle not in haystack:
                 continue
+            matches.append(entry)
+        visible_matches = matches[: self._gameplay_palette_page_limit]
+        for entry in visible_matches:
             label = self._entry_value(entry, "label") or self._entry_value(entry, "template_resref")
             self.gameplayPaletteComboBox.addItem(label, entry)
-            count += 1
-        if count <= 0:
+        if not visible_matches:
             self.gameplayPaletteComboBox.addItem("No compatible game-library resources", None)
         self.gameplayPaletteComboBox.blockSignals(False)
+        if len(matches) > len(visible_matches):
+            self.gameplayPaletteResultLabel.setText(
+                f"Showing {len(visible_matches):,} of {len(matches):,} matches. "
+                "Type a name or resref to narrow the list."
+            )
+        else:
+            self.gameplayPaletteResultLabel.setText(
+                f"{len(matches):,} matching asset{'s' if len(matches) != 1 else ''}."
+            )
         self._update_gameplay_palette_hint()
         self._update_gameplay_spatial_controls()
 

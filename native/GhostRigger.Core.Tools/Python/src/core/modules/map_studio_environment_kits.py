@@ -25,6 +25,255 @@ ENVIRONMENT_KIT_PAYLOAD_SCHEMA = "ghostrigger.map-environment-kit/v1"
 _CATALOG_RELATIVE = Path("assets/map_studio/environment_kits/vanilla_kits.json")
 
 
+def audit_environment_kit_room_occupancy(
+    primitive: Any,
+    *,
+    position: tuple[float, float, float],
+    rooms: tuple[Any, ...],
+    ignored_room_resrefs: tuple[str, ...] = (),
+    minimum_overlap_area: float = 0.04,
+) -> dict[str, Any]:
+    """Reject solid kit rooms that would occupy another room's walkable volume.
+
+    Retail LYT partitions often include geometry far beyond their doorway.
+    Render bounds are therefore a poor placement test. This audit compares the
+    actual projected WOK triangles, falling back to generated floor-plan
+    triangles. The intended portal target is ignored because its connection
+    side is handled by :func:`trim_environment_kit_connection_overlap`.
+
+    Imported WOK is never silently cut: doing so would invalidate retail
+    transition indices. Visual-only dressing is excluded because it is meant
+    to be staged inside a room.
+    """
+
+    try:
+        from .authored_room_floorplan import triangulate_floor_plan_points
+    except ImportError:  # pragma: no cover - embedded package route.
+        from core.modules.authored_room_floorplan import triangulate_floor_plan_points  # type: ignore
+
+    ignored = {
+        str(value or "").strip().lower()[:16]
+        for value in tuple(ignored_room_resrefs or ())
+        if str(value or "").strip()
+    }
+    threshold = max(1.0e-6, float(minimum_overlap_area))
+
+    def triangles_for(
+        source_primitive: Any,
+        source_position: tuple[float, float, float],
+    ) -> tuple[tuple[tuple[float, float], tuple[float, float], tuple[float, float]], ...]:
+        ox, oy, _oz = (
+            float(value)
+            for value in tuple(source_position or (0.0, 0.0, 0.0))[:3]
+        )
+        wok = getattr(source_primitive, "wok", None)
+        wok_vertices = tuple(getattr(wok, "verts", ()) or ())
+        result: list[
+            tuple[tuple[float, float], tuple[float, float], tuple[float, float]]
+        ] = []
+        for face in tuple(getattr(wok, "faces", ()) or ()):
+            indices = (
+                int(getattr(face, "v1", -1)),
+                int(getattr(face, "v2", -1)),
+                int(getattr(face, "v3", -1)),
+            )
+            if any(index < 0 or index >= len(wok_vertices) for index in indices):
+                continue
+            result.append(
+                tuple(
+                    (
+                        float(wok_vertices[index][0]) + ox,
+                        float(wok_vertices[index][1]) + oy,
+                    )
+                    for index in indices
+                )
+            )
+        if result:
+            return tuple(result)
+        points = tuple(getattr(source_primitive, "points", ()) or ())
+        if len(points) < 3:
+            return ()
+        faces = triangulate_floor_plan_points(
+            tuple((float(point[0]), float(point[1])) for point in points)
+        )
+        return tuple(
+            tuple(
+                (
+                    float(points[index][0]) + ox,
+                    float(points[index][1]) + oy,
+                )
+                for index in face
+            )
+            for face in faces
+        )
+
+    def polygon_area(polygon: list[tuple[float, float]]) -> float:
+        if len(polygon) < 3:
+            return 0.0
+        return abs(
+            sum(
+                (polygon[index][0] * polygon[(index + 1) % len(polygon)][1])
+                - (polygon[(index + 1) % len(polygon)][0] * polygon[index][1])
+                for index in range(len(polygon))
+            )
+        ) * 0.5
+
+    def signed_area(triangle: tuple[tuple[float, float], ...]) -> float:
+        return sum(
+            (triangle[index][0] * triangle[(index + 1) % len(triangle)][1])
+            - (triangle[(index + 1) % len(triangle)][0] * triangle[index][1])
+            for index in range(len(triangle))
+        ) * 0.5
+
+    def intersection_area(
+        first: tuple[tuple[float, float], ...],
+        second: tuple[tuple[float, float], ...],
+    ) -> float:
+        clip = second if signed_area(second) >= 0.0 else tuple(reversed(second))
+        polygon = list(first)
+        for edge_index, edge_start in enumerate(clip):
+            edge_end = clip[(edge_index + 1) % len(clip)]
+            dx = edge_end[0] - edge_start[0]
+            dy = edge_end[1] - edge_start[1]
+
+            def distance(point: tuple[float, float]) -> float:
+                return (dx * (point[1] - edge_start[1])) - (
+                    dy * (point[0] - edge_start[0])
+                )
+
+            if not polygon:
+                break
+            clipped: list[tuple[float, float]] = []
+            previous = polygon[-1]
+            previous_distance = distance(previous)
+            previous_inside = previous_distance >= -1.0e-7
+            for current in polygon:
+                current_distance = distance(current)
+                current_inside = current_distance >= -1.0e-7
+                if current_inside != previous_inside:
+                    denominator = previous_distance - current_distance
+                    fraction = (
+                        0.0
+                        if abs(denominator) <= 1.0e-12
+                        else previous_distance / denominator
+                    )
+                    clipped.append(
+                        (
+                            previous[0] + ((current[0] - previous[0]) * fraction),
+                            previous[1] + ((current[1] - previous[1]) * fraction),
+                        )
+                    )
+                if current_inside:
+                    clipped.append(current)
+                previous = current
+                previous_distance = current_distance
+                previous_inside = current_inside
+            polygon = clipped
+        return polygon_area(polygon)
+
+    candidate = triangles_for(primitive, position)
+    if not candidate:
+        return {
+            "ok": True,
+            "candidate_triangle_count": 0,
+            "conflicts": [],
+            "policy": "no_walkable_footprint",
+        }
+
+    conflicts: list[dict[str, Any]] = []
+    candidate_bounds = (
+        min(point[0] for triangle in candidate for point in triangle),
+        min(point[1] for triangle in candidate for point in triangle),
+        max(point[0] for triangle in candidate for point in triangle),
+        max(point[1] for triangle in candidate for point in triangle),
+    )
+    for room in tuple(rooms or ()):
+        normalizer = getattr(room, "normalised_resref", None)
+        room_resref = str(
+            normalizer() if callable(normalizer) else getattr(room, "room_resref", "")
+        ).strip().lower()[:16]
+        if not room_resref or room_resref in ignored:
+            continue
+        metadata = dict(getattr(room, "metadata", {}) or {})
+        room_primitive = getattr(room, "primitive", None)
+        primitive_metadata = dict(getattr(room_primitive, "metadata", {}) or {})
+        if (
+            bool(metadata.get("visual_only", False))
+            or bool(primitive_metadata.get("visual_only", False))
+            or str(metadata.get("environment_kit_role") or "").strip().lower()
+            == "dressing"
+            or bool(metadata.get("skybox", False))
+            or bool(primitive_metadata.get("skybox", False))
+        ):
+            continue
+        room_position = tuple(
+            float(value)
+            for value in tuple(
+                getattr(room, "position", (0.0, 0.0, 0.0))
+                or (0.0, 0.0, 0.0)
+            )[:3]
+        )
+        occupied = triangles_for(room_primitive, room_position)
+        if not occupied:
+            continue
+        occupied_bounds = (
+            min(point[0] for triangle in occupied for point in triangle),
+            min(point[1] for triangle in occupied for point in triangle),
+            max(point[0] for triangle in occupied for point in triangle),
+            max(point[1] for triangle in occupied for point in triangle),
+        )
+        if (
+            candidate_bounds[2] <= occupied_bounds[0] + 1.0e-6
+            or occupied_bounds[2] <= candidate_bounds[0] + 1.0e-6
+            or candidate_bounds[3] <= occupied_bounds[1] + 1.0e-6
+            or occupied_bounds[3] <= candidate_bounds[1] + 1.0e-6
+        ):
+            continue
+        overlap_area = 0.0
+        for first in candidate:
+            first_bounds = (
+                min(point[0] for point in first),
+                min(point[1] for point in first),
+                max(point[0] for point in first),
+                max(point[1] for point in first),
+            )
+            for second in occupied:
+                second_bounds = (
+                    min(point[0] for point in second),
+                    min(point[1] for point in second),
+                    max(point[0] for point in second),
+                    max(point[1] for point in second),
+                )
+                if (
+                    first_bounds[2] <= second_bounds[0] + 1.0e-7
+                    or second_bounds[2] <= first_bounds[0] + 1.0e-7
+                    or first_bounds[3] <= second_bounds[1] + 1.0e-7
+                    or second_bounds[3] <= first_bounds[1] + 1.0e-7
+                ):
+                    continue
+                overlap_area += intersection_area(first, second)
+                if overlap_area >= threshold:
+                    break
+            if overlap_area >= threshold:
+                break
+        if overlap_area >= threshold:
+            conflicts.append(
+                {
+                    "room_resref": room_resref,
+                    "overlap_area_m2": overlap_area,
+                    "occupied_bounds": list(occupied_bounds),
+                }
+            )
+    return {
+        "ok": not conflicts,
+        "candidate_triangle_count": len(candidate),
+        "conflicts": conflicts,
+        "minimum_overlap_area_m2": threshold,
+        "candidate_bounds": list(candidate_bounds),
+        "policy": "retail_wok_overlap_rejected",
+    }
+
+
 def trim_environment_kit_connection_overlap(
     primitive: Any,
     *,
@@ -203,6 +452,360 @@ def trim_environment_kit_connection_overlap(
         "wok_visual_clip_excluded": True,
     }
     return replace(primitive, surfaces=tuple(trimmed_surfaces), wok=wok, metadata=metadata)
+
+
+def trim_environment_kit_room_volume_overlap(
+    primitive: Any,
+    *,
+    position: tuple[float, float, float],
+    rooms: tuple[Any, ...],
+    epsilon: float = 0.002,
+) -> Any:
+    """Subtract existing room footprints from newly attached render geometry.
+
+    A retail room partition may carry wall, ceiling, or backdrop triangles well
+    beyond its walkmesh doorway.  Portal-plane trimming removes the forward
+    overlap, but oblique shell pieces can still spear through a neighbouring
+    authored room.  This operation clips only the candidate's render surfaces
+    against every existing solid room footprint.  UV0, normals, lightmap UVs,
+    material rows, and the imported WOK are preserved; collision remains the
+    separate portal/walkmesh authority.
+    """
+
+    try:
+        from .authored_room_floorplan import triangulate_floor_plan_points
+    except ImportError:  # pragma: no cover - embedded package route.
+        from core.modules.authored_room_floorplan import triangulate_floor_plan_points  # type: ignore
+
+    px, py, _pz = (
+        float(value) for value in tuple(position or (0.0, 0.0, 0.0))[:3]
+    )
+    tolerance = max(0.0, float(epsilon))
+    clip_triangles: list[
+        tuple[
+            str,
+            tuple[tuple[float, float], tuple[float, float], tuple[float, float]],
+        ]
+    ] = []
+    for room in tuple(rooms or ()):
+        metadata = dict(getattr(room, "metadata", {}) or {})
+        room_primitive = getattr(room, "primitive", None)
+        primitive_metadata = dict(getattr(room_primitive, "metadata", {}) or {})
+        if (
+            bool(metadata.get("visual_only", False))
+            or bool(primitive_metadata.get("visual_only", False))
+            or str(metadata.get("environment_kit_role") or "").strip().lower()
+            == "dressing"
+            or bool(metadata.get("skybox", False))
+            or bool(primitive_metadata.get("skybox", False))
+        ):
+            continue
+        points = tuple(getattr(room_primitive, "points", ()) or ())
+        if len(points) < 3:
+            continue
+        normalizer = getattr(room, "normalised_resref", None)
+        room_resref = str(
+            normalizer()
+            if callable(normalizer)
+            else getattr(room, "room_resref", "room")
+        ).strip().lower()[:16]
+        rx, ry, _rz = (
+            float(value)
+            for value in tuple(
+                getattr(room, "position", (0.0, 0.0, 0.0))
+                or (0.0, 0.0, 0.0)
+            )[:3]
+        )
+        local_points = tuple(
+            (
+                float(point[0]) + rx - px,
+                float(point[1]) + ry - py,
+            )
+            for point in points
+        )
+        for face in triangulate_floor_plan_points(
+            tuple((float(point[0]), float(point[1])) for point in local_points)
+        ):
+            triangle = tuple(local_points[int(index)] for index in face)
+            signed = sum(
+                (triangle[index][0] * triangle[(index + 1) % 3][1])
+                - (triangle[(index + 1) % 3][0] * triangle[index][1])
+                for index in range(3)
+            )
+            if signed < 0.0:
+                triangle = tuple(reversed(triangle))
+            clip_triangles.append((room_resref, triangle))  # type: ignore[arg-type]
+    if not clip_triangles:
+        return primitive
+
+    def lerp(
+        first: tuple[float, ...],
+        second: tuple[float, ...],
+        fraction: float,
+    ) -> tuple[float, ...]:
+        return tuple(
+            float(a) + ((float(b) - float(a)) * fraction)
+            for a, b in zip(first, second)
+        )
+
+    def normalise(normal: tuple[float, ...]) -> tuple[float, float, float]:
+        x, y, z = (
+            float(normal[index]) if index < len(normal) else 0.0
+            for index in range(3)
+        )
+        length = math.sqrt((x * x) + (y * y) + (z * z))
+        return (
+            (x / length, y / length, z / length)
+            if length > 1.0e-8
+            else (0.0, 0.0, 1.0)
+        )
+
+    def clip_half_plane(
+        vertices: list[dict[str, tuple[float, ...]]],
+        edge_start: tuple[float, float],
+        edge_end: tuple[float, float],
+        *,
+        keep_inside: bool,
+    ) -> list[dict[str, tuple[float, ...]]]:
+        if not vertices:
+            return []
+        dx = edge_end[0] - edge_start[0]
+        dy = edge_end[1] - edge_start[1]
+
+        def signed_distance(vertex: dict[str, tuple[float, ...]]) -> float:
+            point = vertex["position"]
+            return (dx * (float(point[1]) - edge_start[1])) - (
+                dy * (float(point[0]) - edge_start[0])
+            )
+
+        clipped: list[dict[str, tuple[float, ...]]] = []
+        previous = vertices[-1]
+        previous_distance = signed_distance(previous)
+        previous_kept = (
+            previous_distance >= -tolerance
+            if keep_inside
+            else previous_distance <= tolerance
+        )
+        for current in vertices:
+            current_distance = signed_distance(current)
+            current_kept = (
+                current_distance >= -tolerance
+                if keep_inside
+                else current_distance <= tolerance
+            )
+            if current_kept != previous_kept:
+                denominator = previous_distance - current_distance
+                fraction = (
+                    0.0
+                    if abs(denominator) <= 1.0e-12
+                    else previous_distance / denominator
+                )
+                fraction = max(0.0, min(1.0, fraction))
+                intersection = {
+                    key: lerp(value, current.get(key, value), fraction)
+                    for key, value in previous.items()
+                }
+                if "normal" in intersection:
+                    intersection["normal"] = normalise(intersection["normal"])
+                clipped.append(intersection)
+            if current_kept:
+                clipped.append(current)
+            previous = current
+            previous_distance = current_distance
+            previous_kept = current_kept
+        return clipped
+
+    def subtract_convex_triangle(
+        polygon: list[dict[str, tuple[float, ...]]],
+        clip: tuple[tuple[float, float], ...],
+    ) -> list[list[dict[str, tuple[float, ...]]]]:
+        candidates = [polygon]
+        outside: list[list[dict[str, tuple[float, ...]]]] = []
+        for edge_index, edge_start in enumerate(clip):
+            edge_end = clip[(edge_index + 1) % len(clip)]
+            next_candidates: list[list[dict[str, tuple[float, ...]]]] = []
+            for candidate in candidates:
+                inside = clip_half_plane(
+                    candidate,
+                    edge_start,
+                    edge_end,
+                    keep_inside=True,
+                )
+                escaped = clip_half_plane(
+                    candidate,
+                    edge_start,
+                    edge_end,
+                    keep_inside=False,
+                )
+                if len(escaped) >= 3:
+                    outside.append(escaped)
+                if len(inside) >= 3:
+                    next_candidates.append(inside)
+            candidates = next_candidates
+            if not candidates:
+                break
+        return outside
+
+    def triangle_area(
+        first: tuple[float, float, float],
+        second: tuple[float, float, float],
+        third: tuple[float, float, float],
+    ) -> float:
+        ux, uy, uz = (second[index] - first[index] for index in range(3))
+        vx, vy, vz = (third[index] - first[index] for index in range(3))
+        return math.sqrt(
+            ((uy * vz) - (uz * vy)) ** 2
+            + ((uz * vx) - (ux * vz)) ** 2
+            + ((ux * vy) - (uy * vx)) ** 2
+        ) * 0.5
+
+    trimmed_surfaces: list[Any] = []
+    faces_before = 0
+    faces_after = 0
+    affected_rooms: set[str] = set()
+    for surface in tuple(getattr(primitive, "surfaces", ()) or ()):
+        source_vertices = tuple(getattr(surface, "vertices", ()) or ())
+        source_uvs = tuple(getattr(surface, "uvs", ()) or ())
+        source_normals = tuple(getattr(surface, "normals", ()) or ())
+        source_uvs_lm = tuple(getattr(surface, "uvs_lm", ()) or ())
+        has_uvs = len(source_uvs) == len(source_vertices)
+        has_normals = len(source_normals) == len(source_vertices)
+        has_uvs_lm = len(source_uvs_lm) == len(source_vertices)
+        vertices: list[tuple[float, float, float]] = []
+        uvs: list[tuple[float, float]] = []
+        normals: list[tuple[float, float, float]] = []
+        uvs_lm: list[tuple[float, float]] = []
+        faces: list[tuple[int, int, int]] = []
+        face_mats: list[int] = []
+        material_rows = tuple(getattr(surface, "face_mats", ()) or ())
+        for face_index, face in enumerate(tuple(getattr(surface, "faces", ()) or ())):
+            try:
+                indices = tuple(int(index) for index in face[:3])
+                source = [
+                    {
+                        "position": tuple(
+                            float(value) for value in source_vertices[index][:3]
+                        ),
+                        "uv": (
+                            tuple(float(value) for value in source_uvs[index][:2])
+                            if has_uvs
+                            else (0.0, 0.0)
+                        ),
+                        "normal": (
+                            tuple(
+                                float(value)
+                                for value in source_normals[index][:3]
+                            )
+                            if has_normals
+                            else (0.0, 0.0, 1.0)
+                        ),
+                        "uv_lm": (
+                            tuple(
+                                float(value)
+                                for value in source_uvs_lm[index][:2]
+                            )
+                            if has_uvs_lm
+                            else (0.0, 0.0)
+                        ),
+                    }
+                    for index in indices
+                ]
+            except (IndexError, TypeError, ValueError):
+                continue
+            faces_before += 1
+            fragments = [source]
+            source_bounds = (
+                min(vertex["position"][0] for vertex in source),
+                min(vertex["position"][1] for vertex in source),
+                max(vertex["position"][0] for vertex in source),
+                max(vertex["position"][1] for vertex in source),
+            )
+            for room_resref, clip in clip_triangles:
+                clip_bounds = (
+                    min(point[0] for point in clip),
+                    min(point[1] for point in clip),
+                    max(point[0] for point in clip),
+                    max(point[1] for point in clip),
+                )
+                if (
+                    source_bounds[2] <= clip_bounds[0] + tolerance
+                    or clip_bounds[2] <= source_bounds[0] + tolerance
+                    or source_bounds[3] <= clip_bounds[1] + tolerance
+                    or clip_bounds[3] <= source_bounds[1] + tolerance
+                ):
+                    continue
+                next_fragments: list[list[dict[str, tuple[float, ...]]]] = []
+                before_count = len(fragments)
+                for fragment in fragments:
+                    next_fragments.extend(subtract_convex_triangle(fragment, clip))
+                fragments = next_fragments
+                if len(fragments) != before_count:
+                    affected_rooms.add(room_resref)
+                if not fragments:
+                    break
+            for fragment in fragments:
+                for index in range(1, len(fragment) - 1):
+                    triangle = (fragment[0], fragment[index], fragment[index + 1])
+                    points = tuple(
+                        tuple(float(value) for value in vertex["position"][:3])
+                        for vertex in triangle
+                    )
+                    if triangle_area(*points) <= 1.0e-10:
+                        continue
+                    first_index = len(vertices)
+                    vertices.extend(points)
+                    if has_uvs:
+                        uvs.extend(
+                            tuple(float(value) for value in vertex["uv"][:2])
+                            for vertex in triangle
+                        )
+                    if has_normals:
+                        normals.extend(
+                            normalise(vertex["normal"]) for vertex in triangle
+                        )
+                    if has_uvs_lm:
+                        uvs_lm.extend(
+                            tuple(float(value) for value in vertex["uv_lm"][:2])
+                            for vertex in triangle
+                        )
+                    faces.append(
+                        (first_index, first_index + 1, first_index + 2)
+                    )
+                    face_mats.append(
+                        int(material_rows[face_index])
+                        if face_index < len(material_rows)
+                        else 0
+                    )
+                    faces_after += 1
+        if faces:
+            trimmed_surfaces.append(
+                replace(
+                    surface,
+                    vertices=tuple(vertices),
+                    faces=tuple(faces),
+                    face_mats=tuple(face_mats),
+                    uvs=tuple(uvs) if has_uvs else (),
+                    normals=tuple(normals) if has_normals else (),
+                    uvs_lm=tuple(uvs_lm) if has_uvs_lm else (),
+                )
+            )
+
+    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    metadata["environment_kit_room_volume_trim"] = {
+        "operation": "candidate_render_minus_existing_room_footprints",
+        "position": [px, py, float(position[2])],
+        "epsilon_m": tolerance,
+        "rooms": sorted(affected_rooms),
+        "render_faces_before": faces_before,
+        "render_faces_after": faces_after,
+        "wok_policy": "preserved_for_portal_and_occupancy_validation",
+        "uv_policy": "interpolated_without_rescaling",
+    }
+    return replace(
+        primitive,
+        surfaces=tuple(trimmed_surfaces),
+        metadata=metadata,
+    )
 
 
 def seal_environment_kit_exterior_bounds(
@@ -596,6 +1199,34 @@ def environment_kit_builder_style_id(game: str, module_resref: str, collection_i
         )
     ):
         return "architecture:k2_telos_citadel"
+    if target_game == "K2" and (
+        module in {"501ond", "502ond", "511ond", "512ond"}
+        or collection.startswith(
+            (
+                "k2_501ond",
+                "k2_502ond",
+                "k2_511ond",
+                "k2_512ond",
+                "k2_onderon_city",
+            )
+        )
+    ):
+        return "architecture:k2_onderon_city"
+    if target_game == "K2" and (
+        module in {"503ond", "510ond"}
+        or collection.startswith(("k2_503ond", "k2_510ond", "k2_onderon_cantina"))
+    ):
+        return "architecture:k2_onderon_cantina"
+    if target_game == "K2" and (
+        module in {"504ond", "505ond"}
+        or collection.startswith(("k2_504ond", "k2_505ond", "k2_onderon_sky_ramp"))
+    ):
+        return "architecture:k2_onderon_sky_ramp"
+    if target_game == "K2" and (
+        module == "506ond"
+        or collection.startswith(("k2_506ond", "k2_onderon_palace"))
+    ):
+        return "architecture:k2_onderon_palace"
     return f"kit:{collection}" if collection else ""
 
 
@@ -610,6 +1241,10 @@ def environment_kit_builder_style_label(style_id: str) -> str:
         "architecture:k2_korriban_caves": "K2 Shyrack Caves — All Corridors, Caverns & Webbed Passages",
         "architecture:k2_harbinger": "Harbinger — All Vanilla Rooms + Dressing",
         "architecture:k2_telos_citadel": "Telos Citadel Station — All Public, Residential & Entertainment Rooms + Dressing",
+        "architecture:k2_onderon_city": "Onderon City — Spaceport, Merchant Quarter, Western Square, Buildings & Street Props",
+        "architecture:k2_onderon_cantina": "Onderon Cantina — All Vanilla Rooms, Bar, Seating & Hospitality Props",
+        "architecture:k2_onderon_sky_ramp": "Onderon Sky Ramp — Monumental Exterior Rooms, Towers & Ramp Dressing",
+        "architecture:k2_onderon_palace": "Onderon Royal Palace — All Vanilla Rooms, Galleries, Museum & Palace Props",
     }.get(str(style_id or "").strip().lower(), "Selected Building Style")
 
 
@@ -677,6 +1312,8 @@ class EnvironmentKitPiece:
     triangle_count: int = 0
     magnets: tuple[EnvironmentKitMagnet, ...] = ()
     tags: tuple[str, ...] = ()
+    placement_quality: str = "verified"
+    placement_quality_message: str = ""
 
 
 @dataclass(frozen=True)
@@ -812,6 +1449,8 @@ def _piece_from_payload(raw: object) -> EnvironmentKitPiece:
         triangle_count=int(row.get("triangle_count") or 0),
         magnets=magnets,
         tags=tuple(str(value) for value in tuple(row.get("tags") or ())),
+        placement_quality=str(row.get("placement_quality") or "verified").strip().lower(),
+        placement_quality_message=str(row.get("placement_quality_message") or "").strip(),
     )
 
 
@@ -1553,11 +2192,389 @@ def _telos_citadel_dressing_collection() -> EnvironmentKitCollection:
     )
 
 
+def _onderon_environment_collections() -> tuple[EnvironmentKitCollection, ...]:
+    """Curated, individually placeable Onderon buildings and environment art.
+
+    Full retail rooms remain available as magnet-ready room tiles. These
+    recipes deliberately add a second shelf for world building: complete
+    freestanding building shells and small environment clusters clipped from
+    the installed base-game rooms while retaining their original UVs and
+    materials. No BioWare mesh bytes are stored in the catalog.
+    """
+
+    broad_bounds = (-500.0, -500.0, -100.0, 500.0, 500.0, 500.0)
+
+    def piece(
+        collection_id: str,
+        module: str,
+        room: str,
+        suffix: str,
+        label: str,
+        class_id: str,
+        *,
+        bounds: tuple[float, float, float, float, float, float] = broad_bounds,
+        surfaces: tuple[str, ...] = (),
+        anchor: str = "floor",
+        dimensions: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        texture: str = "",
+        tags: tuple[str, ...] = (),
+    ) -> EnvironmentKitPiece:
+        return EnvironmentKitPiece(
+            piece_id=f"{collection_id}_{suffix}",
+            collection_id=collection_id,
+            label=label,
+            game="K2",
+            module_resref=module,
+            room_resref=room,
+            role="dressing",
+            class_id=class_id,
+            model_resref=room,
+            source_bounds_m=bounds,
+            source_surface_names=surfaces,
+            anchor_mode=anchor,
+            local_normal_axis="y",
+            dimensions_m=dimensions,
+            texture_resref=texture,
+            tags=(
+                "k2",
+                "onderon",
+                "iziz",
+                "individually-placeable",
+                "vanilla-derived",
+            )
+            + tuple(tags),
+            placement_quality=(
+                "needs_review" if str(class_id or "").startswith("building:") else "verified"
+            ),
+            placement_quality_message=(
+                "This vanilla building clip is hidden from drag placement until its silhouette, "
+                "ground contact, and connected components pass visual review."
+                if str(class_id or "").startswith("building:")
+                else ""
+            ),
+        )
+
+    city_id = "k2_onderon_city_environment"
+    city = EnvironmentKitCollection(
+        collection_id=city_id,
+        label="Onderon City — Buildings & Street Environment",
+        game="K2",
+        module_resref="502ond",
+        environment_kind="exterior",
+        floor_texture="ond_fl02",
+        wall_texture="ond_wl05",
+        ceiling_texture="ond_rk01",
+        pieces=(
+            piece(
+                city_id,
+                "501ond",
+                "501onde",
+                "market_pavilion",
+                "Iziz Freestanding Market Pavilion",
+                "building:market_pavilion",
+                bounds=(-37.60, -27.90, 10.60, 4.20, 11.20, 22.00),
+                dimensions=(41.60, 38.80, 11.20),
+                texture="ond_tr04",
+                tags=("building", "external building", "market", "pavilion", "spaceport"),
+            ),
+            piece(
+                city_id,
+                "501ond",
+                "501ondg",
+                "spaceport_palace_block",
+                "Iziz Spaceport Civic Building",
+                "building:civic_block",
+                dimensions=(57.30, 78.30, 22.70),
+                texture="ond_wl12",
+                tags=("building", "external building", "civic", "spaceport"),
+            ),
+            piece(
+                city_id,
+                "512ond",
+                "512ondi",
+                "western_square_palace_block",
+                "Western Square Civic Building",
+                "building:civic_block",
+                dimensions=(57.30, 78.30, 22.70),
+                texture="ond_wl12",
+                tags=("building", "external building", "western square", "palace facade"),
+            ),
+            piece(
+                city_id,
+                "512ond",
+                "512onde",
+                "western_square_shop",
+                "Western Square Shopfront Building",
+                "building:shopfront",
+                dimensions=(26.90, 13.50, 3.70),
+                texture="ond_wl05",
+                tags=("building", "external building", "shop", "merchant quarter"),
+            ),
+            piece(
+                city_id,
+                "512ond",
+                "512ondd",
+                "cantina_sign",
+                "Iziz Cantina Exterior Sign",
+                "dressing:sign",
+                surfaces=("sign8",),
+                anchor="wall",
+                dimensions=(10.40, 2.10, 1.60),
+                texture="ond_can_sign",
+                tags=("sign", "cantina", "wall decor", "wayfinding"),
+            ),
+            piece(
+                city_id,
+                "512ond",
+                "512ondd",
+                "merchant_sign",
+                "Iziz Merchant Banner",
+                "dressing:sign",
+                surfaces=("sign81-",),
+                anchor="wall",
+                dimensions=(12.10, 4.00, 2.20),
+                texture="ond_bu",
+                tags=("sign", "merchant", "banner", "wall decor"),
+            ),
+            piece(
+                city_id,
+                "501ond",
+                "501onde",
+                "civic_lamp",
+                "Iziz Civic Wall Lamp",
+                "dressing:wall_light",
+                surfaces=("501ond231",),
+                anchor="wall",
+                dimensions=(1.20, 0.60, 2.00),
+                texture="ond_lt02",
+                tags=("light", "lamp", "wall light", "street"),
+            ),
+            piece(
+                city_id,
+                "501ond",
+                "501onde",
+                "facade_trim",
+                "Iziz Beveled Facade Trim",
+                "dressing:architectural_trim",
+                surfaces=("501ond215",),
+                anchor="wall",
+                dimensions=(4.00, 0.80, 3.60),
+                texture="ond_tr01",
+                tags=("facade", "trim", "arch", "wall decor"),
+            ),
+        ),
+        tags=(
+            "k2",
+            "onderon",
+            "city",
+            "exterior",
+            "buildings",
+            "props",
+            "content-browser",
+            "individually-placeable",
+            "vanilla-derived",
+        ),
+    )
+
+    cantina_id = "k2_onderon_cantina_environment"
+    cantina = EnvironmentKitCollection(
+        collection_id=cantina_id,
+        label="Onderon Cantina — Furniture & Hospitality Dressing",
+        game="K2",
+        module_resref="503ond",
+        environment_kind="interior",
+        floor_texture="ond_fl08",
+        wall_texture="ond_wl12",
+        ceiling_texture="ond_wl02",
+        pieces=(
+            piece(
+                cantina_id,
+                "503ond",
+                "503onde",
+                "cantina_chair",
+                "Iziz Cantina Chair",
+                "dressing:seating",
+                surfaces=("chairtop16", "chairbase16"),
+                dimensions=(1.10, 1.10, 1.30),
+                texture="ond_wl11",
+                tags=("cantina", "chair", "seating", "furniture"),
+            ),
+            piece(
+                cantina_id,
+                "503ond",
+                "503onde",
+                "cantina_chair_pair",
+                "Iziz Cantina Chair Pair",
+                "dressing:seating",
+                surfaces=("chairtop15", "chairbase15", "chairtop16", "chairbase16"),
+                dimensions=(2.60, 1.20, 1.30),
+                texture="ond_wl11",
+                tags=("cantina", "chairs", "seating", "furniture"),
+            ),
+            piece(
+                cantina_id,
+                "512ond",
+                "512ondd",
+                "cantina_sign",
+                "Iziz Cantina Sign",
+                "dressing:sign",
+                surfaces=("sign8",),
+                anchor="wall",
+                dimensions=(10.40, 2.10, 1.60),
+                texture="ond_can_sign",
+                tags=("cantina", "sign", "wall decor"),
+            ),
+        ),
+        tags=(
+            "k2",
+            "onderon",
+            "cantina",
+            "interior",
+            "furniture",
+            "props",
+            "content-browser",
+            "individually-placeable",
+            "vanilla-derived",
+        ),
+    )
+
+    ramp_id = "k2_onderon_sky_ramp_environment"
+    ramp = EnvironmentKitCollection(
+        collection_id=ramp_id,
+        label="Onderon Sky Ramp — Towers & Monumental Structures",
+        game="K2",
+        module_resref="504ond",
+        environment_kind="exterior",
+        floor_texture="ond_fl03",
+        wall_texture="ond_wl08",
+        ceiling_texture="ond_rk02",
+        pieces=(
+            piece(
+                ramp_id,
+                "504ond",
+                "504ondj",
+                "ramp_gatehouse",
+                "Sky Ramp Gatehouse",
+                "building:gatehouse",
+                dimensions=(38.50, 47.90, 12.70),
+                texture="ond_wl08",
+                tags=("building", "external building", "gatehouse", "sky ramp"),
+            ),
+            piece(
+                ramp_id,
+                "504ond",
+                "504ondk",
+                "ramp_tower",
+                "Sky Ramp Monumental Tower",
+                "building:tower",
+                dimensions=(234.50, 202.10, 255.30),
+                texture="ond_wl10",
+                tags=("building", "external building", "tower", "skyline", "monumental"),
+            ),
+            piece(
+                ramp_id,
+                "504ond",
+                "504ondc",
+                "ramp_terrace",
+                "Sky Ramp Terrace Structure",
+                "building:terrace",
+                dimensions=(51.20, 82.60, 36.80),
+                texture="ond_wl08",
+                tags=("building", "external building", "terrace", "ramp"),
+            ),
+        ),
+        tags=(
+            "k2",
+            "onderon",
+            "sky ramp",
+            "exterior",
+            "buildings",
+            "content-browser",
+            "individually-placeable",
+            "vanilla-derived",
+        ),
+    )
+
+    palace_id = "k2_onderon_palace_environment"
+    palace = EnvironmentKitCollection(
+        collection_id=palace_id,
+        label="Onderon Royal Palace — Museum & Ceremonial Dressing",
+        game="K2",
+        module_resref="506ond",
+        environment_kind="interior",
+        floor_texture="ond_fl07",
+        wall_texture="ond_wl12",
+        ceiling_texture="ond_wl02",
+        pieces=(
+            piece(
+                palace_id,
+                "506ond",
+                "506ondu",
+                "royal_statue",
+                "Onderon Royal Museum Statue",
+                "dressing:statue",
+                surfaces=("stachuz",),
+                dimensions=(1.30, 3.60, 4.60),
+                texture="ond_orn",
+                tags=("palace", "museum", "statue", "ceremonial"),
+            ),
+            piece(
+                palace_id,
+                "506ond",
+                "506ondu",
+                "artifact_04",
+                "Onderon Museum Artifact Display",
+                "dressing:artifact",
+                surfaces=("artifact04",),
+                dimensions=(13.60, 7.50, 1.90),
+                texture="ond_orn",
+                tags=("palace", "museum", "artifact", "display"),
+            ),
+            piece(
+                palace_id,
+                "506ond",
+                "506ondu",
+                "artifact_pair",
+                "Onderon Museum Artifact Pair",
+                "dressing:artifact",
+                surfaces=("artifact03", "artifact04"),
+                dimensions=(15.00, 8.00, 2.20),
+                texture="ond_orn",
+                tags=("palace", "museum", "artifact", "display"),
+            ),
+            piece(
+                palace_id,
+                "506ond",
+                "506onda",
+                "palace_gallery",
+                "Royal Palace Gallery Wing",
+                "building:palace_wing",
+                dimensions=(57.00, 18.00, 12.70),
+                texture="ond_wl12",
+                tags=("building", "palace", "gallery", "complete room wing"),
+            ),
+        ),
+        tags=(
+            "k2",
+            "onderon",
+            "royal palace",
+            "interior",
+            "museum",
+            "props",
+            "content-browser",
+            "individually-placeable",
+            "vanilla-derived",
+        ),
+    )
+    return city, cantina, ramp, palace
+
+
 def _builtin_environment_kit_collections() -> tuple[EnvironmentKitCollection, ...]:
     return (
         _republic_warship_dressing_collection(game="K1"),
         _republic_warship_dressing_collection(game="K2"),
         _telos_citadel_dressing_collection(),
+        *_onderon_environment_collections(),
         _korriban_dressing_collection(game="K1", family="tombs"),
         _korriban_dressing_collection(game="K2", family="tombs"),
         _korriban_dressing_collection(game="K1", family="caves"),
@@ -2085,6 +3102,9 @@ def environment_kit_piece_rows(
                     "wall_texture": collection.wall_texture,
                     "ceiling_texture": collection.ceiling_texture,
                     "tags": piece.tags,
+                    "placement_quality": piece.placement_quality,
+                    "placement_ready": piece.placement_quality == "verified",
+                    "placement_quality_message": piece.placement_quality_message,
                     "building_style_id": environment_kit_builder_style_id(
                         collection.game,
                         collection.module_resref,
@@ -2106,6 +3126,11 @@ def environment_kit_drag_payload(
     entry = environment_kit_piece(piece) if isinstance(piece, str) else piece
     if entry is None:
         raise ValueError(f"Unknown environment-kit piece {piece!r}.")
+    if entry.placement_quality != "verified":
+        raise ValueError(
+            entry.placement_quality_message
+            or f"{entry.label} is awaiting geometry review and cannot be placed."
+        )
     return {
         "schema": ENVIRONMENT_KIT_PAYLOAD_SCHEMA,
         "piece_id": entry.piece_id,
@@ -2332,6 +3357,7 @@ __all__ = [
     "ENVIRONMENT_KIT_SCHEMA",
     "ENVIRONMENT_KIT_MIME_TYPE",
     "ENVIRONMENT_KIT_PAYLOAD_SCHEMA",
+    "audit_environment_kit_room_occupancy",
     "EnvironmentKitCollection",
     "EnvironmentKitMagnet",
     "EnvironmentKitPiece",
@@ -2354,6 +3380,7 @@ __all__ = [
     "scan_vanilla_environment_kits",
     "seal_environment_kit_exterior_bounds",
     "trim_environment_kit_connection_overlap",
+    "trim_environment_kit_room_volume_overlap",
     "vanilla_environment_kit_collections",
     "write_vanilla_environment_kit_catalog",
 ]

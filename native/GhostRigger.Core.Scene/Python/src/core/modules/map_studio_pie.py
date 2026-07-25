@@ -85,6 +85,16 @@ class MapStudioPIEConfig:
     door_transition_reach: float = 2.75
 
 
+@dataclass(frozen=True)
+class MapStudioPIERoomVisibility:
+    """One room-aware runtime visibility update."""
+
+    active_room_resref: str = ""
+    visible_room_resrefs: tuple[str, ...] = ()
+    hidden_room_resrefs: tuple[str, ...] = ()
+    changed_node_count: int = 0
+
+
 @dataclass
 class MapStudioPIEDoorState:
     """Runtime open/closed state for one authored door in the simulation."""
@@ -414,6 +424,156 @@ def _model_nodes(model: Any) -> tuple[Any, ...]:
     return tuple(rows)
 
 
+def apply_map_studio_pie_room_visibility(
+    model: Any,
+    *,
+    active_room_resref: object,
+    connected_room_resrefs: Iterable[object] = (),
+    player_position: object = (0.0, 0.0, 0.0),
+    nearby_distance: float = 18.0,
+) -> MapStudioPIERoomVisibility:
+    """Cull distant authored rooms while preserving the active threshold view.
+
+    KOTOR's LYT/VIS organization is room based. Map Studio PIE keeps the
+    player's current WOK face associated with its source room, then retains the
+    current room, directly connected rooms, nearby exterior dressing, and
+    backdrop rooms. This avoids rendering an entire authored district while
+    standing inside one room without introducing distance pop at a doorway.
+    """
+
+    root = getattr(model, "root_node", None)
+    active = str(active_room_resref or "").strip().lower()
+    if root is None or not active:
+        return MapStudioPIERoomVisibility(active_room_resref=active)
+    try:
+        px, py = (float(value) for value in tuple(player_position)[:2])
+    except Exception:
+        px, py = (0.0, 0.0)
+    visible = {
+        str(value or "").strip().lower()
+        for value in tuple(connected_room_resrefs or ())
+        if str(value or "").strip()
+    }
+    visible.add(active)
+    room_nodes = tuple(
+        node
+        for node in _model_nodes(model)
+        if bool(getattr(node, "_gr_map_studio_authored_room", False))
+        and str(getattr(node, "_gr_map_studio_room_resref", "") or "").strip()
+    )
+
+    bounds_by_room = getattr(model, "_gr_map_studio_pie_room_bounds_xy", None)
+    if not isinstance(bounds_by_room, dict):
+        bounds_by_room = {}
+        for room in room_nodes:
+            room_resref = str(
+                getattr(room, "_gr_map_studio_room_resref", "") or ""
+            ).strip().lower()
+            xs: list[float] = []
+            ys: list[float] = []
+            stack = list(tuple(getattr(room, "children", ()) or ()))
+            while stack:
+                node = stack.pop()
+                stack.extend(tuple(getattr(node, "children", ()) or ()))
+                vertices = tuple(getattr(node, "vertices", ()) or ())
+                if not vertices:
+                    continue
+                vertex_space = int(getattr(node, "vertex_space", 0) or 0)
+                try:
+                    world_position, world_rotation = node.world_transform()
+                    wx, wy, _wz = (
+                        float(value) for value in tuple(world_position)[:3]
+                    )
+                except Exception:
+                    wx, wy = (0.0, 0.0)
+                    world_rotation = (0.0, 0.0, 0.0, 1.0)
+                for vertex in vertices:
+                    try:
+                        point = tuple(
+                            float(value) for value in tuple(vertex)[:3]
+                        )
+                    except Exception:
+                        continue
+                    if len(point) < 3:
+                        continue
+                    if vertex_space == 1:
+                        world = point
+                    else:
+                        rotated = _quat_rotate(world_rotation, point)
+                        world = (rotated[0] + wx, rotated[1] + wy, rotated[2])
+                    xs.append(float(world[0]))
+                    ys.append(float(world[1]))
+            if xs and ys:
+                bounds_by_room[room_resref] = (
+                    min(xs),
+                    min(ys),
+                    max(xs),
+                    max(ys),
+                )
+        setattr(model, "_gr_map_studio_pie_room_bounds_xy", bounds_by_room)
+
+    keep_nearby = max(0.0, float(nearby_distance))
+    for room in room_nodes:
+        room_resref = str(
+            getattr(room, "_gr_map_studio_room_resref", "") or ""
+        ).strip().lower()
+        if bool(getattr(room, "_gr_map_studio_backdrop", False)):
+            visible.add(room_resref)
+            continue
+        bounds = bounds_by_room.get(room_resref)
+        if not bounds:
+            continue
+        min_x, min_y, max_x, max_y = (float(value) for value in bounds)
+        dx = max(min_x - px, 0.0, px - max_x)
+        dy = max(min_y - py, 0.0, py - max_y)
+        if math.hypot(dx, dy) <= keep_nearby:
+            visible.add(room_resref)
+
+    changed = 0
+    hidden_rooms: list[str] = []
+    for room in room_nodes:
+        room_resref = str(
+            getattr(room, "_gr_map_studio_room_resref", "") or ""
+        ).strip().lower()
+        room_visible = room_resref in visible
+        if not room_visible:
+            hidden_rooms.append(room_resref)
+        stack = [room]
+        while stack:
+            node = stack.pop()
+            stack.extend(tuple(getattr(node, "children", ()) or ()))
+            if bool(
+                getattr(node, "_gr_map_studio_pie_visibility_exempt", False)
+            ):
+                continue
+            if not hasattr(node, "_gr_map_studio_pie_visibility_base_hidden"):
+                setattr(
+                    node,
+                    "_gr_map_studio_pie_visibility_base_hidden",
+                    bool(getattr(node, "_gr_hidden", False)),
+                )
+            base_hidden = bool(
+                getattr(node, "_gr_map_studio_pie_visibility_base_hidden", False)
+            )
+            wanted_hidden = base_hidden or not room_visible
+            if bool(getattr(node, "_gr_hidden", False)) != wanted_hidden:
+                setattr(node, "_gr_hidden", wanted_hidden)
+                changed += 1
+
+    if changed:
+        setattr(
+            model,
+            "_gr_classification_revision",
+            int(getattr(model, "_gr_classification_revision", 0) or 0) + 1,
+        )
+    return MapStudioPIERoomVisibility(
+        active_room_resref=active,
+        visible_room_resrefs=tuple(sorted(visible)),
+        hidden_room_resrefs=tuple(sorted(hidden_rooms)),
+        changed_node_count=changed,
+    )
+
+
 def _is_actor_support_node_name(name: object) -> bool:
     clean = "".join(character for character in str(name or "").strip().lower() if character.isalnum())
     return any(token in clean for token in ("foot", "paw", "hoof", "toe"))
@@ -637,6 +797,8 @@ class MapStudioPIESession:
         spawn_facing: float = 0.0,
         collision_triangles: Iterable[CollisionTriangle] = (),
         config: MapStudioPIEConfig | None = None,
+        face_room_resrefs: Iterable[object] = (),
+        room_connections: Iterable[tuple[object, object]] = (),
     ) -> None:
         self.game = str(game or "K1").strip().upper()
         self.config = config or MapStudioPIEConfig()
@@ -647,6 +809,27 @@ class MapStudioPIESession:
         )
         self.collision_triangles = tuple(collision_triangles or ())
         self.collision = SegmentCollisionIndex(self.collision_triangles)
+        face_owners = tuple(
+            str(value or "").strip().lower()
+            for value in tuple(face_room_resrefs or ())
+        )
+        self.face_room_resrefs = (
+            face_owners
+            if len(face_owners) == len(tuple(getattr(wok, "faces", ()) or ()))
+            else ()
+        )
+        adjacency: dict[str, set[str]] = {}
+        for raw_source, raw_target in tuple(room_connections or ()):
+            source = str(raw_source or "").strip().lower()
+            target = str(raw_target or "").strip().lower()
+            if not source or not target or source == target:
+                continue
+            adjacency.setdefault(source, set()).add(target)
+            adjacency.setdefault(target, set()).add(source)
+        self.room_connections = {
+            room: tuple(sorted(targets))
+            for room, targets in adjacency.items()
+        }
         spawn = tuple(float(value) for value in tuple(spawn_position)[:3])
         sample = self.walkmesh.validate_disc(
             spawn,
@@ -692,6 +875,24 @@ class MapStudioPIESession:
     @property
     def simulation_time(self) -> float:
         return float(self._simulation_time)
+
+    def current_room_resref(self) -> str:
+        """Return the source authored room owning the player's WOK face."""
+
+        face_index = int(getattr(self.state, "face_index", -1))
+        if 0 <= face_index < len(self.face_room_resrefs):
+            return str(self.face_room_resrefs[face_index] or "")
+        return ""
+
+    def visible_room_resrefs(self) -> tuple[str, ...]:
+        """Return the current room and its directly connected threshold rooms."""
+
+        current = self.current_room_resref()
+        if not current:
+            return ()
+        return tuple(
+            dict.fromkeys((current, *self.room_connections.get(current, ())))
+        )
 
     def _ensure_doors(self) -> list[MapStudioPIEDoorState]:
         """Build the door-state list once from the attached entity registry."""
@@ -1503,6 +1704,12 @@ def build_map_studio_pie_session(
         spawn_facing=facing,
         collision_triangles=collision_triangles,
         config=config,
+        face_room_resrefs=tuple(
+            getattr(combined, "face_room_resrefs", ()) or ()
+        ),
+        room_connections=tuple(
+            getattr(combined, "room_connections", ()) or ()
+        ),
     )
     blocking.extend(session.validation.blocking_issues)
     warnings.extend(session.validation.warnings)

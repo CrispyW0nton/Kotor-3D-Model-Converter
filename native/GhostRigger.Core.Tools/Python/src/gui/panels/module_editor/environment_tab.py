@@ -6,6 +6,11 @@ from typing import Any
 
 from PySide6 import QtCore, QtWidgets
 
+from src.core.modules.authored_skybox import (
+    available_kotor_skybox_presets,
+    kotor_skybox_preset,
+)
+
 
 class MapStudioEnvironmentTab(QtWidgets.QWidget):
     """Presentation-only Environment tab; engine policy stays in core modules."""
@@ -146,6 +151,14 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         sky_layout = QtWidgets.QVBoxLayout(self.sky_group)
         sky_form = QtWidgets.QFormLayout()
         sky_layout.addLayout(sky_form)
+        self.sky_preset_combo = QtWidgets.QComboBox(self.sky_group)
+        self.sky_preset_combo.setObjectName("mapStudioSkyboxPresetComboBox")
+        self.sky_preset_combo.setAccessibleName("Vanilla sky style")
+        self.sky_preset_combo.setToolTip(
+            "Choose a measured sky texture set from an installed KOTOR module, "
+            "or keep Custom to enter five texture ResRefs manually."
+        )
+        sky_form.addRow("Vanilla sky", self.sky_preset_combo)
         self.sky_room_resref_edit = QtWidgets.QLineEdit(self.sky_group)
         self.sky_room_resref_edit.setObjectName("mapStudioSkyRoomResrefLineEdit")
         self.sky_room_resref_edit.setMaxLength(16)
@@ -279,6 +292,7 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.lightmap_surface_combo.currentIndexChanged.connect(self._refresh_lightmap_default_resref)
         self.sky_create_button.clicked.connect(self._emit_skybox_create)
         self.sky_panorama_button.clicked.connect(self._emit_sky_panorama)
+        self.sky_preset_combo.currentIndexChanged.connect(self._apply_skybox_preset)
         self.sky_traffic_create_button.clicked.connect(self._emit_sky_traffic_create)
         self.sky_traffic_timing_combo.currentIndexChanged.connect(self._sync_sky_traffic_timing_controls)
         self._sync_sky_traffic_timing_controls()
@@ -398,6 +412,8 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
     def skybox_settings(self) -> dict[str, Any]:
         """Return the five-face recipe requested from the headless controller."""
 
+        preset_id = str(self.sky_preset_combo.currentData() or "")
+        preset = kotor_skybox_preset(preset_id)
         return {
             "room_resref": self.sky_room_resref_edit.text().strip(),
             "north_texture": self.sky_texture_edits["north"].text().strip(),
@@ -409,6 +425,17 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
             "bottom_z": float(self.sky_bottom_z_spin.value()),
             "top_z": float(self.sky_top_z_spin.value()),
             "visible_rooms": tuple(getattr(self, "_sky_visible_rooms", ())),
+            "authoring_metadata": (
+                {
+                    "skybox_preset_id": preset.preset_id,
+                    "skybox_source_game": preset.game,
+                    "skybox_source_module": preset.source_module,
+                    "skybox_source_room": preset.source_room,
+                    "skybox_source": "measured_vanilla_module_textures",
+                }
+                if preset is not None
+                else {}
+            ),
         }
 
     def lightmap_settings(self) -> dict[str, Any]:
@@ -523,6 +550,17 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         root = str(module_root or "").strip().lower()
         rooms = tuple(str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip())
         self._sky_visible_rooms = rooms
+        selected_preset = str(self.sky_preset_combo.currentData() or "")
+        self.sky_preset_combo.blockSignals(True)
+        try:
+            self.sky_preset_combo.clear()
+            self.sky_preset_combo.addItem("Custom / Existing Textures", "")
+            for preset in available_kotor_skybox_presets(game):
+                self.sky_preset_combo.addItem(preset.label, preset.preset_id)
+            selected_index = self.sky_preset_combo.findData(selected_preset)
+            self.sky_preset_combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+        finally:
+            self.sky_preset_combo.blockSignals(False)
         self.sky_group.setEnabled(bool(root))
         self.sky_panorama_button.setEnabled(bool(root and rooms))
         if root and not self.sky_room_resref_edit.text().strip():
@@ -533,6 +571,23 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
                 self.sky_texture_edits[face].setText(f"{prefix}_{suffix}"[:16])
         self.sky_group.setToolTip(
             f"Create a {str(game or 'K1').upper()} visual-only sky dome visible from {len(rooms)} authored room(s)."
+        )
+
+    def _apply_skybox_preset(self, _index: int = -1) -> None:
+        """Fill the five explicit fields from one retail-derived recipe."""
+
+        preset = kotor_skybox_preset(str(self.sky_preset_combo.currentData() or ""))
+        if preset is None:
+            return
+        for face, texture in preset.textures.ordered_items():
+            self.sky_texture_edits[face].setText(texture)
+        self.sky_half_extent_spin.setValue(float(preset.half_extent))
+        self.sky_bottom_z_spin.setValue(float(preset.bottom_z))
+        self.sky_top_z_spin.setValue(float(preset.top_z))
+        self.sky_status_label.setText(
+            f"Ready: {preset.label}. These are the original texture ResRefs from "
+            f"{preset.source_room.upper()} in {preset.source_module.upper()}; Ghost Studio "
+            "builds a curved visual-only dome and leaves collision untouched."
         )
 
     def set_skybox_status(self, message: str) -> None:

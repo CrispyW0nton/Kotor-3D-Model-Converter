@@ -1020,6 +1020,9 @@ def preview_authored_room_drag_snap(
     source_room_resref: str,
     world_delta: tuple[float, float, float] | list[float],
     snap_distance: float = 2.5,
+    target_room_resref: str = "",
+    target_edge_index: int = -1,
+    target_opening_name: str = "",
 ) -> AuthoredRoomDragSnapPreview:
     """Solve the closest exact doorway connection for a whole-room drag."""
 
@@ -1030,10 +1033,23 @@ def preview_authored_room_drag_snap(
         return AuthoredRoomDragSnapPreview(False, clean_source, reason="Only one authored floor-plan room can doorway-snap at a time.")
     source_origin = tuple(float(value) for value in source_room.position)
     proposed_origin = tuple(source_origin[index] + delta_values[index] for index in range(3))
+    clean_target = normalise_resref(target_room_resref)
+    wanted_edge = int(target_edge_index)
+    wanted_opening = str(target_opening_name or "").strip().lower()
     target_hooks = tuple(
         hook
         for hook in authored_room_connection_hooks(project)
         if hook.room_resref != clean_source and hook.passable and not hook.external and not hook.connected_room_resref
+        and (not clean_target or hook.room_resref == clean_target)
+        and (
+            not wanted_opening
+            or str(hook.opening_name or "").strip().lower() == wanted_opening
+        )
+        and (
+            bool(wanted_opening)
+            or wanted_edge < 0
+            or int(hook.edge_index) == wanted_edge
+        )
     )
     if not target_hooks:
         return AuthoredRoomDragSnapPreview(
@@ -1054,6 +1070,31 @@ def preview_authored_room_drag_snap(
                     align_source=True,
                 )
             except ValueError:
+                continue
+            # A doorway has two mathematically aligned source-wall choices.
+            # Only the one whose room body remains outside every occupied room
+            # is a valid Lego-style placement. Cursor distance alone can pick
+            # the mirrored solution and place an entire room through the
+            # destination wall.
+            from .map_studio_environment_kits import (
+                audit_environment_kit_room_occupancy,
+            )
+
+            solved_source = next(
+                room
+                for room in solution.project.rooms
+                if _room_name(room) == clean_source
+            )
+            occupancy = audit_environment_kit_room_occupancy(
+                solved_source.primitive,
+                position=tuple(float(value) for value in solved_source.position),
+                rooms=tuple(
+                    room
+                    for room in solution.project.rooms
+                    if _room_name(room) != clean_source
+                ),
+            )
+            if not bool(occupancy.get("ok", False)):
                 continue
             snapped_origin = tuple(source_origin[index] + float(solution.translation[index]) for index in range(3))
             distance = math.sqrt(sum((snapped_origin[index] - proposed_origin[index]) ** 2 for index in range(3)))

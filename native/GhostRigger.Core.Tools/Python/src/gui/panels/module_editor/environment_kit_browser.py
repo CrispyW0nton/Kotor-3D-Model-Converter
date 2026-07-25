@@ -196,6 +196,8 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self.asset_list.dragFinished.connect(self._drag_finished)
 
     def _drag_payload(self, entry: object) -> dict[str, Any]:
+        if not bool(_value(entry, "placement_ready", True)):
+            return {}
         return environment_kit_drag_payload(
             str(_value(entry, "piece_id") or ""),
             rotation_degrees_z=float(self.rotation_spin.value()),
@@ -354,6 +356,8 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             tags = " ".join(str(value) for value in tuple(_value(entry, "tags", ()) or ()))
             item = QtGui.QStandardItem(label)
             item.setEditable(False)
+            placement_ready = bool(_value(entry, "placement_ready", True))
+            item.setEnabled(placement_ready)
             item.setData(entry, _PLACEMENT_ENTRY_ROLE)
             item.setData(entry_collection, _ENV_COLLECTION_ROLE)
             item.setData(class_id, _ENV_CLASS_ROLE)
@@ -373,7 +377,17 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             )
             item.setToolTip(
                 f"{collection_label}\n{class_id.replace('_', ' ')} · {magnet_count} doorway magnet(s)\n"
-                + placement_hint
+                + (
+                    placement_hint
+                    if placement_ready
+                    else str(
+                        _value(
+                            entry,
+                            "placement_quality_message",
+                            "This piece is awaiting geometry review and cannot be dragged yet.",
+                        )
+                    )
+                )
             )
             self._model.appendRow(item)
 
@@ -407,7 +421,17 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
                 else f"{int(_value(entry, 'magnet_count', 0) or 0)} doorway magnet(s) · "
             )
             + f"source {_value(entry, 'game')}:{_value(entry, 'module_resref')}/{_value(entry, 'room_resref')}. "
-            "Drag the card into the viewport."
+            + (
+                "Drag the card into the viewport."
+                if bool(_value(entry, "placement_ready", True))
+                else str(
+                    _value(
+                        entry,
+                        "placement_quality_message",
+                        "This piece is awaiting geometry review and cannot be dragged yet.",
+                    )
+                )
+            )
         )
         self.statusChanged.emit(self.detail_label.text())
         self._request_thumbnail_for_index(current)

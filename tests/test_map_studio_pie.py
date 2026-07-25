@@ -135,6 +135,24 @@ def test_pie_fixed_step_moves_at_retail_walk_speed() -> None:
     assert frame.moving and not frame.blocked
 
 
+def test_pie_tracks_authored_room_from_current_walkmesh_face() -> None:
+    """Runtime VIS ownership follows the same combined WOK face as movement."""
+
+    from src.core.modules.map_studio_pie import MapStudioPIESession
+
+    session = MapStudioPIESession(
+        _quad_wok(maximum=20.0),
+        game="K2",
+        spawn_position=(5.0, 5.0, 0.0),
+        face_room_resrefs=("arrival", "arrival"),
+        room_connections=(("arrival", "courtyard"),),
+    )
+
+    assert session.validation.ok
+    assert session.current_room_resref() == "arrival"
+    assert session.visible_room_resrefs() == ("arrival", "courtyard")
+
+
 def test_pie_player_actor_faces_actual_wok_constrained_motion() -> None:
     """A boundary slide must turn the +Y-forward actor toward its real velocity."""
 
@@ -927,6 +945,7 @@ def test_pie_clean_runtime_presentation_masks_editor_helpers_without_disabling_l
 
     gpu_frame = _method_source(render_source, "_render_gpu_frame")
     assert 'clean_runtime = bool(self.property("_gr_map_studio_pie_clean_runtime"))' in gpu_frame
+    assert "interactive_render_scale = 0.90 if clean_runtime else 1.0" in gpu_frame
     assert "show_light_gizmos" in gpu_frame and "and not clean_runtime" in gpu_frame
     assert "show_light_radius_volumes" in gpu_frame
     assert "show_dummy_helpers" in gpu_frame

@@ -22,6 +22,8 @@ class AuthoredModuleWalkmesh:
     wok: WOKData
     room_count: int = 0
     source_rooms: tuple[str, ...] = ()
+    face_room_resrefs: tuple[str, ...] = ()
+    room_connections: tuple[tuple[str, str], ...] = ()
     warnings: tuple[str, ...] = ()
     blocking_issues: tuple[str, ...] = ()
 
@@ -666,6 +668,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
     blocking: list[str] = []
     raw_woks: dict[str, WOKData] = {}
     room_face_offsets: dict[str, int] = {}
+    face_room_resrefs: list[str] = []
     for room in tuple(project.rooms or ()):
         room_resref = room.normalised_resref()
         room_metadata = dict(getattr(room, "metadata", {}) or {})
@@ -709,6 +712,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
                     int(getattr(face, "trans3", -1)),
                 )
             )
+            face_room_resrefs.append(room_resref)
         source_rooms.append(room_resref)
         if alignment_warning:
             warnings.append(alignment_warning)
@@ -765,6 +769,22 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
         wok=combined,
         room_count=len(source_rooms),
         source_rooms=tuple(source_rooms),
+        face_room_resrefs=tuple(face_room_resrefs),
+        room_connections=tuple(
+            dict.fromkeys(
+                tuple(
+                    sorted(
+                        (
+                            str(portal.source_room_resref or "").strip().lower(),
+                            str(portal.target_room_resref or "").strip().lower(),
+                        )
+                    )
+                )
+                for portal in connection_build.portals
+                if str(portal.source_room_resref or "").strip()
+                and str(portal.target_room_resref or "").strip()
+            )
+        ),
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
     )

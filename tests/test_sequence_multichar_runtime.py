@@ -1157,6 +1157,68 @@ def test_moderngl_pie_actor_frustum_culls_whole_transparent_actor() -> None:
         renderer.release()
 
 
+def test_moderngl_rigid_pie_door_uses_tight_mesh_frustum_bounds() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene = ModelNode(name="scene", flags=int(NodeFlags.HEADER))
+    actor = ModelNode(
+        name="offscreen_door",
+        flags=int(NodeFlags.HEADER),
+        parent=scene,
+        position=(80.0, 0.0, 0.0),
+    )
+    actor._gr_scene_object_root = True
+    actor._gr_scene_gpu_transform = True
+    actor._gr_scene_object_id = "door-offscreen"
+    actor._gr_map_studio_pie_actor = True
+    actor._gr_map_studio_pie_rigid_actor = True
+    # A deliberately loose stock door header intersects the camera frustum,
+    # while the actual panel mesh is far outside it.
+    actor._gr_runtime_source_model_ref = SimpleNamespace(
+        bb_min=(-100.0, -100.0, -100.0),
+        bb_max=(100.0, 100.0, 100.0),
+    )
+    mesh = ModelNode(
+        name="door_panel",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=actor,
+        vertices=[(-0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.0, 0.0, 2.0)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="",
+    )
+    mesh._gr_scene_object_id = "door-offscreen"
+    mesh._gr_scene_object_root_ref = actor
+    actor._gr_scene_object_root_ref = actor
+    actor.children = [mesh]
+    scene.children = [actor]
+    model = KotorModel(name="pie-rigid-door-frustum-proof", root_node=scene)
+    model.classification = "character"
+    camera = SimpleNamespace(
+        eye=(0.0, -6.0, 2.0),
+        target=(0.0, 0.0, 0.5),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    try:
+        if not renderer._ensure_context():
+            pytest.skip("ModernGL standalone context is unavailable")
+        image = renderer.render(model, camera, 128, 128, textures={})
+        assert image is not None
+        assert renderer.perf["culled_actor_meshes"] == 0
+        assert renderer.perf["culled_meshes"] == 1
+        assert renderer.perf["draw_calls"] == 0
+    finally:
+        renderer.release()
+
+
 def test_animation_ipc_carries_target_scene_object_id():
     server_source = (
         ROOT / "native/GhostRigger.Core.Automation/Python/src/ipc/server.py"

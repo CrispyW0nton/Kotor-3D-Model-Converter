@@ -146,6 +146,74 @@ def test_door_transition_honors_actual_one_second_clip_length() -> None:
     assert state.transitioning is False
 
 
+def test_downward_vertical_door_pose_is_reflected_upward_only_for_sliding_panel() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.map_studio_pie_doors import (
+        apply_map_studio_pie_door_vertical_pose_policy,
+        build_map_studio_pie_door_vertical_pose_policy,
+    )
+
+    panel = SimpleNamespace(name="panel", position=(0.0, 0.0, 0.25))
+    horizontal = SimpleNamespace(name="horizontal", position=(0.0, 0.0, 0.0))
+    model = SimpleNamespace(all_nodes=lambda: (panel, horizontal))
+    open_pose = SimpleNamespace(
+        nodes={
+            "panel": SimpleNamespace(name="panel", position=(0.05, 0.0, -2.75)),
+            "horizontal": SimpleNamespace(name="horizontal", position=(2.0, 0.0, -0.05)),
+        }
+    )
+
+    policy = build_map_studio_pie_door_vertical_pose_policy(model, open_pose)
+    assert policy.enabled is True
+    assert policy.base_z_by_node == (("panel", 0.25),)
+
+    transition_pose = SimpleNamespace(
+        nodes={
+            "panel": SimpleNamespace(name="panel", position=(0.05, 0.0, -1.25)),
+            "horizontal": SimpleNamespace(name="horizontal", position=(1.0, 0.0, -0.02)),
+        }
+    )
+    result = apply_map_studio_pie_door_vertical_pose_policy(transition_pose, policy)
+    assert result.nodes["panel"].position == pytest.approx((0.05, 0.0, 1.75))
+    assert result.nodes["horizontal"].position == pytest.approx((1.0, 0.0, -0.02))
+
+
+def test_closed_proxy_and_animated_door_visuals_swap_without_overlap() -> None:
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.map_studio_pie_doors import (
+        map_studio_pie_door_visual_nodes,
+        set_map_studio_pie_door_visuals_hidden,
+    )
+
+    root = md.ModelNode(name="door", flags=int(md.NodeFlags.HEADER))
+    panel = md.ModelNode(
+        name="panel",
+        flags=int(md.NodeFlags.MESH),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    helper = md.ModelNode(
+        name="trans",
+        flags=int(md.NodeFlags.MESH),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    setattr(helper, "_gr_map_studio_pie_transition_helper", True)
+    root.children = [panel, helper]
+
+    visuals = map_studio_pie_door_visual_nodes(root)
+    assert visuals == (panel,)
+    assert set_map_studio_pie_door_visuals_hidden(visuals, True) is True
+    assert panel._gr_hidden is True
+    assert not hasattr(helper, "_gr_hidden")
+    assert set_map_studio_pie_door_visuals_hidden(visuals, True) is False
+    assert set_map_studio_pie_door_visuals_hidden(visuals, False) is True
+    assert panel._gr_hidden is False
+
+
 def test_door_actor_can_use_authored_bearing_without_character_quarter_turn() -> None:
     _configure_native_python_roots()
     from src.core.geometry.model_data import ModelNode, NodeFlags
@@ -182,6 +250,7 @@ def test_window_door_swap_contract_is_transactional_and_restorable() -> None:
     assert "original_children = list" in setup
     assert "append_to_preview=False" in setup
     assert "model_yaw_offset_radians=0.0" in setup
+    assert '"_gr_map_studio_pie_rigid_actor"' in setup
     assert "root.children = original_children" in setup
     assert "_map_studio_pie_hidden_door_groups" in setup
     assert "for original_index, group in self._map_studio_pie_hidden_door_groups" in cleanup
