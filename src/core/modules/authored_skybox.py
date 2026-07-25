@@ -58,12 +58,96 @@ class KotorSkyboxPreset:
     source_module: str
     source_room: str
     textures: FiveFaceSkyboxTextures
+    building_style_ids: tuple[str, ...] = ()
     half_extent: float = 500.0
     bottom_z: float = -180.0
     top_z: float = 320.0
 
 
 _KOTOR_SKYBOX_PRESETS = (
+    KotorSkyboxPreset(
+        preset_id="k1_endar_spire_starfield",
+        label="Endar Spire — Deep-Space Starfield",
+        game="K1",
+        source_module="m01aa",
+        source_room="m01aa_01a",
+        # The Endar Spire uses these retail space plates behind its observation
+        # ports rather than a conventional planetary sky room. Repeating the
+        # seamless starfield on the dome keeps custom exterior views coherent.
+        textures=FiveFaceSkyboxTextures(
+            north="lhr_space01",
+            east="lhr_space02",
+            south="lhr_space01",
+            west="lhr_space02",
+            top="lhr_space01",
+        ),
+        building_style_ids=("architecture:k1_endar_spire",),
+        half_extent=360.0,
+        bottom_z=-180.0,
+        top_z=240.0,
+    ),
+    KotorSkyboxPreset(
+        preset_id="k1_taris_upper_city",
+        label="Taris — Upper City Skyline (M02AB)",
+        game="K1",
+        source_module="m02ab",
+        source_room="m02ab_sky",
+        # M02AB_SKY is oriented +Y/+X/-Y/-X/top as 0003/0002/0001/0004/0005.
+        textures=FiveFaceSkyboxTextures(
+            north="lts_sky0003",
+            east="lts_sky0002",
+            south="lts_sky0001",
+            west="lts_sky0004",
+            top="lts_sky0005",
+        ),
+        building_style_ids=("architecture:k1_taris_apartments",),
+        half_extent=500.0,
+        bottom_z=-180.0,
+        top_z=320.0,
+    ),
+    KotorSkyboxPreset(
+        preset_id="k1_shadowlands_canopy",
+        label="Shadowlands — Dense Forest Canopy",
+        game="K1",
+        source_module="m25ab",
+        source_room="m25ab_01a",
+        # Shadowlands rooms use LKA_TREE05 as a cylindrical forest surround,
+        # not a directional horizon. Repeating it on the authored sectors
+        # preserves that enclosed, depth-fogged canopy treatment.
+        textures=FiveFaceSkyboxTextures(
+            north="lka_tree05",
+            east="lka_tree05",
+            south="lka_tree05",
+            west="lka_tree05",
+            top="lka_tree05",
+        ),
+        building_style_ids=("architecture:k1_shadowlands",),
+        half_extent=260.0,
+        bottom_z=-80.0,
+        top_z=190.0,
+    ),
+    KotorSkyboxPreset(
+        preset_id="k1_korriban_valley",
+        label="Korriban — Valley Horizon (M36AA)",
+        game="K1",
+        source_module="m36aa",
+        source_room="m36aa_04",
+        # M36AA_04 stores +X/+Y/-Y/-X/top as 01/02/03/04/05.
+        textures=FiveFaceSkyboxTextures(
+            north="lko_sky02",
+            east="lko_sky01",
+            south="lko_sky03",
+            west="lko_sky04",
+            top="lko_sky05",
+        ),
+        building_style_ids=(
+            "architecture:k1_korriban_tombs",
+            "architecture:k1_korriban_caves",
+        ),
+        half_extent=460.0,
+        bottom_z=-160.0,
+        top_z=300.0,
+    ),
     KotorSkyboxPreset(
         preset_id="k2_onderon_iziz_daylight",
         label="Onderon — Iziz Daylight (502OND)",
@@ -79,6 +163,11 @@ _KOTOR_SKYBOX_PRESETS = (
             south="ond_sky3",
             west="ond_sky4",
             top="ond_sky5",
+        ),
+        building_style_ids=(
+            "architecture:k2_onderon_city",
+            "architecture:k2_onderon_cantina",
+            "architecture:k2_onderon_palace",
         ),
         half_extent=420.0,
         bottom_z=-140.0,
@@ -97,6 +186,7 @@ _KOTOR_SKYBOX_PRESETS = (
             west="ond_sb04",
             top="ond_sb05",
         ),
+        building_style_ids=("architecture:k2_onderon_sky_ramp",),
         half_extent=520.0,
         bottom_z=-180.0,
         top_z=340.0,
@@ -104,14 +194,29 @@ _KOTOR_SKYBOX_PRESETS = (
 )
 
 
-def available_kotor_skybox_presets(game: str = "") -> tuple[KotorSkyboxPreset, ...]:
+def available_kotor_skybox_presets(
+    game: str = "",
+    building_style_id: str = "",
+) -> tuple[KotorSkyboxPreset, ...]:
     """Return retail sky recipes without copying any game texture bytes."""
 
     wanted = str(game or "").strip().upper()
-    return tuple(
+    style_id = str(building_style_id or "").strip().lower()
+    presets = tuple(
         preset
         for preset in _KOTOR_SKYBOX_PRESETS
         if not wanted or preset.game == wanted
+    )
+    if not style_id:
+        return presets
+    return tuple(
+        sorted(
+            presets,
+            key=lambda preset: (
+                style_id not in {value.lower() for value in preset.building_style_ids},
+                preset.label.lower(),
+            ),
+        )
     )
 
 

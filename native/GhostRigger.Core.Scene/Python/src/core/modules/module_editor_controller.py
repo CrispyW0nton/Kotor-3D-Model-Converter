@@ -117,6 +117,7 @@ from .authored_imported_mesh import (
     build_imported_mesh_primitive_from_stock_model,
     extract_imported_mesh_room_bounds,
     fill_imported_wok_from_floor_surfaces,
+    generate_room_walkmesh_from_geometry,
     imported_mesh_room_is_backdrop,
     prepare_imported_mesh_for_static_runtime_rebuild,
     prepare_imported_mesh_walkmesh_generation_intent,
@@ -206,9 +207,11 @@ from .map_studio_environment_kits import (
     environment_kit_piece,
     environment_kit_piece_rows,
     environment_kit_source_room_position,
+    generated_environment_kit_boundary_magnets,
     kotor_module_world_label,
     nearest_environment_kit_snap,
     nearest_environment_kit_wall_snap,
+    rebase_environment_kit_room_to_walkmesh,
     scan_vanilla_environment_kits,
     seal_environment_kit_exterior_bounds,
     trim_environment_kit_connection_overlap,
@@ -3595,6 +3598,9 @@ class ModuleEditorController:
         position: Any,
         rotation_degrees_z: float = 0.0,
         scale: float = 1.0,
+        preferred_wall_room_resref: str = "",
+        excluded_wall_targets: tuple[tuple[str, int], ...] = (),
+        _source_piece_override: Any = None,
     ) -> dict[str, Any]:
         """Return the surface position or nearest compatible trained-kit snap.
 
@@ -3631,10 +3637,19 @@ class ModuleEditorController:
             "opening_height": 0.0,
             "opening_bottom": 0.0,
         }
-        source_piece = environment_kit_piece(str(asset_id or ""))
+        source_piece = (
+            _source_piece_override
+            if _source_piece_override is not None
+            else environment_kit_piece(str(asset_id or ""))
+        )
         authored = self._map_studio_authored_project_snapshot()
         if source_piece is None or authored is None:
             return result
+        preferred_wall_room = normalise_resref(preferred_wall_room_resref)
+        excluded_walls = {
+            (normalise_resref(str(room_resref or "")), int(edge_index))
+            for room_resref, edge_index in tuple(excluded_wall_targets or ())
+        }
 
         targets: list[tuple[Any, tuple[float, float, float], float, float, str]] = []
         for room in tuple(authored.rooms or ()):
@@ -3708,6 +3723,25 @@ class ModuleEditorController:
         # then the opening preview contract validates/clamps the exact cut.
         from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area
 
+        def point_inside_polygon(
+            candidate: tuple[float, float],
+            polygon: tuple[tuple[float, float], ...],
+        ) -> bool:
+            inside = False
+            previous = polygon[-1] if polygon else (0.0, 0.0)
+            for current in polygon:
+                if (current[1] > candidate[1]) != (previous[1] > candidate[1]):
+                    denominator = previous[1] - current[1]
+                    if abs(denominator) > 1.0e-12:
+                        boundary_x = (
+                            ((previous[0] - current[0]) * (candidate[1] - current[1]))
+                            / denominator
+                        ) + current[0]
+                        if candidate[0] < boundary_x:
+                            inside = not inside
+                previous = current
+            return inside
+
         wall_snap = None
         for room in tuple(authored.rooms or ()):
             primitive = getattr(room, "primitive", None)
@@ -3715,6 +3749,9 @@ class ModuleEditorController:
             if not isinstance(primitive, FloorPlanRoomPrimitive):
                 continue
             if str(primitive_metadata.get("source") or "").strip().lower() != "map_studio:pascal_building":
+                continue
+            room_key = room.normalised_resref()
+            if preferred_wall_room and room_key != preferred_wall_room:
                 continue
             profile = str(primitive_metadata.get("architecture_profile") or "").strip().lower()
             door_spec = pascal_architecture_door_spec(str(authored.game or "K1"), profile)
@@ -3742,8 +3779,15 @@ class ModuleEditorController:
             )
             origin = tuple(float(value) for value in tuple(room.position or (0.0, 0.0, 0.0))[:3])
             points = tuple((float(value[0]), float(value[1])) for value in tuple(primitive.points or ()))
+            world_points = tuple((origin[0] + value[0], origin[1] + value[1]) for value in points)
+            dropped_inside_room = point_inside_polygon(
+                (float(point[0]), float(point[1])),
+                world_points,
+            )
             ccw = polygon_signed_area(points) > 0.0
             for edge_index, local_start in enumerate(points):
+                if (room_key, edge_index) in excluded_walls:
+                    continue
                 local_end = points[(edge_index + 1) % len(points)]
                 dx = local_end[0] - local_start[0]
                 dy = local_end[1] - local_start[1]
@@ -3771,7 +3815,15 @@ class ModuleEditorController:
                     proposed_yaw=math.radians(yaw_degrees),
                     source_scale=uniform_scale,
                     walls=(wall,),
-                    max_distance=max(1.5, min(4.0, edge_length * 0.35)),
+                    # Dropping a complete vanilla room anywhere on an authored
+                    # room means "attach this room", not "occupy this floor".
+                    # Search every wall in that room, while ordinary free-space
+                    # drags retain the short magnetic capture radius.
+                    max_distance=(
+                        max(edge_length * 2.0, 8.0)
+                        if dropped_inside_room or preferred_wall_room
+                        else max(1.5, min(4.0, edge_length * 0.35))
+                    ),
                 )
                 if candidate is None:
                     continue
@@ -4011,6 +4063,7 @@ class ModuleEditorController:
         scale: float = 1.0,
         target_room_resref: str = "",
         resource_manager: Any = None,
+        _excluded_wall_targets: tuple[tuple[str, int], ...] = (),
     ) -> str:
         """Place a reusable vanilla room tile as uniquely named authored geometry.
 
@@ -4022,7 +4075,7 @@ class ModuleEditorController:
         piece = environment_kit_piece(str(piece_id or ""))
         if piece is None or piece.role not in {"room_tile", "exterior_tile", "dressing"}:
             raise ValueError("Choose a trained vanilla room, exterior tile, or dressing piece.")
-        if piece.placement_quality != "verified":
+        if piece.placement_quality not in {"verified", "generated_connector"}:
             raise ValueError(
                 piece.placement_quality_message
                 or f"{piece.label} is awaiting geometry review and cannot be placed."
@@ -4115,6 +4168,8 @@ class ModuleEditorController:
             position=requested_position,
             rotation_degrees_z=rotation_degrees_z,
             scale=scale,
+            preferred_wall_room_resref=target_room_resref,
+            excluded_wall_targets=_excluded_wall_targets,
         )
         point = tuple(float(value) for value in tuple(placement["position"])[:3])
         rotation_degrees_z = float(placement["rotation_degrees_z"])
@@ -4142,7 +4197,79 @@ class ModuleEditorController:
             game=game,
             wok_bytes=wok_bytes,
         )
-        if piece.role != "dressing" and whole_room.wok is not None:
+        if piece.placement_quality == "generated_connector":
+            source_wok = getattr(whole_room, "wok", None)
+            if source_wok is None or not tuple(getattr(source_wok, "faces", ()) or ()):
+                components = analyze_obj_walkmesh_candidate_components(whole_room)
+                substantial = tuple(component for component in components if float(component.area) >= 2.0)
+                if not substantial:
+                    raise ValueError(
+                        f"{piece.label} has no substantial reviewed floor geometry from which to generate collision."
+                    )
+                floor_z = min(float(component.bounds_min[2]) for component in substantial)
+                selected = tuple(
+                    component
+                    for component in substantial
+                    if float(component.bounds_max[2]) <= floor_z + 0.35
+                    and float(component.bounds_max[2]) - float(component.bounds_min[2]) <= 0.50
+                )
+                if not selected:
+                    raise ValueError(
+                        f"{piece.label} has no flat floor component at its lowest reviewed elevation."
+                    )
+                whole_room = apply_obj_walkmesh_component_review(
+                    whole_room,
+                    components,
+                    selected_component_ids=tuple(component.component_id for component in selected),
+                    reason=(
+                        "Reviewed stock-room recovery: substantial up-facing components at the "
+                        "lowest shared floor elevation; preserve separate walkable islands."
+                    ),
+                )
+                whole_room, generation = generate_room_walkmesh_from_geometry(
+                    whole_room,
+                    disconnected_island_policy="preserve",
+                    source_wok_policy="replace",
+                )
+                if str(generation.get("structural_validation") or "").strip().lower() != "passed":
+                    raise ValueError(
+                        f"Ghost Studio could not validate generated floor collision for {piece.label}."
+                    )
+            whole_room = rebase_environment_kit_room_to_walkmesh(whole_room)
+            generated_magnets = generated_environment_kit_boundary_magnets(
+                whole_room,
+                opening_width=4.0,
+            )
+            if not generated_magnets:
+                raise ValueError(
+                    f"{piece.label} has no exposed WOK boundary wide enough for a safe generated connector. "
+                    "Existing closed stock walls were preserved."
+                )
+            piece = replace(
+                piece,
+                magnets=generated_magnets,
+                placement_quality="generated_connector",
+            )
+            from .authored_module_walkmesh import prepare_environment_kit_room_walkmesh
+
+            whole_room = prepare_environment_kit_room_walkmesh(
+                whole_room,
+                source_room_position=(0.0, 0.0, 0.0),
+                magnets=piece.magnets,
+            )
+            placement = self.preview_authored_terrain_kit_placement(
+                asset_id=piece.piece_id,
+                position=requested_position,
+                rotation_degrees_z=rotation_degrees_z,
+                scale=scale,
+                preferred_wall_room_resref=target_room_resref,
+                excluded_wall_targets=_excluded_wall_targets,
+                _source_piece_override=piece,
+            )
+            point = tuple(float(value) for value in tuple(placement["position"])[:3])
+            rotation_degrees_z = float(placement["rotation_degrees_z"])
+            scale = float(placement["scale"])
+        elif piece.role != "dressing" and whole_room.wok is not None:
             from .authored_module_walkmesh import prepare_environment_kit_room_walkmesh
 
             source_origin = environment_kit_source_room_position(piece, resource_manager)
@@ -4371,10 +4498,24 @@ class ModuleEditorController:
                 portal_midpoint=tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3]),
                 outward_normal=connection_outward_normal,
             )
+            target_room_for_closure = next(
+                (
+                    candidate
+                    for candidate in authored.rooms
+                    if candidate.normalised_resref()
+                    == normalise_resref(str(placement.get("target_room_resref") or ""))
+                ),
+                None,
+            )
+            target_style_for_closure = str(
+                dict(getattr(getattr(target_room_for_closure, "primitive", None), "metadata", {}) or {}).get(
+                    "style_id"
+                )
+                or ""
+            ).strip().lower()
             if (
-                piece.role == "exterior_tile"
-                and environment_kit_builder_style_id(piece.game, piece.module_resref, piece.collection_id)
-                == "architecture:k1_shadowlands"
+                piece.role in {"room_tile", "exterior_tile"}
+                and target_style_for_closure == "architecture:k1_shadowlands"
             ):
                 # A single Shadowlands LYT partition is deliberately only one
                 # slice of an outdoor map.  Give its remaining WOK perimeter a
@@ -4383,6 +4524,8 @@ class ModuleEditorController:
                 primitive = seal_environment_kit_exterior_bounds(
                     primitive,
                     portal_midpoint=tuple(float(value) for value in tuple(source_portal.get("midpoint") or ())[:3]),
+                    portal_start=tuple(float(value) for value in tuple(source_portal.get("start") or ())[:3]),
+                    portal_end=tuple(float(value) for value in tuple(source_portal.get("end") or ())[:3]),
                     portal_width=float(source_portal.get("width_m", 0.0) or 0.0),
                 )
             source_portal = next(
@@ -4478,14 +4621,35 @@ class ModuleEditorController:
                     f"({float(row.get('overlap_area_m2', 0.0)):.2f} m²)"
                     for row in conflicts
                 )
+                target_edge = int(placement.get("target_edge_index", -1))
+                target_pair = (target_key, target_edge)
+                if (
+                    target_key
+                    and target_edge >= 0
+                    and target_pair not in set(_excluded_wall_targets)
+                    and len(_excluded_wall_targets) < 32
+                ):
+                    # The nearest portal can be blocked by an adjacent room.
+                    # Retry the same user drop against the next free wall of
+                    # the intended authored room. No project mutation occurs
+                    # before this audit, so the retry remains one undoable
+                    # placement transaction.
+                    return self.add_authored_environment_kit_piece(
+                        piece_id=piece_id,
+                        position=position,
+                        rotation_degrees_z=rotation_degrees_z,
+                        scale=scale,
+                        target_room_resref=target_key,
+                        resource_manager=resource_manager,
+                        _excluded_wall_targets=(
+                            *tuple(_excluded_wall_targets),
+                            target_pair,
+                        ),
+                    )
                 raise ValueError(
-                    f"{piece.label} would pass through occupied room volume: {labels}. "
-                    f"Its selected doorway target is {target_key or 'none'}. "
-                    f"Candidate XY bounds are {tuple(occupancy.get('candidate_bounds') or ())}; "
-                    f"occupied bounds are "
-                    f"{tuple(tuple(row.get('occupied_bounds') or ()) for row in conflicts)}. "
-                    "Move the connected room farther away or choose another free doorway; "
-                    "Map Studio will not cut a retail walkmesh and leave broken collision."
+                    f"Ghost Studio could not find a free doorway for {piece.label}. "
+                    f"It would overlap {labels}. Drag it toward another room wall or move a neighboring room "
+                    "to create enough space; the retail walkmesh was left unchanged."
                 )
             primitive = replace(
                 primitive,

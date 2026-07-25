@@ -903,6 +903,110 @@ def test_pie_first_batch_rehydrates_room_identity_from_model_manifest() -> None:
     }
 
 
+def test_pie_runtime_upload_rebatches_source_hierarchy_rehydrated_by_viewport_load() -> None:
+    """Synchronous viewport publication cannot restore thousands of PIE draws."""
+
+    _configure_native_python_roots()
+    from src.core.geometry import model_data as md
+    from src.core.modules.authored_module_preview_model import (
+        optimize_authored_preview_model_for_pie,
+    )
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    root = md.ModelNode(name="root", flags=int(md.NodeFlags.HEADER))
+    room = md.ModelNode(name="grshyrack_room", flags=int(md.NodeFlags.HEADER), parent=root)
+    setattr(room, "_gr_map_studio_authored_room", True)
+    setattr(room, "_gr_map_studio_room_resref", "grshyrack_room")
+
+    def source_mesh(index: int):
+        mesh = md.ModelNode(
+            name=f"cave_facet_{index}",
+            flags=int(md.NodeFlags.MESH),
+            parent=room,
+            vertices=[
+                (float(index), 0.0, 0.0),
+                (float(index) + 1.0, 0.0, 0.0),
+                (float(index), 1.0, 0.0),
+            ],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            faces=[(0, 1, 2)],
+            texture="lko_cave01",
+            texture_names=["lko_cave01"],
+        )
+        setattr(mesh, "_gr_map_studio_authored_mesh", True)
+        return mesh
+
+    room.children = [source_mesh(index) for index in range(96)]
+    root.children = [room]
+    runtime = optimize_authored_preview_model_for_pie(
+        md.KotorModel(name="grshyrack", root_node=root)
+    )
+    runtime_room = runtime.root_node.children[0]
+    assert len(runtime_room.children) == 1
+
+    class _SoftwareRenderer:
+        def __init__(self) -> None:
+            self.model = None
+
+        def set_model(self, model) -> None:
+            self.model = model
+
+    class _GpuRenderer:
+        def __init__(self) -> None:
+            self.clear_count = 0
+
+        def clear_caches(self) -> None:
+            self.clear_count += 1
+
+    software_renderer = _SoftwareRenderer()
+    gpu_renderer = _GpuRenderer()
+
+    class _Viewport:
+        _renderer = software_renderer
+        _gpu_renderer = gpu_renderer
+
+        def load_model(self, model, **_kwargs) -> None:
+            # Reproduce the source-preserving synchronous refresh seen in the
+            # real Map Studio viewport during PIE publication.
+            restored_room = model.root_node.children[0]
+            restored_room.children = [source_mesh(index) for index in range(96)]
+            for child in restored_room.children:
+                child.parent = restored_room
+
+    viewport = _Viewport()
+    harness = SimpleNamespace(
+        viewport_panel=SimpleNamespace(
+            viewport=viewport,
+            _project_texture_dirs=[],
+        ),
+        _map_studio_pie_actor=None,
+        _map_studio_pie_animation_engine=None,
+        _map_studio_pie_animation_name="",
+        _map_studio_pie_creature_entries=[],
+        _map_studio_pie_door_entries=[],
+    )
+
+    warning = ModuleEditorWindow._activate_map_studio_pie_runtime_actors(
+        harness,
+        runtime,
+        recompute_bounds=False,
+        reload_model=True,
+    )
+
+    assert warning == ""
+    assert len(runtime_room.children) == 1
+    assert len(runtime_room.children[0].faces) == 96
+    assert runtime._gr_map_studio_pie_static_batch_summary == {
+        "source_meshes": 96,
+        "runtime_batches": 1,
+        "draw_calls_saved": 95,
+        "rehydrated_meshes_suppressed": 0,
+    }
+    assert software_renderer.model is runtime
+    assert gpu_renderer.clear_count == 1
+
+
 def test_prewarm_is_deferred_and_guarded() -> None:
     _configure_native_python_roots()
     source = (ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py").read_text(encoding="utf-8")

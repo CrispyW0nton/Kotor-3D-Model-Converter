@@ -756,6 +756,8 @@ def build_module_transition_shell_meshes(
     inward_normal: tuple[float, float],
     opening_width: float,
     connected_room_resref: str,
+    opening_height: float = 2.60,
+    transition_length_m: float = 0.0,
     game: str = "K1",
 ) -> tuple[PrimitiveMesh, ...]:
     """Fit one supplied two-way transition shell onto a shared room portal.
@@ -763,7 +765,10 @@ def build_module_transition_shell_meshes(
     OBJ UV0 and normals are preserved.  Scaling is uniform, and the source
     X/Y/Z axes become portal tangent/depth/up in room-local coordinates.  The
     shell is visual-only; the authored reciprocal WOK portal and generated
-    floor/throat remain the collision owners.
+    floor/throat remain the collision owners.  The source mesh is clipped to a
+    portal-sized envelope and a central actor-clear volume before placement.
+    This keeps decorative roots/rocks from spearing through room walls or the
+    walkable tunnel while interpolating UV0 and normals at every cut edge.
     """
 
     clean_asset = str(asset_id or "").strip().lower()
@@ -780,7 +785,10 @@ def build_module_transition_shell_meshes(
         # tangent and needs that correction before it is fitted.
         "korriban_cave_entrance": 180.0,
         "shyrack_cave_entrance": 90.0,
-        "shadowlands_module_transition": 0.0,
+        # The supplied tree tunnel was authored with its passage running on
+        # source X. Align that axis with portal depth; leaving it at zero turns
+        # the tunnel across the route (visible near X 11.81 / Y 51.61 in PIE).
+        "shadowlands_module_transition": 90.0,
     }[clean_asset]
     uniform_scale = nominal_scale * max(0.65, min(1.65, float(opening_width) / 5.25))
     source = _module_transition_source_primitive(
@@ -796,59 +804,248 @@ def build_module_transition_shell_meshes(
     yaw_sin = math.sin(yaw)
     cx, cy, cz = (float(value) for value in center)
 
-    def point(value: tuple[float, float, float]) -> tuple[float, float, float]:
+    def portal_point(value: tuple[float, float, float]) -> tuple[float, float, float]:
         source_x = yaw_cos * float(value[0]) - yaw_sin * float(value[1])
         source_y = yaw_sin * float(value[0]) + yaw_cos * float(value[1])
+        return (source_x, source_y, float(value[2]))
+
+    def world_point(value: tuple[float, float, float]) -> tuple[float, float, float]:
         return (
-            cx + tx * source_x + nx * source_y,
-            cy + ty * source_x + ny * source_y,
+            cx + tx * float(value[0]) + nx * float(value[1]),
+            cy + ty * float(value[0]) + ny * float(value[1]),
             cz + float(value[2]),
         )
 
-    def normal(value: tuple[float, float, float]) -> tuple[float, float, float]:
+    def portal_normal(value: tuple[float, float, float]) -> tuple[float, float, float]:
         source_x = yaw_cos * float(value[0]) - yaw_sin * float(value[1])
         source_y = yaw_sin * float(value[0]) + yaw_cos * float(value[1])
-        transformed = (
-            tx * source_x + nx * source_y,
-            ty * source_x + ny * source_y,
-            float(value[2]),
-        )
+        return (source_x, source_y, float(value[2]))
+
+    def world_normal(value: tuple[float, float, float]) -> tuple[float, float, float]:
+        transformed = (tx * value[0] + nx * value[1], ty * value[0] + ny * value[1], value[2])
         length = math.sqrt(sum(component * component for component in transformed)) or 1.0
         return tuple(component / length for component in transformed)
 
-    return tuple(
-        PrimitiveMesh(
-            name=(
-                f"{str(room_resref or 'room')[:16]}_transition_e{int(edge_index) + 1:02d}_"
-                f"{clean_asset[:12]}_{surface_index + 1:02d}"
-            ),
-            vertices=tuple(point(vertex) for vertex in surface.vertices),
-            faces=tuple(tuple(int(index) for index in face) for face in surface.faces),
-            normals=tuple(normal(value) for value in surface.normals),
-            uvs=tuple(tuple(float(value) for value in uv) for uv in surface.uvs),
-            texture=str(surface.texture or ""),
-            diffuse=tuple(float(value) for value in surface.diffuse),
-            ambient=tuple(float(value) for value in surface.ambient),
-            metadata={
-                "source": "map_studio:module_transition_asset",
-                "module_transition_asset_id": clean_asset,
-                "module_transition_shell": True,
-                "mirrored_two_way_transition": True,
-                "visual_only": True,
-                "walkmesh_role": "visual_shell",
-                "transition_floor_owner": "generated_reciprocal_wok_portal",
-                "room_resref": str(room_resref or "")[:16],
-                "edge_index": int(edge_index),
-                "opening_name": str(opening_name or ""),
-                "connected_room_resref": str(connected_room_resref or "")[:16],
-                "uniform_scale": float(uniform_scale),
-                "source_yaw_degrees": float(source_yaw_degrees),
-                "uv0_preserved": bool(surface.uvs),
-                "source_surface": str(surface.name or ""),
-            },
-        )
-        for surface_index, surface in enumerate(source.surfaces)
+    source_points = tuple(
+        portal_point(vertex)
+        for surface in source.surfaces
+        for vertex in tuple(surface.vertices or ())
     )
+    if not source_points:
+        return ()
+    source_depth_min = min(point[1] for point in source_points)
+    source_depth_max = max(point[1] for point in source_points)
+    source_depth_span = max(0.25, source_depth_max - source_depth_min)
+    requested_length = max(source_depth_span, float(transition_length_m or 0.0))
+    tile_step = max(0.25, source_depth_span - min(0.45, source_depth_span * 0.10))
+    tile_count = max(1, int(math.ceil(max(0.0, requested_length - source_depth_span) / tile_step)) + 1)
+    tiled_depth_span = source_depth_span + float(tile_count - 1) * tile_step
+    tile_offsets = tuple(
+        (float(index) - float(tile_count - 1) * 0.5) * tile_step
+        for index in range(tile_count)
+    )
+    depth_limit_min = -max(requested_length, tiled_depth_span) * 0.5
+    depth_limit_max = max(requested_length, tiled_depth_span) * 0.5
+    shell_half_width = max(float(opening_width) * 0.66, float(opening_width) * 0.5 + 0.65)
+    clearance_half_width = max(
+        1.00,
+        min(float(opening_width) * 0.30, max(1.00, float(opening_width) * 0.5 - 0.35)),
+    )
+    clearance_height = max(2.15, min(2.75, float(opening_height) - 0.18))
+    tolerance = 1.0e-6
+
+    def normalise(value: tuple[float, ...]) -> tuple[float, float, float]:
+        x, y, z = (float(value[index]) if index < len(value) else 0.0 for index in range(3))
+        length = math.sqrt((x * x) + (y * y) + (z * z))
+        return (x / length, y / length, z / length) if length > 1.0e-8 else (0.0, 0.0, 1.0)
+
+    def lerp(first: tuple[float, ...], second: tuple[float, ...], fraction: float) -> tuple[float, ...]:
+        return tuple(float(a) + ((float(b) - float(a)) * fraction) for a, b in zip(first, second))
+
+    def clip_half_space(
+        polygon: list[dict[str, tuple[float, ...]]],
+        signed_distance: Any,
+        *,
+        keep_inside: bool,
+    ) -> list[dict[str, tuple[float, ...]]]:
+        if not polygon:
+            return []
+        result: list[dict[str, tuple[float, ...]]] = []
+        previous = polygon[-1]
+        previous_distance = float(signed_distance(previous["position"]))
+        previous_kept = (
+            previous_distance >= -tolerance
+            if keep_inside
+            else previous_distance <= tolerance
+        )
+        for current in polygon:
+            current_distance = float(signed_distance(current["position"]))
+            current_kept = (
+                current_distance >= -tolerance
+                if keep_inside
+                else current_distance <= tolerance
+            )
+            if current_kept != previous_kept:
+                denominator = previous_distance - current_distance
+                fraction = 0.0 if abs(denominator) <= 1.0e-12 else previous_distance / denominator
+                fraction = max(0.0, min(1.0, fraction))
+                intersection = {
+                    key: lerp(value, current.get(key, value), fraction)
+                    for key, value in previous.items()
+                }
+                intersection["normal"] = normalise(intersection.get("normal", (0.0, 0.0, 1.0)))
+                result.append(intersection)
+            if current_kept:
+                result.append(current)
+            previous = current
+            previous_distance = current_distance
+            previous_kept = current_kept
+        return result
+
+    envelope_planes = (
+        lambda point: float(point[0]) + shell_half_width,
+        lambda point: shell_half_width - float(point[0]),
+        lambda point: float(point[1]) - depth_limit_min,
+        lambda point: depth_limit_max - float(point[1]),
+    )
+    clearance_planes = (
+        lambda point: float(point[0]) + clearance_half_width,
+        lambda point: clearance_half_width - float(point[0]),
+        lambda point: float(point[1]) - (depth_limit_min - 0.02),
+        lambda point: (depth_limit_max + 0.02) - float(point[1]),
+        lambda point: float(point[2]) + 0.08,
+        lambda point: clearance_height - float(point[2]),
+    )
+
+    def clip_to_envelope(
+        polygon: list[dict[str, tuple[float, ...]]],
+    ) -> list[dict[str, tuple[float, ...]]]:
+        result = polygon
+        for plane in envelope_planes:
+            result = clip_half_space(result, plane, keep_inside=True)
+            if len(result) < 3:
+                return []
+        return result
+
+    def subtract_clearance(
+        polygon: list[dict[str, tuple[float, ...]]],
+    ) -> list[list[dict[str, tuple[float, ...]]]]:
+        candidates = [polygon]
+        outside: list[list[dict[str, tuple[float, ...]]]] = []
+        for plane in clearance_planes:
+            next_candidates: list[list[dict[str, tuple[float, ...]]]] = []
+            for candidate in candidates:
+                inside = clip_half_space(candidate, plane, keep_inside=True)
+                escaped = clip_half_space(candidate, plane, keep_inside=False)
+                if len(escaped) >= 3:
+                    outside.append(escaped)
+                if len(inside) >= 3:
+                    next_candidates.append(inside)
+            candidates = next_candidates
+            if not candidates:
+                break
+        return outside
+
+    meshes: list[PrimitiveMesh] = []
+    for surface_index, surface in enumerate(source.surfaces):
+        source_vertices = tuple(surface.vertices or ())
+        source_normals = tuple(surface.normals or ())
+        source_uvs = tuple(surface.uvs or ())
+        has_normals = len(source_normals) == len(source_vertices)
+        has_uvs = len(source_uvs) == len(source_vertices)
+        for tile_index, tile_offset in enumerate(tile_offsets):
+            vertices: list[tuple[float, float, float]] = []
+            normals: list[tuple[float, float, float]] = []
+            uvs: list[tuple[float, float]] = []
+            faces: list[tuple[int, int, int]] = []
+            source_face_count = 0
+            for face in tuple(surface.faces or ()):
+                try:
+                    indices = tuple(int(index) for index in tuple(face)[:3])
+                    polygon = [
+                        {
+                            "position": (
+                                portal_point(source_vertices[index])[0],
+                                portal_point(source_vertices[index])[1] + float(tile_offset),
+                                portal_point(source_vertices[index])[2],
+                            ),
+                            "normal": (
+                                portal_normal(source_normals[index])
+                                if has_normals
+                                else (0.0, 0.0, 1.0)
+                            ),
+                            "uv": (
+                                tuple(float(value) for value in source_uvs[index][:2])
+                                if has_uvs
+                                else (0.0, 0.0)
+                            ),
+                        }
+                        for index in indices
+                    ]
+                except (IndexError, TypeError, ValueError):
+                    continue
+                source_face_count += 1
+                bounded = clip_to_envelope(polygon)
+                if len(bounded) < 3:
+                    continue
+                for fragment in subtract_clearance(bounded):
+                    for fragment_index in range(1, len(fragment) - 1):
+                        triangle = (fragment[0], fragment[fragment_index], fragment[fragment_index + 1])
+                        first_index = len(vertices)
+                        vertices.extend(world_point(tuple(vertex["position"][:3])) for vertex in triangle)
+                        normals.extend(
+                            world_normal(normalise(tuple(vertex["normal"][:3])))
+                            for vertex in triangle
+                        )
+                        if has_uvs:
+                            uvs.extend(tuple(float(value) for value in vertex["uv"][:2]) for vertex in triangle)
+                        faces.append((first_index, first_index + 1, first_index + 2))
+            if not faces:
+                continue
+            meshes.append(
+                PrimitiveMesh(
+                    name=(
+                        f"{str(room_resref or 'room')[:16]}_transition_e{int(edge_index) + 1:02d}_"
+                        f"{clean_asset[:12]}_{surface_index + 1:02d}_t{tile_index + 1:02d}"
+                    ),
+                    vertices=tuple(vertices),
+                    faces=tuple(faces),
+                    normals=tuple(normals),
+                    uvs=tuple(uvs) if has_uvs else (),
+                    texture=str(surface.texture or ""),
+                    diffuse=tuple(float(value) for value in surface.diffuse),
+                    ambient=tuple(float(value) for value in surface.ambient),
+                    metadata={
+                        "source": "map_studio:module_transition_asset",
+                        "module_transition_asset_id": clean_asset,
+                        "module_transition_shell": True,
+                        "mirrored_two_way_transition": True,
+                        "visual_only": True,
+                        "walkmesh_role": "visual_shell",
+                        "transition_floor_owner": "generated_reciprocal_wok_portal",
+                        "room_resref": str(room_resref or "")[:16],
+                        "edge_index": int(edge_index),
+                        "opening_name": str(opening_name or ""),
+                        "connected_room_resref": str(connected_room_resref or "")[:16],
+                        "uniform_scale": float(uniform_scale),
+                        "source_yaw_degrees": float(source_yaw_degrees),
+                        "uv0_preserved": bool(has_uvs),
+                        "source_surface": str(surface.name or ""),
+                        "source_face_count": int(source_face_count),
+                        "trimmed_face_count": len(faces),
+                        "portal_envelope_half_width_m": float(shell_half_width),
+                        "player_clearance_half_width_m": float(clearance_half_width),
+                        "player_clearance_height_m": float(clearance_height),
+                        "transition_length_m": float(max(requested_length, tiled_depth_span)),
+                        "transition_tile_index": int(tile_index),
+                        "transition_tile_count": int(tile_count),
+                        "transition_tile_offset_m": float(tile_offset),
+                        "geometry_trim_policy": "portal_envelope_minus_player_clearance",
+                        "host_surface_overlap_trimmed": True,
+                    },
+                )
+            )
+    return tuple(meshes)
 
 
 def _terrain_asset_is_browser_ready(asset: TerrainKitAsset | VanillaTerrainKitAsset) -> bool:

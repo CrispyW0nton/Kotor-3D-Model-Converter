@@ -531,7 +531,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
             "source_path": "src/core/modules/authored_module_layout.py",
             "packaged_path": "Python/src/core/modules/authored_module_layout.py",
-            "sha256": "bb1298c8f0539bf780a08bce97cb54f0dfb082ed7365d282850e19eb27396b76"
+            "sha256": "8a4b3b9083f9b42595a2f2c26445d79797c72d925038f8f1daaddb4c74d01d70"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LIGHTING",
@@ -627,7 +627,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "60554815cf18c9a084934086af0045fe40c14e4894dc82da9be69f7ac7c165f7"
+            "sha256": "c636b1d24389438ed134bcf2a6bc06eabc27cb4b4d40e0f0dac38b659708682c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -681,7 +681,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_SKYBOX",
             "source_path": "src/core/modules/authored_skybox.py",
             "packaged_path": "Python/src/core/modules/authored_skybox.py",
-            "sha256": "deb4f3b3b716cc4bba22ed9b2fa4b643016b0d436a5ef6a1a25105c8268f1c65"
+            "sha256": "0af7fcfbe6ab356bcc50fe495e675414b836faf8368f771e63789ab4c4852ae4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_TERRAIN_BUILDER",
@@ -759,7 +759,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ENVIRONMENT_KITS",
             "source_path": "src/core/modules/map_studio_environment_kits.py",
             "packaged_path": "Python/src/core/modules/map_studio_environment_kits.py",
-            "sha256": "6684becbd4d4171e3e18b4e4d4d3eaf4195cfcea4da93eef65fbf8def8f66d20"
+            "sha256": "b6ae8111637dc638f9e200970680ed891e8d5ea3f5018592a09e6c922dea3210"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS",
@@ -807,7 +807,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "7e07e2b8cccdbbaed6fef6f0a5a501f4743bd977199e851a2d6a64fdeff79938"
+            "sha256": "fcf03556460a2b537211d19d5b6e40e621afd6b60c3ae159a437ef52a3c95e64"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
@@ -951,7 +951,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_KIT",
             "source_path": "src/core/modules/map_studio_terrain_kit.py",
             "packaged_path": "Python/src/core/modules/map_studio_terrain_kit.py",
-            "sha256": "37611cfeedb9321b38d2a2e3eac8f16151bfd71ebde5acfa4ed1bf9066996dab"
+            "sha256": "0e156649b08d9b92b36a49d787aa0346f5ba4b4203fa7eb27f6fc8ac654bf27e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION",
@@ -1011,7 +1011,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "a0188ddbad797b3b232d4def2fed1132eee95168e559ec8e249ad62c97863cf5"
+            "sha256": "19ada27278b989bc967b417558d2550a995ed19ca8fca960949cb7f0f22b3bff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1737,13 +1737,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_KIT_BROWSER",
             "source_path": "src/gui/panels/module_editor/environment_kit_browser.py",
             "packaged_path": "Python/src/gui/panels/module_editor/environment_kit_browser.py",
-            "sha256": "113926eb96efdcbd9fed9df209a3e510e63095c9f491942f581cc1371a6f0532"
+            "sha256": "b1ee8b6f49230c6bd50f0273efccbfaf5cda706bde2060ee378adbba0044c639"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_TAB",
             "source_path": "src/gui/panels/module_editor/environment_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/environment_tab.py",
-            "sha256": "393ddeb10420fe613ec99429e56d682806a3af53bc716c699414f3c7bcaa4643"
+            "sha256": "c7ec217a493d3d05efbbf714de0f9d2055c8874761dcddbc81124bf6ce41f082"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_EXPORT_PANEL",
@@ -2007,7 +2007,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "7ac9d98249dbe6bd8e05db450e331d00b258048a4eeed5837a2b08146f7241b7"
+            "sha256": "d580b3593d3c0b5d6cb159b2ff3e2a33467685b4e616faeb3e3a13fb52bda128"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

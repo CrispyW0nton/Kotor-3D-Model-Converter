@@ -140,6 +140,9 @@ def main() -> int:
     )
     transition_assets: list[str] = []
     shell_face_count = 0
+    shell_trim_policies: set[str] = set()
+    shell_clearance_widths: list[float] = []
+    shell_clearance_heights: list[float] = []
     panorama_count = 0
     threshold_count = 0
     for room in (first_room, second_room):
@@ -148,11 +151,24 @@ def main() -> int:
             for opening in room.primitive.openings
         )
         geometry = compile_authored_room_spec(room)
-        shell_face_count += sum(
-            len(mesh.faces)
+        shell_meshes = tuple(
+            mesh
             for mesh in geometry.helper_meshes
             if mesh.metadata.get("module_transition_asset_id")
             == "shadowlands_module_transition"
+        )
+        shell_face_count += sum(len(mesh.faces) for mesh in shell_meshes)
+        shell_trim_policies.update(
+            str(mesh.metadata.get("geometry_trim_policy") or "")
+            for mesh in shell_meshes
+        )
+        shell_clearance_widths.extend(
+            float(mesh.metadata.get("player_clearance_half_width_m", 0.0)) * 2.0
+            for mesh in shell_meshes
+        )
+        shell_clearance_heights.extend(
+            float(mesh.metadata.get("player_clearance_height_m", 0.0))
+            for mesh in shell_meshes
         )
         panorama_count += sum(
             mesh.metadata.get("architecture_role")
@@ -268,6 +284,9 @@ def main() -> int:
         ],
         "transition_assets": transition_assets,
         "tree_tunnel_shell_face_count": shell_face_count,
+        "tree_tunnel_trim_policies": sorted(shell_trim_policies),
+        "tree_tunnel_min_clearance_width_m": min(shell_clearance_widths, default=0.0),
+        "tree_tunnel_min_clearance_height_m": min(shell_clearance_heights, default=0.0),
         "panorama_card_count": panorama_count,
         "visual_threshold_count": threshold_count,
         "crossed_first_transition": crossed_first,
@@ -297,7 +316,12 @@ def main() -> int:
         report["portal_count"] == 2,
         max(report["portal_midpoint_gaps"], default=1.0) <= 2.0e-5,
         report["transition_assets"].count("shadowlands_module_transition") == 2,
-        report["tree_tunnel_shell_face_count"] == 4795 * 2,
+        report["tree_tunnel_shell_face_count"] > 0,
+        report["tree_tunnel_trim_policies"] == [
+            "portal_envelope_minus_player_clearance"
+        ],
+        report["tree_tunnel_min_clearance_width_m"] >= 2.0,
+        report["tree_tunnel_min_clearance_height_m"] >= 2.1,
         report["panorama_card_count"] == 8,
         report["visual_threshold_count"] == 2,
         report["crossed_first_transition"],

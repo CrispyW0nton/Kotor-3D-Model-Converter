@@ -622,6 +622,19 @@ def test_environment_tab_explicit_apply_and_honest_capability_labels() -> None:
     assert panorama_requests[-1]["room_resref"] == "grworld_sky"
     assert panorama_requests[-1]["north_texture"] == tab.sky_texture_edits["north"].text()
 
+    tab.set_skybox_context(
+        module_root="grtaris",
+        game="K1",
+        room_resrefs=("grtarisa",),
+        building_style_id="architecture:k1_taris_apartments",
+    )
+    assert tab.sky_preset_combo.currentData() == "k1_taris_upper_city"
+    assert tab.sky_preset_combo.currentText().startswith("Recommended")
+    assert tab.sky_texture_edits["north"].text() == "lts_sky0003"
+    tab.set_skybox_building_style("architecture:k1_shadowlands", "exterior")
+    assert tab.sky_preset_combo.currentData() == "k1_shadowlands_canopy"
+    assert tab.sky_texture_edits["north"].text() == "lka_tree05"
+
     tab.set_lightmap_context(
         (
             {
@@ -746,5 +759,6 @@ def test_environment_payload_mirrors_and_window_wiring_are_exact() -> None:
     assert "_MAP_STUDIO_SKYBOX_EXECUTOR.submit(" in window
     assert "MapStudioPanoramaSkyboxDialog" in window
     assert "self.environment_tab.set_skybox_context(" in window
+    assert "self.environment_tab.set_skybox_building_style" in window
     assert "self.environment_tab.skyTrafficCreateRequested.connect(self._create_map_studio_sky_traffic)" in window
     assert "self.environment_tab.set_sky_traffic_context(" in window

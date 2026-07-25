@@ -1978,6 +1978,12 @@ def _module_transition_shell_meshes(
         inward_normal=inward_normal,
         opening_width=float(opening.width),
         connected_room_resref=connected_room,
+        opening_height=float(opening.height),
+        transition_length_m=float(
+            metadata.get("module_transition_length_m")
+            or metadata.get("transition_length_m")
+            or 0.0
+        ),
         game="K2" if str(architecture_profile or "").strip().lower().endswith("_k2") else "K1",
     )
 
@@ -2054,6 +2060,32 @@ def _architecture_door_transition_meshes(
                 "surface_role": "architectural_detail",
                 "vanilla_measurement_source": "DOR_LKO04 + m38aa_02 WOK threshold",
             }
+            structural_depth_back = -0.58
+            structural_depth_front = 0.30
+            for part, span, z0, z1 in (
+                ("left", (outer_start, inner_start), floor_z + opening_bottom, floor_z + outer_top),
+                ("right", (inner_end, outer_end), floor_z + opening_bottom, floor_z + outer_top),
+                ("lintel", (outer_start, outer_end), floor_z + opening_top, floor_z + outer_top),
+            ):
+                meshes.extend(
+                    _architecture_closed_wall_prism_meshes(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_korriban_door_structural_{part}",
+                        start=start,
+                        end=end,
+                        span=span,
+                        depth_back=structural_depth_back,
+                        depth_front=structural_depth_front,
+                        z_bottom=z0,
+                        z_top=z1,
+                        material=trim_material,
+                        metadata={
+                            **frame_metadata,
+                            "door_frame_part": part,
+                            "architecture_role": "korriban_door_structural_return",
+                            "door_wall_depth_m": structural_depth_front - structural_depth_back,
+                        },
+                    )
+                )
             tiers = (
                 ("outer", 0.835, trim_material),
                 ("middle", 0.935, infill_material),
@@ -2111,22 +2143,23 @@ def _architecture_door_transition_meshes(
                     float(z_value),
                 )
 
+            reveal_start = structural_depth_front
             reveal_depth = tiers[-1][1]
             reveal_rows = (
                 (
                     "left",
                     (
-                        portal_point(inner_start, 0.0, floor_z + opening_bottom),
+                        portal_point(inner_start, reveal_start, floor_z + opening_bottom),
                         portal_point(inner_start, reveal_depth, floor_z + opening_bottom),
                         portal_point(inner_start, reveal_depth, floor_z + opening_top),
-                        portal_point(inner_start, 0.0, floor_z + opening_top),
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
                     ),
                 ),
                 (
                     "right",
                     (
-                        portal_point(inner_end, 0.0, floor_z + opening_bottom),
-                        portal_point(inner_end, 0.0, floor_z + opening_top),
+                        portal_point(inner_end, reveal_start, floor_z + opening_bottom),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
                         portal_point(inner_end, reveal_depth, floor_z + opening_top),
                         portal_point(inner_end, reveal_depth, floor_z + opening_bottom),
                     ),
@@ -2134,19 +2167,10 @@ def _architecture_door_transition_meshes(
                 (
                     "lintel",
                     (
-                        portal_point(inner_start, 0.0, floor_z + opening_top),
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
                         portal_point(inner_start, reveal_depth, floor_z + opening_top),
                         portal_point(inner_end, reveal_depth, floor_z + opening_top),
-                        portal_point(inner_end, 0.0, floor_z + opening_top),
-                    ),
-                ),
-                (
-                    "threshold",
-                    (
-                        portal_point(inner_start, 0.0, floor_z + opening_bottom + 0.012),
-                        portal_point(inner_end, 0.0, floor_z + opening_bottom + 0.012),
-                        portal_point(inner_end, reveal_depth, floor_z + opening_bottom + 0.012),
-                        portal_point(inner_start, reveal_depth, floor_z + opening_bottom + 0.012),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
                     ),
                 ),
             )
@@ -2489,30 +2513,250 @@ def _architecture_door_transition_meshes(
                     )
                 )
             continue
+        if door_model == "dor_lts02":
+            # Taris apartment doors are carried by a shallow but complete
+            # service-wall cassette.  Treating the aperture as a boolean cut
+            # left every profiled panel course exposed at the jambs.  Build a
+            # closed return first, then layer the familiar trim/light surround
+            # in front of it so the result remains clean from either room.
+            center = max(0.0, min(edge_length, float(opening.center_fraction) * edge_length))
+            half_width = min(edge_length * 0.5, float(opening.width) * 0.5)
+            inner_start = max(0.0, center - half_width)
+            inner_end = min(edge_length, center + half_width)
+            requested_outer_width = float(
+                metadata.get("door_outer_width_m")
+                or metadata.get("door_frame_width_m")
+                or (float(opening.width) + 0.42)
+            )
+            outer_half = min(edge_length * 0.5, max(half_width + 0.16, requested_outer_width * 0.5))
+            outer_start = max(0.0, center - outer_half)
+            outer_end = min(edge_length, center + outer_half)
+            opening_bottom = max(0.0, float(opening.bottom))
+            opening_top = min(wall_height - 0.01, opening_bottom + float(opening.height))
+            outer_top = min(
+                wall_height - 0.005,
+                max(
+                    opening_top + 0.12,
+                    float(metadata.get("door_outer_height_m") or metadata.get("door_frame_height_m") or 2.65),
+                ),
+            )
+            frame_metadata = {
+                **common,
+                "opening_name": str(opening.name or ""),
+                "door_model_resref": "dor_lts02",
+                "door_aperture_width_m": float(opening.width),
+                "architecture_role": "taris_door_portal",
+                "surface_role": "architectural_detail",
+                "vanilla_measurement_source": "DOR_LTS02 + m02aa_01a WOK threshold",
+            }
+            structural_depth_back = -0.34
+            structural_depth_front = 0.18
+            for part, span, z0, z1 in (
+                ("left", (outer_start, inner_start), floor_z + opening_bottom, floor_z + outer_top),
+                ("right", (inner_end, outer_end), floor_z + opening_bottom, floor_z + outer_top),
+                ("lintel", (outer_start, outer_end), floor_z + opening_top, floor_z + outer_top),
+            ):
+                meshes.extend(
+                    _architecture_closed_wall_prism_meshes(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_taris_door_structural_{part}",
+                        start=start,
+                        end=end,
+                        span=span,
+                        depth_back=structural_depth_back,
+                        depth_front=structural_depth_front,
+                        z_bottom=z0,
+                        z_top=z1,
+                        material=trim_material,
+                        metadata={
+                            **frame_metadata,
+                            "door_frame_part": part,
+                            "architecture_role": "taris_door_structural_return",
+                            "door_wall_depth_m": structural_depth_front - structural_depth_back,
+                        },
+                    )
+                )
+            for tier, depth, lateral, material in (
+                ("outer", 0.205, 0.0, trim_material),
+                ("inner", 0.275, 0.065, infill_material),
+            ):
+                tier_start = min(inner_start, outer_start + lateral)
+                tier_end = max(inner_end, outer_end - lateral)
+                tier_top = max(opening_top + 0.025, outer_top - lateral * 0.25)
+                for part, span, z0, z1 in (
+                    ("left", (tier_start, inner_start), floor_z + opening_bottom, floor_z + tier_top),
+                    ("right", (inner_end, tier_end), floor_z + opening_bottom, floor_z + tier_top),
+                    ("lintel", (tier_start, tier_end), floor_z + opening_top, floor_z + tier_top),
+                ):
+                    if span[1] - span[0] <= 0.012 or z1 - z0 <= 0.012:
+                        continue
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_taris_door_{tier}_{part}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=None,
+                            depth_bottom=depth,
+                            depth_top=depth,
+                            z_bottom=z0,
+                            z_top=z1,
+                            material=material,
+                            metadata={
+                                **frame_metadata,
+                                "architecture_role": f"taris_door_frame_{tier}",
+                                "door_frame_tier": tier,
+                                "door_frame_part": part,
+                                "beveled_geometry": True,
+                            },
+                        )
+                    )
+
+            tx = (float(end[0]) - float(start[0])) / max(edge_length, 1.0e-8)
+            ty = (float(end[1]) - float(start[1])) / max(edge_length, 1.0e-8)
+            nx, ny = -ty, tx
+
+            def portal_point(distance: float, depth: float, z_value: float) -> Vec3:
+                return (
+                    float(start[0]) + tx * float(distance) + nx * float(depth),
+                    float(start[1]) + ty * float(distance) + ny * float(depth),
+                    float(z_value),
+                )
+
+            reveal_start = structural_depth_front
+            reveal_depth = 0.30
+            for reveal, vertices in (
+                (
+                    "left",
+                    (
+                        portal_point(inner_start, reveal_start, floor_z + opening_bottom),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_bottom),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
+                    ),
+                ),
+                (
+                    "right",
+                    (
+                        portal_point(inner_end, reveal_start, floor_z + opening_bottom),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_bottom),
+                    ),
+                ),
+                (
+                    "lintel",
+                    (
+                        portal_point(inner_start, reveal_start, floor_z + opening_top),
+                        portal_point(inner_start, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_depth, floor_z + opening_top),
+                        portal_point(inner_end, reveal_start, floor_z + opening_top),
+                    ),
+                ),
+            ):
+                meshes.append(
+                    _planar_surface_mesh(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_taris_door_reveal_{reveal}",
+                        vertices=vertices,
+                        faces=((0, 1, 2), (0, 2, 3), (2, 1, 0), (3, 2, 0)),
+                        material=trim_material,
+                        metadata={
+                            **frame_metadata,
+                            "architecture_role": "taris_door_transition_reveal",
+                            "door_frame_part": reveal,
+                            "sealed_transition_reveal": True,
+                        },
+                    )
+                )
+            for side, edge_distance in (("left", inner_start), ("right", inner_end)):
+                light_width = min(0.07, max(0.035, (outer_end - inner_end) * 0.35))
+                span = (
+                    (max(outer_start, edge_distance - light_width), edge_distance)
+                    if side == "left"
+                    else (edge_distance, min(outer_end, edge_distance + light_width))
+                )
+                if span[1] - span[0] <= 0.012:
+                    continue
+                meshes.append(
+                    _architecture_wall_mesh(
+                        name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_taris_door_light_{side}",
+                        start=start,
+                        end=end,
+                        span_bottom=span,
+                        span_top=None,
+                        depth_bottom=0.29,
+                        depth_top=0.29,
+                        z_bottom=floor_z + opening_bottom + 0.08,
+                        z_top=floor_z + opening_top - 0.08,
+                        material=light_material,
+                        metadata={
+                            **frame_metadata,
+                            "architecture_role": "taris_door_light",
+                            "door_frame_part": side,
+                        },
+                    )
+                )
+            continue
         if door_model != "dor_lhr01":
             continue
         center = max(0.0, min(edge_length, float(opening.center_fraction) * edge_length))
         half_width = min(edge_length * 0.5, float(opening.width) * 0.5)
         inner_start = max(0.0, center - half_width)
         inner_end = min(edge_length, center + half_width)
-        trim_width = min(0.22, max(0.12, edge_length * 0.025))
-        outer_start = max(0.0, inner_start - trim_width)
-        outer_end = min(edge_length, inner_end + trim_width)
+        requested_outer_width = float(
+            metadata.get("door_outer_width_m")
+            or metadata.get("door_frame_width_m")
+            or (float(opening.width) + 0.44)
+        )
+        outer_half = min(edge_length * 0.5, max(half_width + 0.12, requested_outer_width * 0.5))
+        outer_start = max(0.0, center - outer_half)
+        outer_end = min(edge_length, center + outer_half)
+        trim_width = max(0.12, min(inner_start - outer_start, outer_end - inner_end))
         opening_bottom = max(0.0, float(opening.bottom))
         opening_top = min(wall_height - 0.015, opening_bottom + float(opening.height))
-        outer_top = min(wall_height - 0.015, opening_top + trim_width)
+        outer_top = min(
+            wall_height - 0.015,
+            max(
+                opening_top + trim_width,
+                float(metadata.get("door_outer_height_m") or metadata.get("door_frame_height_m") or 3.60),
+            ),
+        )
         frame_metadata = {
             **common,
             "opening_name": str(opening.name or ""),
             "door_model_resref": "dor_lhr01",
             "architecture_role": "endar_door_frame",
             "surface_role": "architectural_detail",
+            "vanilla_measurement_source": "DOR_LHR01 + m01aa_08c bulkhead contour",
+            "visible_aperture_profile": "chamfered_octagon",
         }
         parts = (
             ("left", (outer_start, inner_start), floor_z + opening_bottom, floor_z + outer_top),
             ("right", (inner_end, outer_end), floor_z + opening_bottom, floor_z + outer_top),
             ("lintel", (outer_start, outer_end), floor_z + opening_top, floor_z + outer_top),
         )
+        structural_depth_back = -0.52
+        structural_depth_front = 0.13
+        for part, span, z0, z1 in parts:
+            meshes.extend(
+                _architecture_closed_wall_prism_meshes(
+                    name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_endar_door_structural_{part}",
+                    start=start,
+                    end=end,
+                    span=span,
+                    depth_back=structural_depth_back,
+                    depth_front=structural_depth_front,
+                    z_bottom=z0,
+                    z_top=z1,
+                    material=infill_material,
+                    metadata={
+                        **frame_metadata,
+                        "door_frame_part": part,
+                        "architecture_role": "endar_door_structural_return",
+                        "bulkhead_surface_family": "lhr_wall01",
+                        "door_wall_depth_m": structural_depth_front - structural_depth_back,
+                    },
+                )
+            )
         for part, span, z0, z1 in parts:
             if span[1] - span[0] <= 0.015 or z1 - z0 <= 0.015:
                 continue
@@ -2527,15 +2771,21 @@ def _architecture_door_transition_meshes(
                     depth_top=0.145,
                     z_bottom=z0,
                     z_top=z1,
-                    material=trim_material,
-                    metadata={**frame_metadata, "door_frame_part": part},
+                    material=infill_material,
+                    metadata={
+                        **frame_metadata,
+                        "door_frame_part": part,
+                        "architecture_role": "endar_door_bulkhead_backing",
+                        "bulkhead_surface_family": "lhr_wall01",
+                    },
                 )
             )
-        # DOR_LHR01 is an octagonal/rounded portal inside a rectangular MDL
-        # transition envelope. A plain rectangular boolean cut leaves the
-        # four corner voids visible from the authored-room side. Fill those
-        # corners and close the reveal depth so this side reads like the
-        # vanilla LHR transition shell instead of a ring pasted over a hole.
+        # DOR_LHR01's ``trans`` mesh is a rectangular 6.160 x 3.010 collision
+        # envelope, but the visible door and the m01aa_08c wall aperture are
+        # chamfered octagons. A rectangular authored reveal is therefore
+        # visibly wrong even though its gameplay bounds are correct. Fill the
+        # four collision-envelope corners with the white bulkhead material and
+        # continue every diagonal through the wall depth.
         tx = (float(end[0]) - float(start[0])) / max(edge_length, 1.0e-8)
         ty = (float(end[1]) - float(start[1])) / max(edge_length, 1.0e-8)
         nx, ny = -ty, tx
@@ -2599,33 +2849,70 @@ def _architecture_door_transition_meshes(
                 )
             )
 
-        reveal_depth = 0.165
+        reveal_start = structural_depth_front
+        reveal_depth = 0.26
         reveal_rows = (
             (
                 "left",
                 (
-                    portal_point(inner_start, 0.0, floor_z + opening_bottom),
-                    portal_point(inner_start, reveal_depth, floor_z + opening_bottom),
-                    portal_point(inner_start, reveal_depth, floor_z + opening_top),
-                    portal_point(inner_start, 0.0, floor_z + opening_top),
+                    portal_point(inner_start, reveal_start, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_start, reveal_depth, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_start, reveal_depth, floor_z + opening_top - chamfer),
+                    portal_point(inner_start, reveal_start, floor_z + opening_top - chamfer),
                 ),
             ),
             (
                 "right",
                 (
-                    portal_point(inner_end, 0.0, floor_z + opening_bottom),
-                    portal_point(inner_end, 0.0, floor_z + opening_top),
-                    portal_point(inner_end, reveal_depth, floor_z + opening_top),
-                    portal_point(inner_end, reveal_depth, floor_z + opening_bottom),
+                    portal_point(inner_end, reveal_start, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_end, reveal_start, floor_z + opening_top - chamfer),
+                    portal_point(inner_end, reveal_depth, floor_z + opening_top - chamfer),
+                    portal_point(inner_end, reveal_depth, floor_z + opening_bottom + chamfer),
                 ),
             ),
             (
                 "lintel",
                 (
-                    portal_point(inner_start, 0.0, floor_z + opening_top),
-                    portal_point(inner_start, reveal_depth, floor_z + opening_top),
-                    portal_point(inner_end, reveal_depth, floor_z + opening_top),
-                    portal_point(inner_end, 0.0, floor_z + opening_top),
+                    portal_point(inner_start + chamfer, reveal_start, floor_z + opening_top),
+                    portal_point(inner_start + chamfer, reveal_depth, floor_z + opening_top),
+                    portal_point(inner_end - chamfer, reveal_depth, floor_z + opening_top),
+                    portal_point(inner_end - chamfer, reveal_start, floor_z + opening_top),
+                ),
+            ),
+            (
+                "upper_left_diagonal",
+                (
+                    portal_point(inner_start, reveal_start, floor_z + opening_top - chamfer),
+                    portal_point(inner_start, reveal_depth, floor_z + opening_top - chamfer),
+                    portal_point(inner_start + chamfer, reveal_depth, floor_z + opening_top),
+                    portal_point(inner_start + chamfer, reveal_start, floor_z + opening_top),
+                ),
+            ),
+            (
+                "upper_right_diagonal",
+                (
+                    portal_point(inner_end - chamfer, reveal_start, floor_z + opening_top),
+                    portal_point(inner_end - chamfer, reveal_depth, floor_z + opening_top),
+                    portal_point(inner_end, reveal_depth, floor_z + opening_top - chamfer),
+                    portal_point(inner_end, reveal_start, floor_z + opening_top - chamfer),
+                ),
+            ),
+            (
+                "lower_left_diagonal",
+                (
+                    portal_point(inner_start + chamfer, reveal_start, floor_z + opening_bottom),
+                    portal_point(inner_start + chamfer, reveal_depth, floor_z + opening_bottom),
+                    portal_point(inner_start, reveal_depth, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_start, reveal_start, floor_z + opening_bottom + chamfer),
+                ),
+            ),
+            (
+                "lower_right_diagonal",
+                (
+                    portal_point(inner_end, reveal_start, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_end, reveal_depth, floor_z + opening_bottom + chamfer),
+                    portal_point(inner_end - chamfer, reveal_depth, floor_z + opening_bottom),
+                    portal_point(inner_end - chamfer, reveal_start, floor_z + opening_bottom),
                 ),
             ),
         )
@@ -2641,6 +2928,7 @@ def _architecture_door_transition_meshes(
                         "architecture_role": "endar_door_transition_reveal",
                         "door_frame_part": reveal,
                         "sealed_transition_reveal": True,
+                        "octagonal_reveal": True,
                     },
                 )
             )
@@ -2665,8 +2953,8 @@ def _architecture_door_transition_meshes(
                     span_top=None,
                     depth_bottom=0.158,
                     depth_top=0.158,
-                    z_bottom=floor_z + opening_bottom + 0.06,
-                    z_top=floor_z + opening_top - 0.06,
+                    z_bottom=floor_z + opening_bottom + chamfer + 0.03,
+                    z_top=floor_z + opening_top - chamfer - 0.03,
                     material=light_material,
                     metadata={
                         **frame_metadata,
@@ -2813,6 +3101,8 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
     shell_profile = architecture_shell_profile(primitive)
     if shell_profile not in {
         "endar_corridor",
+        "endar_command_deck",
+        "endar_crew_quarters",
         "harbinger_corridor",
         "telos_citadel_residential",
         "telos_citadel_civic",
@@ -2828,6 +3118,8 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         "onderon_palace_state_hall",
         "onderon_palace_museum",
         "taris_apartment",
+        "taris_residential_corridor",
+        "taris_living_suite",
         "korriban_tomb",
         "korriban_tomb_chamber",
         "korriban_tomb_junction",
@@ -2842,6 +3134,10 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
     height = float(primitive.wall_height)
     minimum_height = {
         "taris_apartment": 2.10,
+        "taris_residential_corridor": 2.10,
+        "taris_living_suite": 2.10,
+        "endar_command_deck": 3.75,
+        "endar_crew_quarters": 3.20,
         "telos_citadel_residential": 3.50,
         "telos_citadel_civic": 5.40,
         "telos_citadel_concourse": 6.10,
@@ -2865,7 +3161,7 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
     if height < minimum_height:
         label = (
             "Taris apartment"
-            if shell_profile == "taris_apartment"
+            if shell_profile.startswith("taris_")
             else "Telos Citadel room"
             if shell_profile.startswith("telos_citadel_")
             else "Onderon exterior court"
@@ -3290,7 +3586,11 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
             rib_projection = 0.36 if is_state_hall else 0.20
             bay_target = 7.50 if is_state_hall else 3.75 if shell_profile == "onderon_palace_museum" else 4.50
             rib_role = "palace_monumental_pylon" if is_state_hall else "palace_beveled_column"
-    elif shell_profile == "taris_apartment":
+    elif shell_profile in {
+        "taris_apartment",
+        "taris_residential_corridor",
+        "taris_living_suite",
+    }:
         # Repeated m02aa_03a/m02aa_06a and m02ad counterparts establish the
         # Taris apartment interior stations: 0.187 m skirting, 0.45 m lower
         # service return, 1.35..1.50 m luminous belt, 1.65 m upper panel datum,
@@ -3299,43 +3599,109 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         # the recommended floor-to-floor dimension rather than wasted interior
         # headroom. Scaling the station ratios keeps edited heights coherent.
         nominal_height = 2.55
-        levels = (
-            (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
-            (0.05, 0.187 / nominal_height, "taris_floor_edge", floor_edge_material, True),
-            (0.02, 0.450 / nominal_height, "taris_lower_service_plinth", utility_material, False),
-            (0.02, 1.350 / nominal_height, "taris_wall_panel_zone", wall_material, False),
-            (0.05, 1.500 / nominal_height, "integrated_light", light_material, False),
-            (0.02, 1.650 / nominal_height, "taris_utility_light_return", accent_material, False),
-            (0.03, 1.950 / nominal_height, "taris_upper_wall_panel", wall_material, False),
-            (0.14, 2.100 / nominal_height, "taris_upper_shoulder", trim_material, False),
-            (0.32, 2.396 / nominal_height, "taris_ceiling_cove", ceiling_material, False),
-            (0.32, 1.000, "recessed_ceiling_transition", ceiling_material, False),
-        )
-        rib_projection = 0.055
-        bay_target = 2.40
-        rib_role = "structural_rib"
+        if shell_profile == "taris_residential_corridor":
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.07, 0.187 / nominal_height, "taris_corridor_floor_edge", floor_edge_material, True),
+                (0.05, 0.450 / nominal_height, "taris_corridor_service_plinth", utility_material, False),
+                (0.08, 1.350 / nominal_height, "taris_corridor_panel_field", wall_material, False),
+                (0.12, 1.500 / nominal_height, "integrated_light", light_material, False),
+                (0.10, 1.650 / nominal_height, "taris_corridor_light_return", accent_material, False),
+                (0.18, 1.950 / nominal_height, "taris_corridor_upper_panel", wall_material, False),
+                (0.30, 2.100 / nominal_height, "taris_corridor_door_crown", trim_material, False),
+                (0.40, 2.396 / nominal_height, "taris_corridor_ceiling_cove", ceiling_material, False),
+                (0.40, 1.000, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.085
+            bay_target = 1.80
+            rib_role = "taris_corridor_door_station"
+        elif shell_profile == "taris_living_suite":
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.04, 0.187 / nominal_height, "taris_suite_floor_edge", floor_edge_material, True),
+                (0.10, 0.450 / nominal_height, "taris_suite_service_recess", utility_material, False),
+                (0.15, 1.350 / nominal_height, "taris_suite_broad_panel_field", wall_material, False),
+                (0.09, 1.500 / nominal_height, "integrated_light", light_material, False),
+                (0.16, 1.650 / nominal_height, "taris_suite_utility_shelf", accent_material, False),
+                (0.22, 1.950 / nominal_height, "taris_suite_upper_return", wall_material, False),
+                (0.34, 2.100 / nominal_height, "taris_suite_ceiling_shoulder", trim_material, False),
+                (0.44, 2.396 / nominal_height, "taris_suite_ceiling_cove", ceiling_material, False),
+                (0.44, 1.000, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.045
+            bay_target = 4.80
+            rib_role = "taris_suite_divider"
+        else:
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.05, 0.187 / nominal_height, "taris_floor_edge", floor_edge_material, True),
+                (0.02, 0.450 / nominal_height, "taris_lower_service_plinth", utility_material, False),
+                (0.02, 1.350 / nominal_height, "taris_wall_panel_zone", wall_material, False),
+                (0.05, 1.500 / nominal_height, "integrated_light", light_material, False),
+                (0.02, 1.650 / nominal_height, "taris_utility_light_return", accent_material, False),
+                (0.03, 1.950 / nominal_height, "taris_upper_wall_panel", wall_material, False),
+                (0.14, 2.100 / nominal_height, "taris_upper_shoulder", trim_material, False),
+                (0.32, 2.396 / nominal_height, "taris_ceiling_cove", ceiling_material, False),
+                (0.32, 1.000, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.055
+            bay_target = 2.40
+            rib_role = "structural_rib"
     else:
         # The vertical stations are measured from the repeated Endar/Harbinger
         # corridor shell (m01aa_06a, m01ab_09a, 151har02). 151har02 repeats the
         # same 0.000..3.655 m stations, proving this is a Republic-warship module
         # dimension rather than a one-off screenshot estimate.
-        nominal_height = 3.655
-        levels = (
-            (0.00, 0.00, "", floor_edge_material, True),
-            (0.50, 0.176 / nominal_height, "raised_floor_edge", floor_edge_material, True),
-            (0.68, 0.695 / nominal_height, "red_inset_panel", accent_material, False),
-            (0.52, 0.945 / nominal_height, "lower_bulkhead_return", utility_material, False),
-            (0.47, 1.177 / nominal_height, "integrated_light", light_material, False),
-            (0.52, 1.472 / nominal_height, "mid_bulkhead", wall_material, False),
-            (0.76, 2.242 / nominal_height, "canted_upper_bulkhead", accent_material, False),
-            (0.97, 2.676 / nominal_height, "arched_shoulder", trim_material, False),
-            (1.10, 2.971 / nominal_height, "ceiling_light_coffer", light_material, False),
-            (1.13, 3.221 / nominal_height, "faceted_ceiling_cove", ceiling_material, False),
-            (1.13, 1.00, "recessed_ceiling_transition", ceiling_material, False),
-        )
-        rib_projection = 0.075
-        bay_target = 2.55
-        rib_role = "arched_rib"
+        nominal_height = 4.20 if shell_profile == "endar_command_deck" else 3.655
+        if shell_profile == "endar_command_deck":
+            levels = (
+                (0.00, 0.00, "", floor_edge_material, True),
+                (0.42, 0.176 / nominal_height, "command_floor_edge", floor_edge_material, True),
+                (0.62, 0.760 / nominal_height, "command_console_plinth", utility_material, False),
+                (0.54, 1.160 / nominal_height, "command_light_belt", light_material, False),
+                (0.66, 1.760 / nominal_height, "command_bulkhead_field", wall_material, False),
+                (0.92, 2.720 / nominal_height, "command_canted_upper_bulkhead", accent_material, False),
+                (1.18, 3.180 / nominal_height, "command_arch_shoulder", trim_material, False),
+                (1.34, 3.620 / nominal_height, "command_ceiling_light_tray", light_material, False),
+                (1.42, 3.920 / nominal_height, "command_faceted_ceiling_cove", ceiling_material, False),
+                (1.42, 1.00, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.12
+            bay_target = 5.10
+            rib_role = "command_deck_pylon"
+        elif shell_profile == "endar_crew_quarters":
+            levels = (
+                (0.00, 0.00, "", floor_edge_material, True),
+                (0.36, 0.176 / nominal_height, "quarters_floor_edge", floor_edge_material, True),
+                (0.64, 0.695 / nominal_height, "quarters_service_recess", utility_material, False),
+                (0.48, 1.177 / nominal_height, "integrated_light", light_material, False),
+                (0.62, 1.472 / nominal_height, "quarters_wall_panel", wall_material, False),
+                (0.84, 2.242 / nominal_height, "quarters_canted_upper_panel", accent_material, False),
+                (1.02, 2.676 / nominal_height, "quarters_arch_shoulder", trim_material, False),
+                (1.14, 2.971 / nominal_height, "quarters_ceiling_light_coffer", light_material, False),
+                (1.18, 3.221 / nominal_height, "quarters_ceiling_cove", ceiling_material, False),
+                (1.18, 1.00, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.065
+            bay_target = 1.80
+            rib_role = "quarters_compartment_rib"
+        else:
+            levels = (
+                (0.00, 0.00, "", floor_edge_material, True),
+                (0.50, 0.176 / nominal_height, "raised_floor_edge", floor_edge_material, True),
+                (0.68, 0.695 / nominal_height, "red_inset_panel", accent_material, False),
+                (0.52, 0.945 / nominal_height, "lower_bulkhead_return", utility_material, False),
+                (0.47, 1.177 / nominal_height, "integrated_light", light_material, False),
+                (0.52, 1.472 / nominal_height, "mid_bulkhead", wall_material, False),
+                (0.76, 2.242 / nominal_height, "canted_upper_bulkhead", accent_material, False),
+                (0.97, 2.676 / nominal_height, "arched_shoulder", trim_material, False),
+                (1.10, 2.971 / nominal_height, "ceiling_light_coffer", light_material, False),
+                (1.13, 3.221 / nominal_height, "faceted_ceiling_cove", ceiling_material, False),
+                (1.13, 1.00, "recessed_ceiling_transition", ceiling_material, False),
+            )
+            rib_projection = 0.075
+            bay_target = 2.55
+            rib_role = "arched_rib"
     depths = tuple(level[0] for level in levels) + tuple(level[0] + rib_projection for level in levels)
     rings, depth_scale = _architecture_profile_rings(points, depths)
     openings_by_edge: dict[int, tuple[FloorPlanWallOpening, ...]] = {
@@ -4121,9 +4487,10 @@ def _shadowlands_connected_cave_connector_meshes(
     # supplied opaque moss/root atlas so the default never exposes the hard,
     # alpha-cut edges of retail foliage billboards.  The slots remain
     # replaceable with a user-authored jungle panorama.
+    panorama_lateral = half_width + max(1.55, float(berm_width) * 0.58)
     for side_name, lateral, texture in (
-        ("left", -half_width - 0.45, "gr_shadentr"),
-        ("right", half_width + 0.45, "gr_shadentr"),
+        ("left", -panorama_lateral, "gr_shadentr"),
+        ("right", panorama_lateral, "gr_shadentr"),
     ):
         bottom = float(floor_z) + float(opening.bottom) + 0.04
         top = bottom + max(3.5, float(opening.height) + 1.15)
@@ -4153,6 +4520,8 @@ def _shadowlands_connected_cave_connector_meshes(
                         "architecture_role": "shadowlands_jungle_panorama_card",
                         "surface_role": "forest_backdrop",
                         "panorama_side": side_name,
+                        "panorama_lateral_offset_m": float(panorama_lateral),
+                        "portal_clearance_occlusion_safe": True,
                         "replaceable_panorama_texture": True,
                         "background_geometry": True,
                         "visual_only": True,
@@ -4180,9 +4549,20 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
     validation = validate_floor_plan_room_primitive(primitive)
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
+    shell_profile = architecture_shell_profile(primitive)
+    if shell_profile not in {
+        "shadowlands_root_wall",
+        "shadowlands_root_passage",
+        "shadowlands_ancient_grove",
+    }:
+        shell_profile = "shadowlands_root_wall"
     height = float(primitive.wall_height)
-    if height < 2.5:
-        raise ValueError("The Shadowlands root-wall contour requires a height of at least 2.50 m.")
+    minimum_height = 3.5 if shell_profile == "shadowlands_root_passage" else 4.5
+    if height < minimum_height:
+        raise ValueError(
+            f"The Shadowlands {shell_profile.removeprefix('shadowlands_').replace('_', ' ')} "
+            f"contour requires a height of at least {minimum_height:.2f} m."
+        )
     points = _ccw_points(_normalise_points(primitive.points))
     room_resref = _normalise_resref(primitive.room_resref)
     floor_z = float(primitive.z)
@@ -4198,7 +4578,7 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
     common = {
         "primitive": "floor_plan_shadowlands_shell",
         "architecture_profile": "shadowlands",
-        "architecture_shell_profile": "shadowlands_root_wall",
+        "architecture_shell_profile": shell_profile,
         "source_module": str(primitive.metadata.get("style_source_module", "") or ""),
         "source_rooms": tuple(primitive.metadata.get("architecture_evidence_rooms") or ()),
         "open_air": True,
@@ -4211,25 +4591,56 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
     # A wide bank is the visual contract: it must visibly slope away from the
     # clearing instead of reading as a textured vertical wall.  Limit it for
     # compact footprints so a small encounter space remains usable.
-    berm_width = min(4.80, max(1.85, min(max_x - min_x, max_y - min_y) * 0.19))
+    footprint_span = min(max_x - min_x, max_y - min_y)
+    if shell_profile == "shadowlands_root_passage":
+        berm_width = min(3.60, max(1.55, footprint_span * 0.16))
+    elif shell_profile == "shadowlands_ancient_grove":
+        berm_width = min(6.40, max(2.60, footprint_span * 0.23))
+    else:
+        berm_width = min(4.80, max(1.85, footprint_span * 0.19))
     # Closed height/depth rings.  Every vertical strip samples these shared
     # values, and the corner caps below stitch adjacent polygon edges.  This
     # is the topology contract that prevents a procedural outdoor boundary
     # from exposing the editor grid through a crack.
-    profile_levels = (
-        # The first ring is the exact authored floor outline.  Starting it at
-        # a positive berm offset left a real slit between terrain and floor;
-        # fog merely made that seam harder to notice instead of closing it.
-        (0.00, 0.00, 0.000, "earthen_toe"),
-        (0.11, 0.24, 0.055, "earthen_toe"),
-        (0.42, 0.64, 0.100, "dirt_mound_slope"),
-        (0.69, 0.91, 0.130, "weathered_dirt_ridge"),
-        (0.90, 1.00, 0.075, "mossy_berm_crown"),
-        (1.00, 0.96, 0.040, "mossy_berm_crown"),
-    )
+    if shell_profile == "shadowlands_root_passage":
+        profile_levels = (
+            (0.00, 0.00, 0.000, "root_passage_floor_weld"),
+            (0.08, 0.18, 0.070, "root_passage_earthen_toe"),
+            (0.34, 0.52, 0.145, "root_passage_steep_bank"),
+            (0.62, 0.86, 0.180, "root_passage_exposed_slope"),
+            (0.86, 1.00, 0.115, "root_passage_crown"),
+            (1.00, 0.92, 0.060, "root_passage_crown"),
+        )
+        vertical_subdivisions = 4
+        root_stride = 2
+    elif shell_profile == "shadowlands_ancient_grove":
+        profile_levels = (
+            (0.00, 0.00, 0.000, "grove_floor_weld"),
+            (0.10, 0.28, 0.075, "grove_earthen_toe"),
+            (0.35, 0.70, 0.145, "grove_broad_mound"),
+            (0.62, 0.96, 0.190, "grove_weathered_ridge"),
+            (0.82, 0.78, 0.160, "grove_root_recess"),
+            (0.94, 1.00, 0.120, "grove_high_crown"),
+            (1.00, 0.90, 0.080, "grove_high_crown"),
+        )
+        vertical_subdivisions = 4
+        root_stride = 2
+    else:
+        profile_levels = (
+            # The first ring is the exact authored floor outline.  Starting it
+            # at a positive berm offset left a real slit between terrain and
+            # floor; fog only hid that seam instead of closing it.
+            (0.00, 0.00, 0.000, "earthen_toe"),
+            (0.11, 0.24, 0.055, "earthen_toe"),
+            (0.42, 0.64, 0.100, "dirt_mound_slope"),
+            (0.69, 0.91, 0.130, "weathered_dirt_ridge"),
+            (0.90, 1.00, 0.075, "mossy_berm_crown"),
+            (1.00, 0.96, 0.040, "mossy_berm_crown"),
+        )
+        vertical_subdivisions = 3
+        root_stride = 3
     # Three strips per profile band makes the circular cave aperture read as
     # an actual dirt arch rather than a stepped rectangular cutout.
-    vertical_subdivisions = 3
     for edge_index, start in enumerate(points):
         end = points[(edge_index + 1) % len(points)]
         edge_length = _edge_length(start, end)
@@ -4327,7 +4738,7 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
 
         # A few exposed roots keep the bank grounded in Kashyyyk without
         # turning every perimeter segment into a vertical tree-trunk fence.
-        for boundary_index in range(1, segment_count, 3):
+        for boundary_index in range(1, segment_count, root_stride):
             center = min(edge_length, (boundary_index + 0.42) * segment_width)
             half_bottom = min(0.52, segment_width * 0.20)
             bottom_span = (max(0.0, center - half_bottom), min(edge_length, center + half_bottom))
@@ -5029,6 +5440,13 @@ def build_floor_plan_korriban_cave_meshes(primitive: FloorPlanRoomPrimitive) -> 
     room_resref = _normalise_resref(primitive.room_resref)
     floor_z = float(primitive.z)
     profile = str(primitive.metadata.get("architecture_profile", "") or "").strip().lower()
+    shell_profile = architecture_shell_profile(primitive)
+    if shell_profile not in {
+        "korriban_cave",
+        "korriban_cave_grotto",
+        "korriban_cave_nest",
+    }:
+        shell_profile = "korriban_cave"
     is_k2 = profile == "korriban_caves_k2"
     cliff_texture = "kor_cliff01" if is_k2 else "lko_cliff01"
     cliff_material = primitive.wall_material or _architecture_material(cliff_texture)
@@ -5038,21 +5456,53 @@ def build_floor_plan_korriban_cave_meshes(primitive: FloorPlanRoomPrimitive) -> 
     max_x = max(point[0] for point in points)
     min_y = min(point[1] for point in points)
     max_y = max(point[1] for point in points)
-    maximum_depth = min(1.85, max(0.72, min(max_x - min_x, max_y - min_y) * 0.18))
+    footprint_span = min(max_x - min_x, max_y - min_y)
+    if shell_profile == "korriban_cave_grotto":
+        maximum_depth = min(2.65, max(1.10, footprint_span * 0.22))
+    elif shell_profile == "korriban_cave_nest":
+        maximum_depth = min(2.20, max(0.90, footprint_span * 0.20))
+    else:
+        maximum_depth = min(1.85, max(0.72, footprint_span * 0.18))
     # Alternating inward shoulders and outward pockets create a genuinely
     # concave cross-section.  The old monotonic inset read as a flat berm even
     # after triangulation.  These stations follow the layered bulge/recess
     # rhythm measured across m34aa_02a/03a/04a cliff surfaces.
-    profile_levels = (
-        (0.00, 0.00, 0.000, "cave_floor_weld"),
-        (0.10, 0.24, 0.120, "weathered_cave_toe"),
-        (0.28, 0.02, 0.220, "lower_cave_recess"),
-        (0.47, 0.44, 0.270, "shyrack_cliff_wall"),
-        (0.64, 0.12, 0.320, "eroded_cave_alcove"),
-        (0.80, 0.78, 0.290, "canted_rock_shoulders"),
-        (0.92, 0.38, 0.240, "upper_ceiling_pocket"),
-        (1.00, 1.00, 0.190, "faceted_cave_crown"),
-    )
+    if shell_profile == "korriban_cave_grotto":
+        profile_levels = (
+            (0.00, 0.00, 0.000, "grotto_floor_weld"),
+            (0.08, 0.28, 0.150, "grotto_weathered_toe"),
+            (0.24, 0.02, 0.300, "grotto_lower_undercut"),
+            (0.42, 0.58, 0.360, "grotto_layered_cliff"),
+            (0.58, 0.16, 0.410, "grotto_deep_rock_pocket"),
+            (0.74, 0.86, 0.370, "grotto_rock_shelf"),
+            (0.88, 0.30, 0.330, "grotto_upper_undercut"),
+            (1.00, 1.00, 0.260, "grotto_faceted_crown"),
+        )
+        formation_spacing = 3.25
+    elif shell_profile == "korriban_cave_nest":
+        profile_levels = (
+            (0.00, 0.00, 0.000, "nest_floor_weld"),
+            (0.09, 0.22, 0.160, "nest_rock_toe"),
+            (0.25, 0.03, 0.310, "nest_lower_recess"),
+            (0.45, 0.50, 0.390, "nest_cliff_wall"),
+            (0.62, 0.10, 0.450, "nest_eroded_alcove"),
+            (0.78, 0.82, 0.410, "nest_pointed_shoulders"),
+            (0.91, 0.34, 0.370, "nest_ceiling_pocket"),
+            (1.00, 1.00, 0.300, "nest_irregular_crown"),
+        )
+        formation_spacing = 2.45
+    else:
+        profile_levels = (
+            (0.00, 0.00, 0.000, "cave_floor_weld"),
+            (0.10, 0.24, 0.120, "weathered_cave_toe"),
+            (0.28, 0.02, 0.220, "lower_cave_recess"),
+            (0.47, 0.44, 0.270, "shyrack_cliff_wall"),
+            (0.64, 0.12, 0.320, "eroded_cave_alcove"),
+            (0.80, 0.78, 0.290, "canted_rock_shoulders"),
+            (0.92, 0.38, 0.240, "upper_ceiling_pocket"),
+            (1.00, 1.00, 0.190, "faceted_cave_crown"),
+        )
+        formation_spacing = 3.80
     depths = tuple(maximum_depth * level[1] for level in profile_levels)
     rings, depth_scale = _architecture_profile_rings(points, depths)
     ring_cache = dict(rings)
@@ -5071,7 +5521,7 @@ def build_floor_plan_korriban_cave_meshes(primitive: FloorPlanRoomPrimitive) -> 
     common = {
         "primitive": "floor_plan_korriban_cave_shell",
         "architecture_profile": profile,
-        "architecture_shell_profile": "korriban_cave",
+        "architecture_shell_profile": shell_profile,
         "profile_depth_scale": depth_scale,
         "source_module": "710kor" if is_k2 else "m34aa",
         "source_rooms": tuple(primitive.metadata.get("architecture_evidence_rooms") or ()),
@@ -5264,7 +5714,7 @@ def build_floor_plan_korriban_cave_meshes(primitive: FloorPlanRoomPrimitive) -> 
         # Keep pointed formations near the perimeter so they read clearly
         # without narrowing the central traversal lane.  Openings receive a
         # generous exclusion margin, and the formations stay visual-only.
-        formation_count = max(2, int(math.floor(edge_length / 3.8)))
+        formation_count = max(2, int(math.floor(edge_length / formation_spacing)))
         for formation_index in range(formation_count):
             distance = edge_length * (float(formation_index) + 0.5) / float(formation_count)
             blocked = any(
@@ -5878,7 +6328,9 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
                 floor_z=floor_z,
                 wall_height=height,
                 openings=openings,
-                infill_material=accent_material,
+                # Endar's retail portal is cut through the white LHR bulkhead;
+                # red is adjacent panel dressing, not the aperture surround.
+                infill_material=wall_material if profile == "endar_spire" else accent_material,
                 trim_material=trim_material,
                 light_material=light_material,
                 common=common,

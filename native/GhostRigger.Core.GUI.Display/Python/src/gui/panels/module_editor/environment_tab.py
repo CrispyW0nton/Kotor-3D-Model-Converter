@@ -28,6 +28,10 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self._last_profile = "standard"
         self._standard_values: dict[str, Any] = {}
         self._lightmap_rows: tuple[dict[str, Any], ...] = ()
+        self._sky_module_root = ""
+        self._sky_game = "K1"
+        self._sky_visible_rooms: tuple[str, ...] = ()
+        self._sky_building_style_id = ""
 
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
@@ -544,23 +548,67 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.sky_traffic_duration_spin.setEnabled(not speed_mode)
         self.sky_traffic_speed_spin.setEnabled(speed_mode)
 
-    def set_skybox_context(self, *, module_root: str = "", game: str = "K1", room_resrefs: Any = ()) -> None:
-        """Keep sky authoring defaults aligned with the current KMAP project."""
+    def _rebuild_skybox_preset_choices(self) -> None:
+        """Keep the selected kit's measured sky first without hiding alternatives."""
 
-        root = str(module_root or "").strip().lower()
-        rooms = tuple(str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip())
-        self._sky_visible_rooms = rooms
         selected_preset = str(self.sky_preset_combo.currentData() or "")
+        style_id = self._sky_building_style_id
+        presets = available_kotor_skybox_presets(self._sky_game, style_id)
+        recommended = tuple(
+            preset
+            for preset in presets
+            if style_id and style_id in {value.lower() for value in preset.building_style_ids}
+        )
+        others = tuple(preset for preset in presets if preset not in recommended)
         self.sky_preset_combo.blockSignals(True)
         try:
             self.sky_preset_combo.clear()
             self.sky_preset_combo.addItem("Custom / Existing Textures", "")
-            for preset in available_kotor_skybox_presets(game):
+            for preset in recommended:
+                self.sky_preset_combo.addItem(f"Recommended — {preset.label}", preset.preset_id)
+            if recommended and others:
+                self.sky_preset_combo.insertSeparator(self.sky_preset_combo.count())
+            for preset in others:
                 self.sky_preset_combo.addItem(preset.label, preset.preset_id)
-            selected_index = self.sky_preset_combo.findData(selected_preset)
-            self.sky_preset_combo.setCurrentIndex(selected_index if selected_index >= 0 else 0)
+            selected_index = self.sky_preset_combo.findData(selected_preset) if selected_preset else -1
+            self.sky_preset_combo.setCurrentIndex(selected_index if selected_index >= 0 else (1 if recommended else 0))
         finally:
             self.sky_preset_combo.blockSignals(False)
+        if recommended and not selected_preset:
+            self._apply_skybox_preset()
+
+    def set_skybox_building_style(self, style_id: str, _environment_kind: str = "") -> None:
+        """Recommend the retail sky/backdrop measured for the selected build kit."""
+
+        wanted = str(style_id or "").strip().lower()
+        if wanted == self._sky_building_style_id:
+            return
+        self._sky_building_style_id = wanted
+        self.sky_preset_combo.blockSignals(True)
+        try:
+            self.sky_preset_combo.setCurrentIndex(0)
+        finally:
+            self.sky_preset_combo.blockSignals(False)
+        self._rebuild_skybox_preset_choices()
+
+    def set_skybox_context(
+        self,
+        *,
+        module_root: str = "",
+        game: str = "K1",
+        room_resrefs: Any = (),
+        building_style_id: str = "",
+    ) -> None:
+        """Keep sky authoring defaults aligned with the current KMAP project."""
+
+        root = str(module_root or "").strip().lower()
+        rooms = tuple(str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip())
+        self._sky_module_root = root
+        self._sky_game = str(game or "K1").strip().upper()
+        self._sky_visible_rooms = rooms
+        if building_style_id:
+            self._sky_building_style_id = str(building_style_id).strip().lower()
+        self._rebuild_skybox_preset_choices()
         self.sky_group.setEnabled(bool(root))
         self.sky_panorama_button.setEnabled(bool(root and rooms))
         if root and not self.sky_room_resref_edit.text().strip():
@@ -570,7 +618,8 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
             for face, suffix in (("north", "n"), ("east", "e"), ("south", "s"), ("west", "w"), ("top", "t")):
                 self.sky_texture_edits[face].setText(f"{prefix}_{suffix}"[:16])
         self.sky_group.setToolTip(
-            f"Create a {str(game or 'K1').upper()} visual-only sky dome visible from {len(rooms)} authored room(s)."
+            f"Create a {self._sky_game} visual-only sky dome visible from {len(rooms)} authored room(s). "
+            "The selected architecture kit's measured retail sky is listed first."
         )
 
     def _apply_skybox_preset(self, _index: int = -1) -> None:
@@ -587,7 +636,8 @@ class MapStudioEnvironmentTab(QtWidgets.QWidget):
         self.sky_status_label.setText(
             f"Ready: {preset.label}. These are the original texture ResRefs from "
             f"{preset.source_room.upper()} in {preset.source_module.upper()}; Ghost Studio "
-            "builds a curved visual-only dome and leaves collision untouched."
+            "builds a curved visual-only dome and leaves collision untouched. You can still "
+            "choose a custom panorama or HDR; HDR values are tone-mapped offline for KOTOR."
         )
 
     def set_skybox_status(self, message: str) -> None:

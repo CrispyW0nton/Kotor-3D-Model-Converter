@@ -121,6 +121,44 @@ _ARCHITECTURE_STYLES = (
         source_room="m01aa_08a",
         architecture_profile="endar_spire",
         architecture_shell_profile="endar_corridor",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="corridor",
+                label="Republic corridor",
+                shell_profile="endar_corridor",
+                recommended_wall_height_m=3.655,
+                recommended_floor_to_floor_m=3.87,
+                description=(
+                    "The close, ribbed Endar Spire passage: raised floor margins, illuminated "
+                    "lower belt, canted red bulkheads, and a deeply faceted ceiling coffer."
+                ),
+                evidence_rooms=("m01aa_06a", "m01aa_08a", "m01ab_09a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="command_deck",
+                label="Command-deck gallery",
+                shell_profile="endar_command_deck",
+                recommended_wall_height_m=4.20,
+                recommended_floor_to_floor_m=4.45,
+                description=(
+                    "A broader command and bridge shell with wider console bays, stronger "
+                    "portal pylons, and a higher recessed lighting tray."
+                ),
+                evidence_rooms=("m01aa_01a", "m01ab_09a", "k2:151har02"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="crew_quarters",
+                label="Crew-quarters compartment",
+                shell_profile="endar_crew_quarters",
+                recommended_wall_height_m=3.655,
+                recommended_floor_to_floor_m=3.87,
+                description=(
+                    "A denser Republic compartment contour with shorter wall-panel cadence, "
+                    "utility recesses, and a compact vaulted ceiling."
+                ),
+                evidence_rooms=("m01aa_06a", "m01aa_08a", "k2:152har36"),
+            ),
+        ),
         recommended_wall_height_m=3.655,
         recommended_floor_to_floor_m=3.87,
         recommended_door_width_m=6.16,
@@ -553,6 +591,44 @@ _ARCHITECTURE_STYLES = (
         source_room="m02aa_06a",
         architecture_profile="taris_apartments",
         architecture_shell_profile="taris_apartment",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="apartment",
+                label="Apartment room",
+                shell_profile="taris_apartment",
+                recommended_wall_height_m=2.55,
+                recommended_floor_to_floor_m=3.075,
+                description=(
+                    "The measured Taris apartment shell with low service plinths, framed wall "
+                    "panels, a luminous utility belt, and a recessed ceiling cove."
+                ),
+                evidence_rooms=("m02aa_03a", "m02aa_06a", "m02ad_06a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="corridor",
+                label="Residential corridor",
+                shell_profile="taris_residential_corridor",
+                recommended_wall_height_m=2.55,
+                recommended_floor_to_floor_m=3.075,
+                description=(
+                    "A tighter apartment-access corridor with shorter structural bays, strong "
+                    "door stations, and a continuous waist-height light run."
+                ),
+                evidence_rooms=("m02aa_01a", "m02aa_03a", "m02ad_01a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="living_suite",
+                label="Living and utility suite",
+                shell_profile="taris_living_suite",
+                recommended_wall_height_m=2.55,
+                recommended_floor_to_floor_m=3.075,
+                description=(
+                    "A wider residential chamber with longer panel fields and deeper service "
+                    "recesses for furniture, storage, and apartment set dressing."
+                ),
+                evidence_rooms=("m02aa_06a", "m02ad_06a"),
+            ),
+        ),
         recommended_wall_height_m=2.55,
         recommended_floor_to_floor_m=3.075,
         recommended_door_width_m=3.0,
@@ -572,6 +648,44 @@ _ARCHITECTURE_STYLES = (
         source_room="m24aa_02a",
         architecture_profile="shadowlands",
         architecture_shell_profile="shadowlands_root_wall",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="clearing",
+                label="Earthen clearing",
+                shell_profile="shadowlands_root_wall",
+                recommended_wall_height_m=6.0,
+                recommended_floor_to_floor_m=8.0,
+                description=(
+                    "An open-air clearing bounded by broad welded dirt berms, exposed roots, "
+                    "and cave-ready organic portal mouths."
+                ),
+                evidence_rooms=("m24aa_02a", "m24aa_09a", "m25aa_01a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="root_passage",
+                label="Root-lined passage",
+                shell_profile="shadowlands_root_passage",
+                recommended_wall_height_m=5.5,
+                recommended_floor_to_floor_m=7.0,
+                description=(
+                    "A narrower traversal lane with steeper dirt shoulders and more frequent "
+                    "exposed roots, intended to connect clearings without reading as a box room."
+                ),
+                evidence_rooms=("m24aa_13a", "m25aa_04a", "m25aa_11a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="ancient_grove",
+                label="Ancient-root grove",
+                shell_profile="shadowlands_ancient_grove",
+                recommended_wall_height_m=8.0,
+                recommended_floor_to_floor_m=10.0,
+                description=(
+                    "A large, low-slope grove enclosure with an irregular high crown and room "
+                    "for retail ancient trunks, canopy silhouettes, fog, and grass dressing."
+                ),
+                evidence_rooms=("m24aa_16a", "m25aa_12a"),
+            ),
+        ),
         # The stock walkable tiles vary by 10-17 m.  The 6 m parameter drives
         # a broad, irregular dirt berm; full-size ancient roots and trunks
         # remain explicit, draggable retail staging pieces.
@@ -748,6 +862,44 @@ _ARCHITECTURE_STYLES = (
         source_room="m34aa_01a",
         architecture_profile="korriban_caves_k1",
         architecture_shell_profile="korriban_cave",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="passage",
+                label="Shyrack cave passage",
+                shell_profile="korriban_cave",
+                recommended_wall_height_m=6.25,
+                recommended_floor_to_floor_m=7.0,
+                description=(
+                    "A concave, faceted passage with asymmetric rock pockets, a continuous "
+                    "walkable floor, and sparse stalactite/stalagmite formations."
+                ),
+                evidence_rooms=("m34aa_01a", "m34aa_01b", "m34aa_05a", "m34aa_05b"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="grotto",
+                label="Layered cavern grotto",
+                shell_profile="korriban_cave_grotto",
+                recommended_wall_height_m=8.50,
+                recommended_floor_to_floor_m=9.25,
+                description=(
+                    "A taller cavern contour with deeper eroded pockets, wider rock shelves, "
+                    "and a more irregular crown for water, web, and cliff dressing."
+                ),
+                evidence_rooms=("m34aa_02a", "m34aa_03a", "m34aa_04a", "m34aa_06a"),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="nest",
+                label="Shyrack nest chamber",
+                shell_profile="korriban_cave_nest",
+                recommended_wall_height_m=7.50,
+                recommended_floor_to_floor_m=8.25,
+                description=(
+                    "A dense organic chamber with more pointed floor and ceiling formations, "
+                    "while preserving a deliberately clear central traversal lane."
+                ),
+                evidence_rooms=("m34aa_07a", "m34aa_07b", "m34aa_07c", "m34aa_08a"),
+            ),
+        ),
         # The reusable authored passage is intentionally smaller than the
         # 40–100 m stock cavern set; full retail caverns remain draggable tiles.
         recommended_wall_height_m=6.25,
@@ -879,8 +1031,10 @@ _VANILLA_STYLE_RELATIVE = Path("assets/map_studio/environment_kits/vanilla_style
 _PASCAL_LEVELS_KEY = "pascal_building_levels"
 
 # Retail K1 genericdoors.2da row 48 resolves to DOR_LHR01.  The model's
-# transition/collision mesh measures 6.160 m wide by 3.010 m high, so the
-# authored wall opening and the runtime door share one measured contract.
+# transition/collision mesh measures 6.160 m wide by 3.010 m high.  That is the
+# runtime aperture, not the visible wall cut: m01aa_08c wraps it in a much
+# broader white Republic bulkhead whose inner boundary follows the door's
+# chamfered/octagonal silhouette.
 _ARCHITECTURE_DOOR_SPECS: dict[tuple[str, str], dict[str, Any]] = {
     ("K1", "endar_spire"): {
         "template_resref": "gr_enddoor",
@@ -890,6 +1044,11 @@ _ARCHITECTURE_DOOR_SPECS: dict[tuple[str, str], dict[str, Any]] = {
         "label": "Endar Spire Door",
         "opening_width_m": 6.16,
         "opening_height_m": 3.01,
+        # Preserve enough shoulder for the vanilla white bulkhead and its
+        # adjacent red panels.  The helper compiler clips this outer envelope
+        # to short authored walls while keeping the 6.160 m WOK aperture exact.
+        "frame_width_m": 8.40,
+        "frame_height_m": 3.60,
     },
     # tar_m02aa/_s.rim uses appearance 20 (DOR_LTS02) for its apartment
     # entrances.  The m02aa_01a WOK transition threshold measures 4.500 m;
@@ -903,6 +1062,10 @@ _ARCHITECTURE_DOOR_SPECS: dict[tuple[str, str], dict[str, Any]] = {
         "label": "Taris Apartment Door",
         "opening_width_m": 4.5,
         "opening_height_m": 2.396,
+        # This surround is intentionally authored around the measured opening
+        # rather than treated as a larger gameplay aperture.
+        "frame_width_m": 4.92,
+        "frame_height_m": 2.65,
     },
     # Citadel residential modules use K2 genericdoors.2da row 117
     # (DOR_TEL14). Its measured model envelope is 3.480 m × 3.029 m and the
@@ -1267,32 +1430,20 @@ def write_vanilla_pascal_style_catalog(
 
 
 def available_pascal_building_styles(game: str = "") -> tuple[PascalBuildingStyle, ...]:
-    wanted = str(game or "").strip().upper()
-    try:
-        from .map_studio_environment_kits import (
-            environment_kit_collection_display_label,
-            vanilla_environment_kit_collections,
-        )
+    """Return only authored styles whose geometry workflow has been verified.
 
-        kit_styles = tuple(
-            PascalBuildingStyle(
-                style_id=f"kit:{collection.collection_id}",
-                label=environment_kit_collection_display_label(collection),
-                game=collection.game,
-                floor_texture=collection.floor_texture,
-                wall_texture=collection.wall_texture,
-                ceiling_texture=collection.ceiling_texture,
-                source_module=collection.module_resref,
-                source_room="",
-                tags=tuple(collection.tags) + ("geometry-kit", collection.environment_kind),
-            )
-            for collection in vanilla_environment_kit_collections()
-        )
-    except Exception:
-        kit_styles = ()
+    The scanner deliberately retains thousands of learned per-room palettes
+    for analysis and future kit work.  They are evidence, not finished Pascal
+    builders.  Exposing every palette and every environment collection here
+    created a long list of duplicate planet/module names and implied support
+    that had not been proven.  Room and prop browsing remains available
+    through the compact planet/ship packages in the content browser.
+    """
+
+    wanted = str(game or "").strip().upper()
     return tuple(
         style
-        for style in (_DEFAULT_STYLES + _ARCHITECTURE_STYLES + kit_styles + vanilla_pascal_building_styles())
+        for style in (_DEFAULT_STYLES + _ARCHITECTURE_STYLES)
         if style.game in {"BOTH", wanted} or not wanted
     )
 

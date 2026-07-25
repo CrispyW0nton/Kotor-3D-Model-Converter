@@ -1093,6 +1093,11 @@ def preview_authored_room_drag_snap(
                     for room in solution.project.rooms
                     if _room_name(room) != clean_source
                 ),
+                # The destination room necessarily shares a narrow portal
+                # throat with the aligned source room. Its overlap is sealed by
+                # trim_environment_kit_connection_overlap after commit, so it
+                # must not be treated as a room-body collision here.
+                ignored_room_resrefs=(target.room_resref,),
             )
             if not bool(occupancy.get("ok", False)):
                 continue

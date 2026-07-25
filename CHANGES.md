@@ -9,6 +9,152 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-25
+
+### [2026-07-25] T2909 trim, align, and tile Shadowlands transition tunnels
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio organic module transitions, vanilla-room portal sealing,
+transition clearance, UV-preserving mesh clipping, and PIE traversal.
+
+Corrected the Shadowlands tree transition orientation and replaced the former
+overlapping source-mesh placement with a portal-aware construction pass.
+Transition geometry is now clipped to the doorway envelope, cut away from a
+two-metre-wide actor passage and host floor volume, and tiled with a small
+overlap when a longer tunnel is required. New cut vertices interpolate the
+source UVs and normals, so the correction does not stretch the source texture
+or introduce unshaded seams. Forest panorama cards now sit behind the organic
+berm instead of intersecting the playable tunnel.
+
+Vanilla-room repair now excludes only the exact reciprocal WOK portal edge
+using collinear edge overlap. Adjacent exposed boundary edges are still sealed,
+while existing closed vanilla walls remain untouched. This removes the black
+side wedges and mesh intrusion seen around the generated Shadowlands connector
+without opening the room shell.
+
+Affected:
+
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_environment_kits.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_terrain_kit.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py`
+- Matching `GhostRigger.Core.Tools` payload-owned module copies
+- `scripts/build_shadowlands_generated_connector_proof.py`
+- `scripts/build_shadowlands_tree_transition_proof.py`
+- `tests/test_authored_room_operations.py`
+
+Verification:
+
+- Focused portal-closure, generated-connector, and transition-mesh tests passed
+  (3 passed); the transition test also proved a 13-metre request produces three
+  clipped tiles with no face centroids inside the actor-clear volume.
+- The generated vanilla connector proof passed with a reciprocal portal gap of
+  `3.6e-8 m`, 75 walkable faces, 55 sealed exposed edges, and 13 preserved
+  stock-wall edges.
+- The three-room tree-transition proof passed export/readback and both
+  traversals with two reciprocal portals, 7,396 trimmed transition faces, a
+  2.0 m minimum passage width, and a 2.75 m passage height.
+- After regenerating, rebuilding, and staging the Debug x64 payloads, the real
+  Map Studio PIE workflow moved the player through both fixtures without a
+  blocker. The tree-transition capture sustained about 47 viewport FPS with
+  22 draw calls; its centered tunnel view showed no crossing roots or
+  panorama-card bleed.
+
+### [2026-07-25] T2909 preserve closed vanilla walls during generated room sealing
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio vanilla-room attachment, Shadowlands exterior closure,
+render-shell classification, and WOK-boundary repair.
+
+Changed the automatic exterior repair pass from “seal every non-portal WOK
+edge” to “seal exposed edges only.” The attachment pipeline now samples
+near-vertical stock render geometry across each walkmesh perimeter edge and
+preserves an edge when the vanilla shell already provides actor-height wall
+coverage. Floors, ceilings, shallow terrain, backdrops, and previously
+generated closures cannot be mistaken for a wall. Closure metadata records
+the preserved stock-wall count and the exposed-boundary-only policy for later
+validation.
+
+Affected:
+
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_environment_kits.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_environment_kits.py`
+- `tests/test_authored_room_operations.py`
+
+Verification:
+
+- `test_t2909_environment_closure_preserves_existing_vanilla_walls` passed
+  with one stock wall preserved and exactly the other three WOK edges sealed.
+- `build_shadowlands_tree_transition_proof.py` passed the complete authored
+  clearing -> vanilla room -> authored clearing chain, including two reciprocal
+  portals, three separate WOK rooms, export/readback, and both traversals.
+- The staged Debug application passed its real Map Studio PIE visual proof:
+  254 walkable faces, 17,178 collision triangles, continuous rendered capture,
+  player movement, no blockers, and a 52.26 FPS viewport median.
+
+### [2026-07-25] T2909 established-kit fidelity, environment libraries, and style-aware skyboxes
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal building kits, vanilla environment extraction,
+room transitions, KOTOR skybox authoring, PIE batching, and native embedded
+payload delivery.
+
+Intersects: the continuing multi-style Map Studio work on the `ghost-studio`
+branch. Existing Onderon, Telos, particle-placeable, and unrelated contributor
+changes were preserved.
+
+Applied the finished Onderon construction workflow to Endar Spire, Taris,
+Shadowlands, and Korriban/Shyrack. Added distinct room archetypes and
+style-specific structural profiles instead of recolored boxes: curved Endar
+command and crew architecture, layered Taris apartment and residential
+panels, welded organic Shadowlands berm/root contours, and deeper irregular
+Shyrack cave chambers with cave formations. Style-correct closed door frames,
+thresholds, returns, and portal apertures now preserve clear traversal without
+coplanar duplicate surfaces or sealed reveals.
+
+Expanded each Build content browser with classified, independently placeable
+vanilla-derived environment pieces. These include Endar wall and command-deck
+dressing, Taris illuminated wall bays, service dividers, number plates, and
+apartment/module assets, Shadowlands trunks, root arches, root clusters, vines,
+and forest modules, plus Korriban tomb and Shyrack cave architecture and
+dressing. Vanilla room scanning now prefers distinct WOK transition magnets
+over duplicated LYT hooks, allowing Shadowlands and other organic rooms to snap
+through their actual walkable openings.
+
+Moved skybox creation into the Build workflow and made it style-aware. Endar
+Spire, Taris Upper City, Shadowlands, Korriban, and Onderon now recommend their
+matching vanilla sky resources and dimensions automatically. Authors can still
+choose another game preset or create a curved, visual-only KOTOR sky dome from
+a custom panorama/HDR image without altering collision or walkmesh.
+
+Corrected a PIE publication-order regression in which viewport loading restored
+the editable source hierarchy after runtime batching. Runtime-only static
+batching now re-runs after model publication, clears stale GPU resources, and
+rebinds the software renderer before the first queued frame. Editable authored
+geometry remains source-preserving while the live simulation uses compact
+batches.
+
+Affected areas: authored skybox, Pascal building, environment-kit,
+authored-room floorplan/layout, Module Editor Environment and Build panels,
+PIE runtime actor activation, the static vanilla-kit catalog, focused Map
+Studio tests, native payload manifests, and `CHANGES.md`.
+
+Verification: targeted archetype/topology/UV, closed-door, environment-browser,
+style-skybox, WOK-magnet, room-occupancy, and PIE publication re-batching tests
+passed. The Shadowlands transition proof produced three separate rooms and two
+reciprocal gap-free portals; the Korriban/Shyrack proof produced four rooms,
+three reciprocal gap-free portals, 18 stalactites, 18 stalagmites, and complete
+PIE traversal/export readback. In the rebuilt and staged Debug x64 application,
+manual PIE proofs rendered Endar at 117.25 FPS, Taris at 124.66 FPS,
+Shadowlands at 141.32 FPS, and Korriban/Shyrack at 144.03 FPS median viewport
+rate. The detached Build > Skybox UI correctly recommended and populated the
+Korriban Valley preset and exposed custom Panorama/HDR creation. Core Scene,
+Core Tools, and GUI Display payloads rebuilt successfully, and all 18 native
+payload DLLs were staged.
+
 ## 2026-07-24
 
 ### [2026-07-24] T2909 Onderon environment kit, stable portals, and responsive Build/Place browsers

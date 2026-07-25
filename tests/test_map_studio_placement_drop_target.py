@@ -190,8 +190,41 @@ def test_environment_kit_browser_exposes_typed_thumbnail_drag_cards() -> None:
             for row in range(browser._model.rowCount())
         ]
         assert {entry["module_resref"] for entry in shadowlands} == {"m24aa", "m25aa"}
-        assert {entry["role"] for entry in shadowlands} <= {"room_tile", "exterior_tile"}
-        assert len(shadowlands) >= 30
+        assert {entry["role"] for entry in shadowlands} <= {"room_tile", "exterior_tile", "dressing"}
+        assert shadowlands
+        assert all(entry["placement_ready"] is True for entry in shadowlands)
+        assert all(
+            int(entry["magnet_count"]) > 0
+            for entry in shadowlands
+            if entry["role"] in {"room_tile", "exterior_tile"}
+        )
+        assert "m24aa_04a" not in {entry["room_resref"] for entry in shadowlands}
+
+        exterior_index = browser.kind_combo.findData("exterior")
+        browser.kind_combo.setCurrentIndex(exterior_index)
+        app.processEvents()
+        exterior_packages = [
+            browser.collection_combo.itemText(index)
+            for index in range(browser.collection_combo.count())
+        ]
+        assert exterior_packages.count("Manaan") == 1
+        assert exterior_packages.count("Kashyyyk") == 1
+        assert exterior_packages.count("Tatooine") == 1
+
+        interior_index = browser.kind_combo.findData("interior")
+        browser.kind_combo.setCurrentIndex(interior_index)
+        app.processEvents()
+        interior_packages = [
+            browser.collection_combo.itemText(index)
+            for index in range(browser.collection_combo.count())
+        ]
+        assert interior_packages.count("Ebon Hawk") == 1
+        assert interior_packages.count("Leviathan") == 1
+        assert not any(
+            token in label.lower()
+            for label in (*exterior_packages, *interior_packages)
+            for token in ("m17aa", "m18aa", "m22aa", "m23aa", "m26aa", "m40aa")
+        )
     finally:
         browser.close()
         browser.deleteLater()

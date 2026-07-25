@@ -84,6 +84,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         super().__init__(parent)
         self.setObjectName("mapStudioEnvironmentKitBrowser")
         self._entries: list[object] = []
+        self._package_collections: dict[str, frozenset[str]] = {}
         self._placeholder_icons: dict[str, QtGui.QIcon] = {}
         self._model = QtGui.QStandardItemModel(self)
         self._proxy = _EnvironmentKitFilterModel(self)
@@ -100,7 +101,8 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         guide = QtWidgets.QLabel(
             "Vanilla Rooms & Connectors — the shelf follows the Building Style above. Drag a complete stock "
             "room, corridor, corner, junction, or dressing piece into the viewport. Doorway sockets magnet-snap; "
-            "wall controls, lights, and observation ports align to the nearest authored wall.",
+            "wall controls, lights, and observation ports align to the nearest authored wall. Planet and ship "
+            "packages combine all of their module variants into one searchable shelf.",
             self,
         )
         guide.setObjectName("mapStudioEnvironmentKitGuideLabel")
@@ -116,6 +118,10 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self.collection_combo = QtWidgets.QComboBox(self)
         self.collection_combo.setObjectName("mapStudioEnvironmentKitCollectionComboBox")
         self.collection_combo.addItem("All module styles", "")
+        self.collection_combo.setToolTip(
+            "Choose a measured building style or one compact planet/ship package. "
+            "A package contains every compatible module room and environment object from that location."
+        )
         self.refresh_button = QtWidgets.QPushButton("Refresh Vanilla", self)
         self.refresh_button.setObjectName("mapStudioEnvironmentKitRefreshButton")
         self.refresh_button.setToolTip("Rebuild the local typed kit catalog from the configured KOTOR installation.")
@@ -247,18 +253,36 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         """Expose collection metadata immediately; materialize cards on selection."""
 
         wanted_kind = str(self.kind_combo.currentData() or "").lower()
-        collections: dict[str, str] = {}
+        packages: dict[tuple[str, str], set[str]] = {}
         styles: set[str] = set()
         for entry in self._entries:
+            if not bool(_value(entry, "placement_ready", True)):
+                continue
             kind = str(_value(entry, "environment_kind") or "interior").lower()
             if wanted_kind and kind != wanted_kind:
                 continue
             collection_id = str(_value(entry, "collection_id") or "")
             if collection_id:
-                collections[collection_id] = str(_value(entry, "collection_label") or collection_id)
+                game = str(_value(entry, "game") or "").strip().upper() or "KOTOR"
+                world = str(_value(entry, "world_label") or "").strip() or "Vanilla KOTOR"
+                packages.setdefault((game, world), set()).add(collection_id)
             style_id = str(_value(entry, "building_style_id") or "").strip().lower()
             if style_id.startswith("architecture:"):
                 styles.add(style_id)
+        self._package_collections = {}
+        package_labels: list[tuple[str, str]] = []
+        for (game, world), collection_ids in packages.items():
+            slug = "_".join(
+                token
+                for token in "".join(
+                    character.lower() if character.isalnum() else " "
+                    for character in world
+                ).split()
+                if token
+            )
+            package_id = f"world:{game.lower()}:{slug or 'vanilla'}"
+            self._package_collections[package_id] = frozenset(collection_ids)
+            package_labels.append((world, package_id))
         previous = str(self.collection_combo.currentData() or "")
         blocked = self.collection_combo.blockSignals(True)
         self.collection_combo.clear()
@@ -267,8 +291,15 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             self.collection_combo.addItem(environment_kit_builder_style_label(style_id), f"style:{style_id}")
         if styles:
             self.collection_combo.insertSeparator(self.collection_combo.count())
-        for key, label in sorted(collections.items(), key=lambda item: item[1].lower()):
-            self.collection_combo.addItem(label, key)
+        for label, package_id in sorted(package_labels, key=lambda item: item[0].lower()):
+            self.collection_combo.addItem(label, package_id)
+            index = self.collection_combo.count() - 1
+            count = len(self._package_collections[package_id])
+            self.collection_combo.setItemData(
+                index,
+                f"{label}: all rooms, exteriors, and environment objects from {count} module collection(s).",
+                QtCore.Qt.ItemDataRole.ToolTipRole,
+            )
         restored = self.collection_combo.findData(previous)
         self.collection_combo.setCurrentIndex(
             restored if previous and restored >= 0 else (1 if self.collection_combo.count() > 1 else 0)
@@ -279,7 +310,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
     def _collection_changed(self, _index: int = -1) -> None:
         collection_id = str(self.collection_combo.currentData() or "")
         self._rebuild_asset_model(collection_id)
-        if collection_id:
+        if collection_id and not collection_id.startswith("world:"):
             self.collectionStyleChanged.emit(collection_id, str(self.kind_combo.currentData() or ""))
 
     def select_building_style(self, style_id: str, environment_kind: str = "") -> bool:
@@ -321,6 +352,15 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
             if str(self.collection_combo.itemData(index) or "").lower() == wanted:
                 self.collection_combo.setCurrentIndex(index)
                 return True
+        # Individual module rows are intentionally collapsed in the UI. Keep
+        # old callers/bookmarks working by selecting the planet/ship package
+        # that owns the requested collection.
+        for package_id, collection_ids in self._package_collections.items():
+            if wanted in {value.lower() for value in collection_ids}:
+                index = self.collection_combo.findData(package_id)
+                if index >= 0:
+                    self.collection_combo.setCurrentIndex(index)
+                    return True
         return False
 
     def _rebuild_asset_model(self, collection_id: str) -> None:
@@ -329,11 +369,17 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         self._model.clear()
         classes: set[str] = set()
         style_id = collection_id[6:] if str(collection_id).startswith("style:") else ""
+        package_collections = self._package_collections.get(collection_id)
         for entry in self._entries:
+            if not bool(_value(entry, "placement_ready", True)):
+                continue
             entry_collection = str(_value(entry, "collection_id") or "")
             entry_style = str(_value(entry, "building_style_id") or "").strip().lower()
             if style_id:
                 if entry_style != style_id:
+                    continue
+            elif package_collections is not None:
+                if entry_collection not in package_collections:
                     continue
             elif not collection_id or entry_collection != collection_id:
                 continue
@@ -383,7 +429,7 @@ class EnvironmentKitBrowser(QtWidgets.QWidget):
         for class_id in sorted(classes):
             self.class_combo.addItem(class_id.split(":")[-1].replace("_", " ").title(), class_id)
         self.class_combo.blockSignals(blocked)
-        self._proxy.set_collection("" if style_id else collection_id)
+        self._proxy.set_collection("" if style_id or package_collections is not None else collection_id)
         self._proxy.set_piece_class("")
         if not collection_id:
             self.detail_label.setText("Choose one module style to load its typed construction pieces.")

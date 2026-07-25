@@ -812,10 +812,13 @@ def seal_environment_kit_exterior_bounds(
     primitive: Any,
     *,
     portal_midpoint: tuple[float, float, float] | None = None,
+    portal_start: tuple[float, float, float] | None = None,
+    portal_end: tuple[float, float, float] | None = None,
     portal_width: float = 0.0,
     texture: str = "lka_mud02",
     bank_height: float = 7.5,
     bank_depth: float = 4.25,
+    audit_only: bool = False,
 ) -> Any:
     """Add a continuous visual berm to an attached outdoor room's WOK edge.
 
@@ -847,11 +850,181 @@ def seal_environment_kit_exterior_bounds(
     portal = tuple(float(value) for value in tuple(portal_midpoint or ())[:3])
     has_portal = len(portal) == 3
     portal_radius = max(1.15, float(portal_width) * 0.70) if has_portal else 0.0
+    exact_portal_start = tuple(float(value) for value in tuple(portal_start or ())[:3])
+    exact_portal_end = tuple(float(value) for value in tuple(portal_end or ())[:3])
+    has_exact_portal_edge = len(exact_portal_start) == 3 and len(exact_portal_end) == 3
+
+    # A retail exterior partition can already carry a perfectly good wall on
+    # part (or all) of its WOK perimeter.  The closure is a missing-shell
+    # repair, not a second wall layer.  Index near-vertical render triangles
+    # once, then sample each WOK boundary edge from floor to actor height.  An
+    # edge is preserved when the stock shell covers at least two of its three
+    # horizontal samples continuously from the floor upward.
+    wall_triangles: list[
+        tuple[
+            tuple[float, float, float],
+            tuple[float, float, float],
+            tuple[float, float, float],
+            float,
+            float,
+        ]
+    ] = []
+    for surface in tuple(getattr(primitive, "surfaces", ()) or ()):
+        if (
+            not bool(getattr(surface, "render", True))
+            or bool(getattr(surface, "backdrop", False))
+            or bool(getattr(surface, "background_geometry", False))
+            or str(getattr(surface, "name", "") or "").endswith("_shadowlands_exterior_closure")
+        ):
+            continue
+        source_vertices = tuple(getattr(surface, "vertices", ()) or ())
+        for face in tuple(getattr(surface, "faces", ()) or ()):
+            try:
+                first, second, third = (
+                    tuple(float(value) for value in source_vertices[int(index)][:3])
+                    for index in tuple(face)[:3]
+                )
+            except (IndexError, TypeError, ValueError):
+                continue
+            ux, uy, uz = (second[index] - first[index] for index in range(3))
+            vx, vy, vz = (third[index] - first[index] for index in range(3))
+            nx = (uy * vz) - (uz * vy)
+            ny = (uz * vx) - (ux * vz)
+            nz = (ux * vy) - (uy * vx)
+            normal_length = math.sqrt((nx * nx) + (ny * ny) + (nz * nz))
+            if normal_length <= 1.0e-9:
+                continue
+            # Floors, ceilings, and shallow terrain do not count as a closed
+            # wall even when they happen to touch a WOK perimeter edge.
+            if math.hypot(nx, ny) / normal_length < 0.62:
+                continue
+            z_min = min(first[2], second[2], third[2])
+            z_max = max(first[2], second[2], third[2])
+            if z_max - z_min < 0.35:
+                continue
+            wall_triangles.append((first, second, third, z_min, z_max))
+
+    def point_segment_distance_xy(
+        point: tuple[float, float],
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+    ) -> float:
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length_sq = (dx * dx) + (dy * dy)
+        if length_sq <= 1.0e-12:
+            return math.hypot(point[0] - start[0], point[1] - start[1])
+        fraction = max(
+            0.0,
+            min(1.0, (((point[0] - start[0]) * dx) + ((point[1] - start[1]) * dy)) / length_sq),
+        )
+        closest = (start[0] + (dx * fraction), start[1] + (dy * fraction))
+        return math.hypot(point[0] - closest[0], point[1] - closest[1])
+
+    def sample_has_stock_wall(point: tuple[float, float], floor_z: float) -> bool:
+        intervals: list[tuple[float, float]] = []
+        search_radius = max(0.55, min(1.10, depth * 0.22))
+        required_top = floor_z + min(1.80, height * 0.55)
+        for first, second, third, z_min, z_max in wall_triangles:
+            if z_max < floor_z - 0.20 or z_min > required_top + 0.35:
+                continue
+            distance = min(
+                point_segment_distance_xy(point, first, second),
+                point_segment_distance_xy(point, second, third),
+                point_segment_distance_xy(point, third, first),
+            )
+            if distance <= search_radius:
+                intervals.append((max(floor_z - 0.20, z_min), min(required_top + 0.35, z_max)))
+        if not intervals:
+            return False
+        merged_start, merged_end = sorted(intervals)[0]
+        coverage_start = merged_start
+        for start, end in sorted(intervals)[1:]:
+            if start <= merged_end + 0.28:
+                merged_end = max(merged_end, end)
+            else:
+                if coverage_start <= floor_z + 0.25 and merged_end >= required_top:
+                    return True
+                coverage_start, merged_end = start, end
+        return coverage_start <= floor_z + 0.25 and merged_end >= required_top
+
+    def boundary_edge_has_stock_wall(
+        first: tuple[float, float, float],
+        second: tuple[float, float, float],
+    ) -> bool:
+        covered = 0
+        for fraction in (0.20, 0.50, 0.80):
+            point = (
+                first[0] + ((second[0] - first[0]) * fraction),
+                first[1] + ((second[1] - first[1]) * fraction),
+            )
+            floor_z = first[2] + ((second[2] - first[2]) * fraction)
+            covered += int(sample_has_stock_wall(point, floor_z))
+        return covered >= 2
+
+    def boundary_edge_is_portal(
+        first: tuple[float, float, float],
+        second: tuple[float, float, float],
+    ) -> bool:
+        """Match only the WOK edge that actually owns the reciprocal portal.
+
+        The previous midpoint-radius test could suppress several neighbouring
+        boundary edges on an irregular outdoor WOK.  That made a valid portal
+        walkable but opened metre-wide black wedges beside it.  Generated and
+        retail connector records both preserve their raw edge endpoints, so
+        use their collinear overlap as the primary identity and retain the
+        radius test only for older metadata that has no endpoints.
+        """
+
+        if not has_portal:
+            return False
+        if not has_exact_portal_edge:
+            midpoint = tuple((first[axis] + second[axis]) * 0.5 for axis in range(3))
+            return math.dist(midpoint, portal) <= portal_radius
+        portal_dx = exact_portal_end[0] - exact_portal_start[0]
+        portal_dy = exact_portal_end[1] - exact_portal_start[1]
+        portal_length = math.hypot(portal_dx, portal_dy)
+        edge_dx = second[0] - first[0]
+        edge_dy = second[1] - first[1]
+        edge_length = math.hypot(edge_dx, edge_dy)
+        if portal_length <= 1.0e-7 or edge_length <= 1.0e-7:
+            return False
+        portal_unit = (portal_dx / portal_length, portal_dy / portal_length)
+        edge_unit = (edge_dx / edge_length, edge_dy / edge_length)
+        if abs((portal_unit[0] * edge_unit[0]) + (portal_unit[1] * edge_unit[1])) < 0.965:
+            return False
+        line_tolerance = max(0.08, min(0.30, portal_length * 0.055))
+        edge_midpoint = ((first[0] + second[0]) * 0.5, (first[1] + second[1]) * 0.5)
+        portal_midpoint_xy = (
+            (exact_portal_start[0] + exact_portal_end[0]) * 0.5,
+            (exact_portal_start[1] + exact_portal_end[1]) * 0.5,
+        )
+        if (
+            point_segment_distance_xy(edge_midpoint, exact_portal_start, exact_portal_end)
+            > line_tolerance
+            or point_segment_distance_xy(portal_midpoint_xy, first, second)
+            > max(line_tolerance, min(edge_length, portal_length) * 0.52)
+        ):
+            return False
+        projections = sorted(
+            (
+                ((first[0] - exact_portal_start[0]) * portal_unit[0])
+                + ((first[1] - exact_portal_start[1]) * portal_unit[1]),
+                ((second[0] - exact_portal_start[0]) * portal_unit[0])
+                + ((second[1] - exact_portal_start[1]) * portal_unit[1]),
+            )
+        )
+        overlap = max(0.0, min(portal_length, projections[1]) - max(0.0, projections[0]))
+        z_gap = abs(
+            ((first[2] + second[2]) * 0.5)
+            - ((exact_portal_start[2] + exact_portal_end[2]) * 0.5)
+        )
+        return overlap >= min(edge_length, portal_length) * 0.62 and z_gap <= 0.35
 
     edge_records: list[dict[str, Any]] = []
     outward_by_vertex: dict[int, list[float]] = {}
     sealed_edges = 0
     skipped_portal_edges = 0
+    preserved_stock_wall_edges = 0
     for face in tuple(getattr(wok, "faces", ()) or ()):
         if not is_walkable_walkmesh_surface(int(getattr(face, "surface", -1))):
             continue
@@ -868,8 +1041,11 @@ def seal_environment_kit_exterior_bounds(
             first = triangle[edge_index]
             second = triangle[(edge_index + 1) % 3]
             midpoint = tuple((first[axis] + second[axis]) * 0.5 for axis in range(3))
-            if has_portal and math.dist(midpoint, portal) <= portal_radius:
+            if boundary_edge_is_portal(first, second):
                 skipped_portal_edges += 1
+                continue
+            if boundary_edge_has_stock_wall(first, second):
+                preserved_stock_wall_edges += 1
                 continue
             dx = midpoint[0] - centroid[0]
             dy = midpoint[1] - centroid[1]
@@ -894,8 +1070,39 @@ def seal_environment_kit_exterior_bounds(
             )
             sealed_edges += 1
 
-    if not edge_records:
-        return primitive
+    exposed_boundary_edges = tuple(
+        {
+            "first": [float(value) for value in tuple(record["first"])[:3]],
+            "second": [float(value) for value in tuple(record["second"])[:3]],
+            "midpoint": [
+                (float(record["first"][axis]) + float(record["second"][axis])) * 0.5
+                for axis in range(3)
+            ],
+            "outward": [float(value) for value in tuple(record["outward"])[:2]],
+            "width_m": math.dist(
+                tuple(float(value) for value in tuple(record["first"])[:3]),
+                tuple(float(value) for value in tuple(record["second"])[:3]),
+            ),
+        }
+        for record in edge_records
+    )
+    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    metadata["environment_kit_boundary_audit"] = {
+        "exposed_boundary_edges": exposed_boundary_edges,
+        "exposed_boundary_edge_count": len(exposed_boundary_edges),
+        "skipped_portal_edges": skipped_portal_edges,
+        "preserved_stock_wall_edges": preserved_stock_wall_edges,
+        "wall_generation_policy": "exposed_wok_boundary_only",
+        "portal_exclusion_policy": (
+            "exact_collinear_wok_edge_overlap"
+            if has_exact_portal_edge
+            else "legacy_midpoint_radius"
+        ),
+        "stock_wall_detection": "vertical_shell_samples_3x_actor_height",
+    }
+    audited = replace(primitive, metadata=metadata)
+    if audit_only or not edge_records:
+        return audited
     vertices: list[tuple[float, float, float]] = []
     normals: list[tuple[float, float, float]] = []
     uvs: list[tuple[float, float]] = []
@@ -1032,13 +1239,21 @@ def seal_environment_kit_exterior_bounds(
         faces.append((cap_inner_first, cap_outer_second, cap_inner_second))
         faces.append((cap_inner_first, cap_outer_first, cap_outer_second))
 
-    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    metadata = dict(getattr(audited, "metadata", {}) or {})
     metadata["environment_kit_exterior_closure"] = {
         "operation": "organic_boundary_mound",
         "visual_only": True,
         "texture": str(texture or "lka_mud02").strip().lower(),
         "sealed_boundary_edges": sealed_edges,
         "skipped_portal_edges": skipped_portal_edges,
+        "preserved_stock_wall_edges": preserved_stock_wall_edges,
+        "wall_generation_policy": "exposed_wok_boundary_only",
+        "portal_exclusion_policy": (
+            "exact_collinear_wok_edge_overlap"
+            if has_exact_portal_edge
+            else "legacy_midpoint_radius"
+        ),
+        "stock_wall_detection": "vertical_shell_samples_3x_actor_height",
         "bank_height_m": height,
         "bank_depth_m": depth,
         "raw_index_topology": True,
@@ -1059,7 +1274,98 @@ def seal_environment_kit_exterior_bounds(
         has_shadow=True,
         render=True,
     )
-    return replace(primitive, surfaces=tuple(getattr(primitive, "surfaces", ()) or ()) + (closure,), metadata=metadata)
+    return replace(audited, surfaces=tuple(getattr(audited, "surfaces", ()) or ()) + (closure,), metadata=metadata)
+
+
+def generated_environment_kit_boundary_magnets(
+    primitive: Any,
+    *,
+    opening_width: float,
+    maximum_count: int = 8,
+) -> tuple["EnvironmentKitMagnet", ...]:
+    """Derive reviewed doorway sockets only from visibly exposed WOK edges.
+
+    Some stock rooms do not ship a WOK transition table.  Their walkable floor
+    can still establish a safe attachment edge, but only where the render mesh
+    does not already contain a continuous stock wall.  This reuses the same
+    three-height shell audit as exterior closure, so generated sockets and
+    generated walls can never claim the same boundary.
+    """
+
+    audited = seal_environment_kit_exterior_bounds(
+        primitive,
+        portal_width=float(opening_width),
+        audit_only=True,
+    )
+    audit = dict(dict(getattr(audited, "metadata", {}) or {}).get("environment_kit_boundary_audit") or {})
+    rows = tuple(dict(row or {}) for row in tuple(audit.get("exposed_boundary_edges") or ()))
+    target_width = max(0.75, float(opening_width))
+    candidates = tuple(
+        row
+        for row in rows
+        if float(row.get("width_m", 0.0) or 0.0) >= min(1.20, target_width * 0.60)
+    )
+    ordered = sorted(
+        candidates,
+        key=lambda row: (
+            abs(float(row.get("width_m", 0.0) or 0.0) - target_width),
+            -float(row.get("width_m", 0.0) or 0.0),
+            tuple(round(float(value), 5) for value in tuple(row.get("midpoint") or ())[:3]),
+        ),
+    )
+    result: list[EnvironmentKitMagnet] = []
+    for ordinal, row in enumerate(ordered[: max(1, int(maximum_count))], 1):
+        midpoint = tuple(float(value) for value in tuple(row.get("midpoint") or ())[:3])
+        outward = tuple(float(value) for value in tuple(row.get("outward") or ())[:2])
+        if len(midpoint) != 3 or len(outward) != 2 or math.hypot(*outward) <= 1.0e-7:
+            continue
+        yaw = math.atan2(outward[1], outward[0])
+        result.append(
+            EnvironmentKitMagnet(
+                magnet_id=f"generated_portal_{ordinal:03d}",
+                kind="doorway",
+                magnet_class="doorway",
+                local_position=midpoint,
+                local_orientation=(0.0, 0.0, math.sin(yaw * 0.5), math.cos(yaw * 0.5)),
+                source="wok_transition_generated_exposed_edge",
+            )
+        )
+    return tuple(result)
+
+
+def rebase_environment_kit_room_to_walkmesh(primitive: Any) -> Any:
+    """Move a stock room from arbitrary module coordinates into room-local space."""
+
+    wok = getattr(primitive, "wok", None)
+    vertices = tuple(tuple(float(value) for value in tuple(vertex)[:3]) for vertex in tuple(getattr(wok, "verts", ()) or ()))
+    if not vertices:
+        return primitive
+    center_x = (min(vertex[0] for vertex in vertices) + max(vertex[0] for vertex in vertices)) * 0.5
+    center_y = (min(vertex[1] for vertex in vertices) + max(vertex[1] for vertex in vertices)) * 0.5
+    floor_z = min(vertex[2] for vertex in vertices)
+    offset = (-center_x, -center_y, -floor_z)
+
+    def shifted(point: Any) -> tuple[float, float, float]:
+        values = tuple(float(value) for value in tuple(point)[:3])
+        return tuple(values[axis] + offset[axis] for axis in range(3))
+
+    surfaces = tuple(
+        replace(surface, vertices=tuple(shifted(vertex) for vertex in tuple(getattr(surface, "vertices", ()) or ())))
+        for surface in tuple(getattr(primitive, "surfaces", ()) or ())
+    )
+    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    metadata["environment_kit_generated_rebase"] = {
+        "translation_m": [float(value) for value in offset],
+        "source_wok_center_xy": [center_x, center_y],
+        "source_wok_floor_z": floor_z,
+        "policy": "walkmesh_center_xy_and_minimum_z_to_room_origin",
+    }
+    return replace(
+        primitive,
+        surfaces=surfaces,
+        wok=replace(wok, verts=[shifted(vertex) for vertex in vertices], raw=None),
+        metadata=metadata,
+    )
 
 
 _K1_MODULE_WORLDS = (
@@ -1153,9 +1459,15 @@ def environment_kit_builder_style_id(game: str, module_resref: str, collection_i
     collection = str(collection_id or "").strip().lower()
     if target_game == "K1" and (module in {"m01aa", "m01ab"} or collection.startswith("k1_endar_spire")):
         return "architecture:k1_endar_spire"
-    if target_game == "K1" and (module in {"m02aa", "m02ad"} or collection.startswith("k1_taris_apartments")):
+    if target_game == "K1" and (
+        module in {"m02aa", "m02ab", "m02ac", "m02ad"}
+        or collection.startswith("k1_taris_apartments")
+    ):
         return "architecture:k1_taris_apartments"
-    if target_game == "K1" and (module in {"m24aa", "m25aa"} or collection.startswith("k1_shadowlands")):
+    if target_game == "K1" and (
+        module in {"m24aa", "m25aa"}
+        or collection.startswith("k1_shadowlands")
+    ):
         return "architecture:k1_shadowlands"
     if target_game == "K1" and (
         module in {"m37aa", "m38aa", "m38ab", "m39aa"}
@@ -1233,8 +1545,8 @@ def environment_kit_builder_style_id(game: str, module_resref: str, collection_i
 def environment_kit_builder_style_label(style_id: str) -> str:
     return {
         "architecture:k1_endar_spire": "Endar Spire — All Vanilla Rooms + Dressing",
-        "architecture:k1_taris_apartments": "Taris Apartments — All Vanilla Rooms",
-        "architecture:k1_shadowlands": "Shadowlands — Upper + Lower Clearings, Roots & Terrain",
+        "architecture:k1_taris_apartments": "Taris — Apartments + Upper City Buildings",
+        "architecture:k1_shadowlands": "Shadowlands — Verified Upper + Lower Forest Connections",
         "architecture:k1_korriban_tombs": "K1 Korriban Tombs — Ajunta Pall, Marka Ragnos, Tulak Hord & Naga Sadow",
         "architecture:k1_korriban_caves": "K1 Shyrack Caves — All Corridors, Caverns & Webbed Passages",
         "architecture:k2_korriban_tombs": "K2 Secret Tomb — All Ruined Chambers & Corridors",
@@ -1413,6 +1725,17 @@ def _magnet_from_payload(raw: object) -> EnvironmentKitMagnet:
     )
 
 
+_GENERATED_CONNECTOR_PIECE_IDS = frozenset(
+    {
+        # Rwookrrorro's central village chamber has useful stock architecture
+        # but no shipped room WOK/LYT doorway socket. It has been reviewed
+        # against its installed render floor and is the first deliberate
+        # generated-connector recovery case.
+        "k1_m23aa_m23aa_04a",
+    }
+)
+
+
 def _piece_from_payload(raw: object) -> EnvironmentKitPiece:
     row = dict(raw or {})
     dimensions = tuple(float(value) for value in tuple(row.get("dimensions_m") or (0, 0, 0))[:3])
@@ -1421,14 +1744,41 @@ def _piece_from_payload(raw: object) -> EnvironmentKitPiece:
     magnets = tuple(_magnet_from_payload(value) for value in magnet_rows)
     if not magnets and str(row.get("magnet_profile") or "") == "bounds_4":
         magnets = _terrain_edge_magnets(dimensions)
+    role = str(row.get("role") or "generic")
+    placement_quality = str(row.get("placement_quality") or "verified").strip().lower()
+    placement_quality_message = str(row.get("placement_quality_message") or "").strip()
+    has_doorway_socket = any(
+        magnet.kind == "doorway" and magnet.magnet_class == "doorway"
+        for magnet in magnets
+    )
+    # Older generated catalogs marked every LYT room as placement-ready even
+    # when the room had neither a retail door hook nor a WOK transition edge.
+    # Those tiles retain large module-space coordinates; dropping one at the
+    # cursor therefore leaves its visible mesh hundreds of metres away.  Keep
+    # it in the learned catalog, but do not expose it as a Lego-style room
+    # until a doorway socket has been measured and verified.
+    piece_id = str(row.get("piece_id") or "")
+    if role in {"room_tile", "exterior_tile"} and not has_doorway_socket:
+        if piece_id.strip().lower() in _GENERATED_CONNECTOR_PIECE_IDS:
+            placement_quality = "generated_connector"
+            placement_quality_message = (
+                "Drop this reviewed stock chamber onto an authored wall. Ghost Studio "
+                "will derive its floor collision and choose an exposed boundary connector."
+            )
+        else:
+            placement_quality = "needs_review"
+            placement_quality_message = (
+                "This stock room has no verified retail doorway socket, so Ghost Studio "
+                "will not offer it as an attachable room yet."
+            )
     return EnvironmentKitPiece(
-        piece_id=str(row.get("piece_id") or ""),
+        piece_id=piece_id,
         collection_id=str(row.get("collection_id") or ""),
         label=str(row.get("label") or row.get("piece_id") or "Kit piece"),
         game=str(row.get("game") or "").upper(),
         module_resref=str(row.get("module_resref") or "").lower(),
         room_resref=str(row.get("room_resref") or "").lower(),
-        role=str(row.get("role") or "generic"),
+        role=role,
         class_id=str(row.get("class_id") or "generic"),
         model_resref=str(row.get("model_resref") or "").lower(),
         terrain_asset_id=str(row.get("terrain_asset_id") or ""),
@@ -1449,8 +1799,8 @@ def _piece_from_payload(raw: object) -> EnvironmentKitPiece:
         triangle_count=int(row.get("triangle_count") or 0),
         magnets=magnets,
         tags=tuple(str(value) for value in tuple(row.get("tags") or ())),
-        placement_quality=str(row.get("placement_quality") or "verified").strip().lower(),
-        placement_quality_message=str(row.get("placement_quality_message") or "").strip(),
+        placement_quality=placement_quality,
+        placement_quality_message=placement_quality_message,
     )
 
 
@@ -1586,6 +1936,176 @@ def _republic_warship_dressing_collection(*, game: str) -> EnvironmentKitCollect
         ceiling_texture="har_tc01" if is_k2 else "lhr_tech01",
         pieces=pieces,
         tags=source_tags + ("portable", "content-browser"),
+    )
+
+
+def _taris_apartment_dressing_collection() -> EnvironmentKitCollection:
+    """Portable Taris apartment wall assemblies from the measured m02aa_06a room."""
+
+    collection_id = "k1_taris_apartments_dressing"
+
+    def piece(
+        suffix: str,
+        label: str,
+        class_name: str,
+        bounds: tuple[float, float, float, float, float, float],
+        surface_names: tuple[str, ...],
+        dimensions: tuple[float, float, float],
+        *,
+        local_normal_axis: str = "y",
+        texture: str,
+        tags: tuple[str, ...],
+    ) -> EnvironmentKitPiece:
+        return EnvironmentKitPiece(
+            piece_id=f"k1_taris_apartments_{suffix}",
+            collection_id=collection_id,
+            label=label,
+            game="K1",
+            module_resref="m02aa",
+            room_resref="m02aa_06a",
+            role="dressing",
+            class_id=f"dressing:{class_name}",
+            model_resref="m02aa_06a",
+            source_bounds_m=bounds,
+            source_surface_names=surface_names,
+            anchor_mode="wall",
+            local_normal_axis=local_normal_axis,
+            dimensions_m=dimensions,
+            texture_resref=texture,
+            tags=("k1", "taris", "apartments", "vanilla-derived", "wall dressing") + tags,
+        )
+
+    return EnvironmentKitCollection(
+        collection_id=collection_id,
+        label="Taris Apartments — Panels, Lights & Number Plates",
+        game="K1",
+        module_resref="m02aa",
+        environment_kind="interior",
+        floor_texture="lts_floor01",
+        wall_texture="lts_pwall01i",
+        ceiling_texture="lts_nwall04i",
+        pieces=(
+            piece(
+                "illuminated_wall_bay",
+                "Taris Illuminated Apartment Wall Bay",
+                "apartment_light_bay",
+                (-2.400010, 21.224954, 0.0, 2.400044, 22.275029, 2.550010),
+                ("object318", "mesh389"),
+                (4.800054, 1.050075, 2.550010),
+                texture="lts_lite08",
+                tags=("light", "trim", "utility belt", "corridor"),
+            ),
+            piece(
+                "service_divider",
+                "Taris Framed Service Divider",
+                "apartment_service_divider",
+                (-2.400055, 10.724956, 0.0, 2.400007, 11.850001, 2.550010),
+                ("object365", "mesh538", "object369"),
+                (4.800062, 1.125045, 2.550010),
+                texture="lts_trim01",
+                tags=("divider", "panel", "service", "structural"),
+            ),
+            piece(
+                "number_plate",
+                "Taris Apartment Number Plate",
+                "apartment_number_plate",
+                (-0.074680, 23.717294, 2.459302, 0.076882, 24.888574, 3.071719),
+                ("box242", "mesh580"),
+                (0.151562, 1.171280, 0.612417),
+                local_normal_axis="x",
+                texture="lts_nums",
+                tags=("number", "signage", "door marker", "wayfinding"),
+            ),
+        ),
+        tags=("k1", "taris", "apartments", "dressing", "content-browser", "vanilla-derived"),
+    )
+
+
+def _shadowlands_dressing_collection() -> EnvironmentKitCollection:
+    """Large retail roots and trunks for deliberate Shadowlands staging."""
+
+    collection_id = "k1_shadowlands_dressing"
+
+    def piece(
+        suffix: str,
+        label: str,
+        class_name: str,
+        bounds: tuple[float, float, float, float, float, float],
+        surface_name: str,
+        dimensions: tuple[float, float, float],
+        texture: str,
+        tags: tuple[str, ...],
+    ) -> EnvironmentKitPiece:
+        return EnvironmentKitPiece(
+            piece_id=f"k1_shadowlands_{suffix}",
+            collection_id=collection_id,
+            label=label,
+            game="K1",
+            module_resref="m24aa",
+            room_resref="m24aa_16a",
+            role="dressing",
+            class_id=f"dressing:{class_name}",
+            model_resref="m24aa_16a",
+            source_bounds_m=bounds,
+            source_surface_names=(surface_name,),
+            anchor_mode="floor",
+            dimensions_m=dimensions,
+            texture_resref=texture,
+            tags=("k1", "kashyyyk", "shadowlands", "vanilla-derived", "organic") + tags,
+        )
+
+    return EnvironmentKitCollection(
+        collection_id=collection_id,
+        label="Shadowlands — Ancient Roots, Trunks & Grove Forms",
+        game="K1",
+        module_resref="m24aa",
+        environment_kind="exterior",
+        floor_texture="lka_mud02",
+        wall_texture="lka_mud02",
+        ceiling_texture="lka_plant03",
+        pieces=(
+            piece(
+                "ancient_trunk",
+                "Shadowlands Ancient Trunk",
+                "ancient_tree_trunk",
+                (-392.063743, -794.873366, 11.686321, -352.771962, -734.259614, 48.951612),
+                "ancient_trunk_33",
+                (39.291781, 60.613752, 37.265291),
+                "lka_bark01",
+                ("tree", "trunk", "canopy support", "landmark"),
+            ),
+            piece(
+                "ancient_root_arch",
+                "Shadowlands Ancient Root Arch",
+                "ancient_root_arch",
+                (-398.752809, -704.182581, 4.430158, -357.358910, -643.276901, 37.866083),
+                "ancient_root_104",
+                (41.393899, 60.905680, 33.435925),
+                "lka_bark01",
+                ("root", "arch", "path framing", "landmark"),
+            ),
+            piece(
+                "root_cluster",
+                "Shadowlands Interlocking Root Cluster",
+                "ancient_root_cluster",
+                (-374.364139, -760.895001, 1.853903, -340.996772, -709.798764, 26.308688),
+                "ancient_root_119",
+                (33.367367, 51.096237, 24.454785),
+                "lka_bark01",
+                ("root", "cluster", "boundary", "cover"),
+            ),
+            piece(
+                "broken_trunk",
+                "Shadowlands Fallen Broken Trunk",
+                "fallen_tree_trunk",
+                (-376.318048, -836.751004, 14.057458, -339.311651, -769.464104, 24.265508),
+                "brokentrunk_26",
+                (37.006397, 67.286900, 10.208050),
+                "lka_bark06",
+                ("tree", "fallen trunk", "path edge", "silhouette"),
+            ),
+        ),
+        tags=("k1", "kashyyyk", "shadowlands", "dressing", "content-browser", "vanilla-derived"),
     )
 
 
@@ -2573,6 +3093,8 @@ def _builtin_environment_kit_collections() -> tuple[EnvironmentKitCollection, ..
     return (
         _republic_warship_dressing_collection(game="K1"),
         _republic_warship_dressing_collection(game="K2"),
+        _taris_apartment_dressing_collection(),
+        _shadowlands_dressing_collection(),
         _telos_citadel_dressing_collection(),
         *_onderon_environment_collections(),
         _korriban_dressing_collection(game="K1", family="tombs"),
@@ -2906,7 +3428,7 @@ def scan_vanilla_environment_kits(
             room_resref = str(getattr(room, "model", getattr(room, "name", "")) or "").strip().lower()
             if not room_resref:
                 continue
-            magnets = tuple(
+            lyt_magnets = tuple(
                 EnvironmentKitMagnet(
                     magnet_id=str(hook.door or f"door_{index + 1}"),
                     kind="doorway",
@@ -2917,21 +3439,62 @@ def scan_vanilla_environment_kits(
                 )
                 for index, hook in enumerate(hooks_by_room.get(room_resref, ()))
             )
-            if not magnets:
-                position = getattr(room, "position", room)
-                source_room_position = (
-                    float(getattr(position, "x", getattr(room, "x", 0.0))),
-                    float(getattr(position, "y", getattr(room, "y", 0.0))),
-                    float(getattr(position, "z", getattr(room, "z", 0.0))),
-                )
-                magnets = _walkmesh_transition_magnets(
-                    resource_manager,
-                    game=game,
-                    room_resref=room_resref,
-                    source_room_position=source_room_position,
-                )
+            position = getattr(room, "position", room)
+            source_room_position = (
+                float(getattr(position, "x", getattr(room, "x", 0.0))),
+                float(getattr(position, "y", getattr(room, "y", 0.0))),
+                float(getattr(position, "z", getattr(room, "z", 0.0))),
+            )
+            # Retail LYTs can list multiple door resource variants at the same
+            # physical hook (m25aa_11a is a concrete example). The room WOK is
+            # the engine's authoritative passage topology, so prefer its
+            # transition-edge groups whenever they are available. This keeps
+            # reusable vanilla tiles aligned to every real opening and avoids
+            # inventing duplicate sockets at one point.
+            wok_magnets = _walkmesh_transition_magnets(
+                resource_manager,
+                game=game,
+                room_resref=room_resref,
+                source_room_position=source_room_position,
+            )
+            if wok_magnets:
+                magnets = wok_magnets
+            else:
+                unique_lyt: list[EnvironmentKitMagnet] = []
+                seen_lyt: set[tuple[float, ...]] = set()
+                for magnet in lyt_magnets:
+                    signature = tuple(
+                        round(float(value), 5)
+                        for value in (*magnet.local_position, *magnet.local_orientation)
+                    )
+                    if signature in seen_lyt:
+                        continue
+                    seen_lyt.add(signature)
+                    unique_lyt.append(magnet)
+                magnets = tuple(unique_lyt)
             role = "exterior_tile" if room_resref in terrain_rooms else "room_tile"
             archetype = _doorway_archetype(magnets)
+            generated_piece_id = f"{collection_id}_{room_resref}".lower()
+            placement_quality = (
+                "verified"
+                if magnets
+                else "generated_connector"
+                if generated_piece_id in _GENERATED_CONNECTOR_PIECE_IDS
+                else "needs_review"
+            )
+            placement_quality_message = (
+                ""
+                if magnets
+                else (
+                    "Drop this reviewed stock chamber onto an authored wall. Ghost Studio "
+                    "will derive its floor collision and choose an exposed boundary connector."
+                )
+                if placement_quality == "generated_connector"
+                else (
+                    "This stock room has no verified retail doorway socket, so Ghost Studio "
+                    "will not offer it as an attachable room yet."
+                )
+            )
             pieces.append(
                 EnvironmentKitPiece(
                     piece_id=f"{collection_id}_{room_resref}",
@@ -2945,6 +3508,8 @@ def scan_vanilla_environment_kits(
                     model_resref=room_resref,
                     magnets=magnets,
                     tags=(game.lower(), module_resref, room_resref, role, archetype, "vanilla"),
+                    placement_quality=placement_quality,
+                    placement_quality_message=placement_quality_message,
                 )
             )
         textures: Counter[str] = Counter()
@@ -3103,7 +3668,7 @@ def environment_kit_piece_rows(
                     "ceiling_texture": collection.ceiling_texture,
                     "tags": piece.tags,
                     "placement_quality": piece.placement_quality,
-                    "placement_ready": piece.placement_quality == "verified",
+                    "placement_ready": piece.placement_quality in {"verified", "generated_connector"},
                     "placement_quality_message": piece.placement_quality_message,
                     "building_style_id": environment_kit_builder_style_id(
                         collection.game,
@@ -3126,7 +3691,7 @@ def environment_kit_drag_payload(
     entry = environment_kit_piece(piece) if isinstance(piece, str) else piece
     if entry is None:
         raise ValueError(f"Unknown environment-kit piece {piece!r}.")
-    if entry.placement_quality != "verified":
+    if entry.placement_quality not in {"verified", "generated_connector"}:
         raise ValueError(
             entry.placement_quality_message
             or f"{entry.label} is awaiting geometry review and cannot be placed."
@@ -3148,6 +3713,7 @@ def environment_kit_drag_payload(
         "scale": float(scale),
         "snap_to_surface": True,
         "snap_to_magnets": bool(entry.magnets),
+        "generated_connector": entry.placement_quality == "generated_connector",
     }
 
 
@@ -3373,10 +3939,12 @@ __all__ = [
     "environment_kit_piece_index",
     "environment_kit_piece_rows",
     "environment_kit_source_room_position",
+    "generated_environment_kit_boundary_magnets",
     "kotor_module_world_label",
     "magnet_snap_transform",
     "nearest_environment_kit_snap",
     "nearest_environment_kit_wall_snap",
+    "rebase_environment_kit_room_to_walkmesh",
     "scan_vanilla_environment_kits",
     "seal_environment_kit_exterior_bounds",
     "trim_environment_kit_connection_overlap",

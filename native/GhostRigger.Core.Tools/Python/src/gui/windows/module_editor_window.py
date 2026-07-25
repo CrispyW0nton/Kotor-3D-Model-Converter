@@ -2158,6 +2158,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.buildingStyleChanged.connect(
             self.terrain_kit_browser.select_building_style
         )
+        self.builder_tab.buildingStyleChanged.connect(
+            self.environment_tab.set_skybox_building_style
+        )
         self.terrainCatalogProgress.connect(
             lambda message: self.terrain_kit_browser.set_refreshing(True, message)
         )
@@ -12591,6 +12594,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if reload_model:
                 texture_dirs = list(getattr(self.viewport_panel, "_project_texture_dirs", ()) or ())
                 viewport.load_model(preview_model, extra_texture_dirs=texture_dirs)
+                # ``load_model`` publishes synchronous model/selection signals.
+                # Map Studio's authoring preview listeners may use those
+                # signals to rehydrate the room-local source hierarchy so edit
+                # mode remains source-preserving.  PIE owns a disposable copy,
+                # however, and rendering that restored hierarchy turns a
+                # detailed cave parcel into thousands of draw submissions.
+                # Compact once more after publication and before the queued
+                # renderer frame consumes the model.  The renderer caches were
+                # cleared by ``load_model`` and have not rendered on this event
+                # loop turn, so the first uploaded frame sees only these
+                # room-local material batches.
+                from src.core.modules.authored_module_preview_model import (
+                    batch_authored_preview_model_for_pie_in_place,
+                )
+
+                batch_authored_preview_model_for_pie_in_place(preview_model)
+                gpu_renderer = getattr(viewport, "_gpu_renderer", None)
+                clear_gpu_caches = getattr(gpu_renderer, "clear_caches", None)
+                if callable(clear_gpu_caches):
+                    clear_gpu_caches()
+                renderer = getattr(viewport, "_renderer", None)
+                set_renderer_model = getattr(renderer, "set_model", None)
+                if callable(set_renderer_model):
+                    set_renderer_model(preview_model)
             runtime_rows: list[tuple[Any, ...]] = []
             actor = self._map_studio_pie_actor
             engine = self._map_studio_pie_animation_engine
