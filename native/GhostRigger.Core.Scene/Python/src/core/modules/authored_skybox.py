@@ -191,6 +191,28 @@ _KOTOR_SKYBOX_PRESETS = (
         bottom_z=-180.0,
         top_z=340.0,
     ),
+    KotorSkyboxPreset(
+        preset_id="k2_rhen_var_polar_day",
+        label="Rhen Var — Lago d'Isola Alpine HDR Vista (CC0)",
+        game="K2",
+        source_module="lago_disola",
+        source_room="cc0_hdr",
+        # Andreas Mischok's CC0 Lago d'Isola HDRI is projected and ACES
+        # tone-mapped offline into KOTOR's five inward-facing sky panels.
+        # Telos 261TEL still supplies the K2-native polar lighting reference;
+        # the permission-tracked Rhen Var mods supply the architecture.
+        textures=FiveFaceSkyboxTextures(
+            north="gr_rvskyn",
+            east="gr_rvskye",
+            south="gr_rvskys",
+            west="gr_rvskyw",
+            top="gr_rvskyt",
+        ),
+        building_style_ids=("architecture:k2_rhen_var",),
+        half_extent=520.0,
+        bottom_z=-180.0,
+        top_z=340.0,
+    ),
 )
 
 

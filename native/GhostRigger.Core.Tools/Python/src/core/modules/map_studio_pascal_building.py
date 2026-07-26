@@ -295,6 +295,93 @@ _ARCHITECTURE_STYLES = (
         ),
     ),
     PascalBuildingStyle(
+        style_id="architecture:k2_rhen_var",
+        label="Rhen Var — Authorized Snow Ruins & Temple Architecture",
+        game="K2",
+        floor_texture="gr_rvsnow",
+        wall_texture="gr_rvstone",
+        ceiling_texture="gr_rvstone",
+        # 261TEL remains the K2 runtime/door and polar-atmosphere reference.
+        # Architectural evidence comes from the permission-tracked Rhen Var
+        # Citadel, Colony, and Temple mod collection packaged with this style.
+        source_module="261tel",
+        source_room="261teld",
+        architecture_profile="rhen_var",
+        architecture_shell_profile="rhen_var_landing_courtyard",
+        architecture_archetypes=(
+            PascalBuildingArchetype(
+                archetype_id="landing_courtyard",
+                label="Snow landing courtyard",
+                shell_profile="rhen_var_landing_courtyard",
+                recommended_wall_height_m=6.40,
+                recommended_floor_to_floor_m=8.00,
+                description=(
+                    "Roofless 8 m ruin modules with a snow-buried plinth, battered stone walls, "
+                    "canted shoulders, projecting piers, and a broken parapet for landing zones."
+                ),
+                evidence_rooms=(
+                    "authorized:rhen_var_citadel",
+                    "authorized:rhen_var_colony",
+                ),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="temple_interior",
+                label="Citadel temple interior",
+                shell_profile="rhen_var_temple_interior",
+                recommended_wall_height_m=8.00,
+                recommended_floor_to_floor_m=8.00,
+                description=(
+                    "Closed Rhen Var temple shell with thick stone courses, inset relief bays, "
+                    "deep corbels, an eight-metre structural cadence, and a faceted vault."
+                ),
+                evidence_rooms=(
+                    "authorized:rhen_var_citadel",
+                    "authorized:rhen_var_temple",
+                ),
+            ),
+            PascalBuildingArchetype(
+                archetype_id="catacomb_tunnel",
+                label="Frozen catacomb tunnel",
+                shell_profile="rhen_var_catacomb_tunnel",
+                recommended_wall_height_m=4.80,
+                recommended_floor_to_floor_m=8.00,
+                description=(
+                    "Compact frozen passage using the same 8 m kit rhythm at half-height, with "
+                    "a heavy frost plinth, recessed stone field, canted vault, and solid portal returns."
+                ),
+                evidence_rooms=(
+                    "authorized:rhen_var_temple",
+                    "authorized:rhen_var_citadel",
+                ),
+            ),
+        ),
+        recommended_wall_height_m=6.40,
+        recommended_floor_to_floor_m=8.00,
+        recommended_door_width_m=3.48,
+        recommended_door_height_m=3.029,
+        accent_textures=("gr_rvstone", "gr_rvfloor", "gr_rvsnow", "gr_rvstone"),
+        evidence_rooms=(
+            "authorized:rhen_var_citadel",
+            "authorized:rhen_var_colony",
+            "authorized:rhen_var_temple",
+        ),
+        tags=(
+            "k2",
+            "rhen var",
+            "telos polar",
+            "snow",
+            "ruins",
+            "temple",
+            "catacomb",
+            "exterior",
+            "interior",
+            "architecture-kit",
+            "authorized-mod-derived",
+            "telos-polar-reference",
+            "priority",
+        ),
+    ),
+    PascalBuildingStyle(
         style_id="architecture:k2_onderon_city",
         label="Onderon — Iziz Courtyards & City Exteriors",
         game="K2",
@@ -1081,6 +1168,21 @@ _ARCHITECTURE_DOOR_SPECS: dict[tuple[str, str], dict[str, Any]] = {
         "frame_width_m": 3.92,
         "frame_height_m": 3.31,
     },
+    # Rhen Var uses the proven K2 Telos moving-door contract inside a much
+    # deeper frost-stone reveal.  The authored frame is intentionally wider
+    # than the actor so exterior ruins and interior temple walls meet the same
+    # walkable aperture without a paper-thin portal.
+    ("K2", "rhen_var"): {
+        "template_resref": "gr_rvdoor",
+        "sealed_template_resref": "gr_rvseal",
+        "model_resref": "dor_tel14",
+        "appearance_id": 117,
+        "label": "Rhen Var Temple Door",
+        "opening_width_m": 3.48,
+        "opening_height_m": 3.029,
+        "frame_width_m": 4.72,
+        "frame_height_m": 3.62,
+    },
     # Onderon uses distinct door families by district. These appearances were
     # read from the installed 502OND, 504OND, 506OND, and 512OND GIT/UTD data;
     # each authored profile therefore produces the same transition family as
@@ -1429,6 +1531,24 @@ def write_vanilla_pascal_style_catalog(
     return target
 
 
+def _rhen_var_asset_pack_available() -> bool:
+    """Keep the optional Rhen Var builder hidden unless its shipped pack exists."""
+
+    relative = Path("assets/map_studio/terrain_kits/rhen_var/manifest.json")
+    roots = (Path.cwd(), Path(sys.executable).resolve().parent, *Path(__file__).resolve().parents)
+    for root in roots:
+        manifest = root / relative
+        if not manifest.is_file():
+            continue
+        try:
+            payload = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, TypeError, ValueError):
+            continue
+        if str(payload.get("schema") or "") == "ghostrigger.rhen-var-asset-pack/v1":
+            return True
+    return False
+
+
 def available_pascal_building_styles(game: str = "") -> tuple[PascalBuildingStyle, ...]:
     """Return only authored styles whose geometry workflow has been verified.
 
@@ -1444,7 +1564,11 @@ def available_pascal_building_styles(game: str = "") -> tuple[PascalBuildingStyl
     return tuple(
         style
         for style in (_DEFAULT_STYLES + _ARCHITECTURE_STYLES)
-        if style.game in {"BOTH", wanted} or not wanted
+        if (style.game in {"BOTH", wanted} or not wanted)
+        and (
+            style.style_id != "architecture:k2_rhen_var"
+            or _rhen_var_asset_pack_available()
+        )
     )
 
 
@@ -1526,6 +1650,7 @@ def add_pascal_building_room(
         raise ValueError("Roof overhang must be between 0 and 5 metres.")
     profile_token = str(architecture_profile or "").strip().lower()
     archetype_token = str(architecture_archetype or "").strip().lower()
+    shell_token = str(architecture_shell_profile or "").strip().lower()
     cleaned_points = _clean_points(points)
     korriban_minimums = {
         "chamber": (9.0, 81.0, 9.75, "reliquary chamber"),
@@ -1552,6 +1677,20 @@ def add_pascal_building_room(
         kind = "exterior"
         roof = "none"
         include_ceiling = False
+    if profile_token == "rhen_var":
+        # Rhen Var is one coherent 8 m kit, but its outdoor landing enclosure
+        # and enclosed temple/catacomb rooms have different floor and roof
+        # contracts.  Enforce those distinctions in the headless owner so the
+        # GUI, scripts, KMAP reload, and export all compile identical geometry.
+        wall_texture = "gr_rvstone"
+        ceiling_texture = "gr_rvstone"
+        if shell_token == "rhen_var_landing_courtyard" or archetype_token == "landing_courtyard":
+            kind = "exterior"
+            roof = "none"
+            include_ceiling = False
+            floor_texture = "gr_rvsnow"
+        else:
+            floor_texture = "gr_rvfloor"
     project = set_pascal_building_level(
         project,
         level_index=int(level_index),
@@ -1570,7 +1709,7 @@ def add_pascal_building_room(
         "kit_collection_id": str(style_id or "")[4:] if str(style_id or "").startswith("kit:") else "",
         "kit_autobuild": str(style_id or "").startswith("kit:"),
         "architecture_profile": profile_token,
-        "architecture_shell_profile": str(architecture_shell_profile or "").strip().lower(),
+        "architecture_shell_profile": shell_token,
         "architecture_archetype": archetype_token,
         "architecture_accent_textures": [
             normalize_authored_room_texture(value)
@@ -2228,6 +2367,10 @@ _ARCHITECTURE_TRAINING_ROOMS: dict[str, tuple[tuple[str, str], ...]] = {
         ("204tel", "204telf"),
         ("207tel", "207tel_1"),
     ),
+    "rhen_var": (
+        ("261tel", "261teld"),
+        ("261tel", "261telf"),
+    ),
     "onderon_city": (
         ("501ond", "501onda"),
         ("501ond", "501ondc"),
@@ -2372,6 +2515,7 @@ _ARCHITECTURE_TRAINING_GAMES = {
     "taris_apartments": "K1",
     "harbinger": "K2",
     "telos_citadel": "K2",
+    "rhen_var": "K2",
     "onderon_city": "K2",
     "onderon_cantina": "K2",
     "onderon_sky_ramp": "K2",

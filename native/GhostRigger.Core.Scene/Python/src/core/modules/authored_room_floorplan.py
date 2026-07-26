@@ -383,6 +383,12 @@ _VANILLA_ARCHITECTURE_UV_METRES: dict[str, float] = {
     "tel_wl03": 3.0,
     "tel_wl06": 3.0,
     "tel_wl07": 3.0,
+    # Ghost Studio's Rhen Var materials are authored for world-space tiling.
+    # Explicit repeat sizes keep large landing pads and eight-metre wall
+    # modules crisp instead of stretching one texture over a complete room.
+    "gr_rvsnow": 4.0,
+    "gr_rvstone": 2.0,
+    "gr_rvfloor": 4.0,
 }
 
 
@@ -1984,7 +1990,12 @@ def _module_transition_shell_meshes(
             or metadata.get("transition_length_m")
             or 0.0
         ),
-        game="K2" if str(architecture_profile or "").strip().lower().endswith("_k2") else "K1",
+        game=(
+            "K2"
+            if str(architecture_profile or "").strip().lower().endswith("_k2")
+            or str(architecture_profile or "").strip().lower() == "rhen_var"
+            else "K1"
+        ),
     )
 
 
@@ -2195,9 +2206,11 @@ def _architecture_door_transition_meshes(
             continue
         if door_model == "dor_tel14":
             # Citadel residential portals are compact rectangular moving doors
-            # carried inside a deep white/grey station reveal. Reconstruct the
-            # surround and threshold as solid geometry so a snapped vanilla
-            # room never meets a paper-thin opening in the authored shell.
+            # carried inside a deep architectural reveal. Rhen Var deliberately
+            # reuses that proven K2 moving-door aperture inside a wider carved
+            # frost-stone surround. Reconstruct the surround and threshold as
+            # solid geometry so a snapped room never meets a paper-thin opening.
+            is_rhen_var = str(profile or "").strip().lower() == "rhen_var"
             center = max(0.0, min(edge_length, float(opening.center_fraction) * edge_length))
             half_width = min(edge_length * 0.5, float(opening.width) * 0.5)
             inner_start = max(0.0, center - half_width)
@@ -2224,9 +2237,17 @@ def _architecture_door_transition_meshes(
                 "opening_name": str(opening.name or ""),
                 "door_model_resref": "dor_tel14",
                 "door_aperture_width_m": float(opening.width),
-                "architecture_role": "telos_citadel_door_frame",
+                "architecture_role": (
+                    "rhen_var_temple_door_frame"
+                    if is_rhen_var
+                    else "telos_citadel_door_frame"
+                ),
                 "surface_role": "architectural_detail",
-                "vanilla_measurement_source": "DOR_TEL14 + 203TEL/204TEL door hooks",
+                "vanilla_measurement_source": (
+                    "DOR_TEL14 K2 aperture + 261TEL/Rhen Var frost-stone reveal"
+                    if is_rhen_var
+                    else "DOR_TEL14 + 203TEL/204TEL door hooks"
+                ),
             }
             for tier, depth, lateral, material in (
                 ("outer", 0.18, 0.0, trim_material),
@@ -2244,7 +2265,10 @@ def _architecture_door_transition_meshes(
                         continue
                     meshes.append(
                         _architecture_wall_mesh(
-                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_telos_door_{tier}_{part}",
+                            name=(
+                                f"{room_resref}_{profile}_e{edge_index + 1:02d}_"
+                                f"{'rhen_var' if is_rhen_var else 'telos'}_door_{tier}_{part}"
+                            ),
                             start=start,
                             end=end,
                             span_bottom=span,
@@ -2979,6 +3003,8 @@ def architecture_shell_profile(primitive: FloorPlanRoomPrimitive) -> str:
         return "harbinger_corridor"
     if architecture == "telos_citadel":
         return "telos_citadel_residential"
+    if architecture == "rhen_var":
+        return "rhen_var_landing_courtyard"
     if architecture == "onderon_city":
         return "onderon_city_courtyard"
     if architecture == "onderon_cantina":
@@ -3107,6 +3133,9 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         "telos_citadel_residential",
         "telos_citadel_civic",
         "telos_citadel_concourse",
+        "rhen_var_landing_courtyard",
+        "rhen_var_temple_interior",
+        "rhen_var_catacomb_tunnel",
         "onderon_city_courtyard",
         "onderon_city_square",
         "onderon_city_spaceport",
@@ -3141,6 +3170,9 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         "telos_citadel_residential": 3.50,
         "telos_citadel_civic": 5.40,
         "telos_citadel_concourse": 6.10,
+        "rhen_var_landing_courtyard": 5.80,
+        "rhen_var_temple_interior": 7.20,
+        "rhen_var_catacomb_tunnel": 4.20,
         "onderon_city_courtyard": 7.50,
         "onderon_city_square": 9.25,
         "onderon_city_spaceport": 8.00,
@@ -3164,6 +3196,8 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
             if shell_profile.startswith("taris_")
             else "Telos Citadel room"
             if shell_profile.startswith("telos_citadel_")
+            else "Rhen Var ruin or temple room"
+            if shell_profile.startswith("rhen_var_")
             else "Onderon exterior court"
             if shell_profile.startswith(("onderon_city_", "onderon_sky_ramp_"))
             else "Onderon interior"
@@ -3197,6 +3231,8 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         defaults = ("lts_pwall04", "lts_trim01", "lts_lite08", "lts_gwall01")
     elif architecture_profile == "telos_citadel":
         defaults = ("tel_wl03", "tel_tr04", "tel_lt02", "tel_hcl1")
+    elif architecture_profile == "rhen_var":
+        defaults = ("gr_rvstone", "gr_rvfloor", "gr_rvsnow", "gr_rvstone")
     elif architecture_profile == "onderon_city":
         defaults = ("ond_tr04", "ond_wl08", "ond_lt02", "ond_wl06")
     elif architecture_profile == "onderon_cantina":
@@ -3219,6 +3255,8 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         if architecture_profile == "harbinger"
         else "tel_fl05"
         if architecture_profile == "telos_citadel"
+        else "gr_rvfloor"
+        if architecture_profile == "rhen_var"
         else "ond_fl02"
         if architecture_profile == "onderon_city"
         else "ond_fl08"
@@ -3481,6 +3519,59 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
             rib_projection = 0.18
             bay_target = 7.00
             rib_role = "citadel_concourse_frame"
+    elif shell_profile.startswith("rhen_var_"):
+        # Rhen Var uses an eight-metre kit rhythm across exterior ruins,
+        # enclosed temple rooms, and compact catacomb links. These are swept
+        # structural sections: the depth changes form real canted shoulders,
+        # corbels, and parapets instead of decorating a flat rectangle.
+        wall_material = _architecture_material("gr_rvstone")
+        accent_material = _architecture_material("gr_rvstone")
+        trim_material = _architecture_material("gr_rvfloor")
+        light_material = _architecture_material("gr_rvsnow")
+        utility_material = _architecture_material("gr_rvfloor")
+        ceiling_material = _architecture_material("gr_rvstone")
+        if shell_profile == "rhen_var_landing_courtyard":
+            nominal_height = 6.40
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.18, 0.220 / nominal_height, "rhen_snow_buried_curb", floor_edge_material, True),
+                (0.34, 0.850 / nominal_height, "rhen_heavy_ruin_plinth", utility_material, False),
+                (0.55, 2.450 / nominal_height, "rhen_battered_lower_wall", wall_material, False),
+                (0.76, 4.650 / nominal_height, "rhen_recessed_frost_stone_field", accent_material, False),
+                (1.06, 5.650 / nominal_height, "rhen_canted_parapet_shoulder", trim_material, True),
+                (1.34, 1.000, "rhen_broken_ruin_parapet", wall_material, False),
+            )
+            rib_projection = 0.34
+            bay_target = 8.00
+            rib_role = "rhen_landing_monumental_buttress"
+        elif shell_profile == "rhen_var_temple_interior":
+            nominal_height = 8.00
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.14, 0.200 / nominal_height, "rhen_temple_floor_plinth", floor_edge_material, True),
+                (0.30, 0.720 / nominal_height, "rhen_temple_carved_dado", utility_material, False),
+                (0.46, 2.300 / nominal_height, "rhen_temple_recessed_relief", accent_material, False),
+                (0.68, 4.900 / nominal_height, "rhen_temple_faceted_wall", wall_material, False),
+                (1.02, 6.250 / nominal_height, "rhen_temple_corbel_course", trim_material, True),
+                (1.42, 7.250 / nominal_height, "rhen_temple_canted_vault_shoulder", accent_material, False),
+                (1.82, 1.000, "rhen_temple_faceted_vault", ceiling_material, False),
+            )
+            rib_projection = 0.42
+            bay_target = 8.00
+            rib_role = "rhen_temple_octagonal_pier"
+        else:
+            nominal_height = 4.80
+            levels = (
+                (0.00, 0.000 / nominal_height, "", floor_edge_material, True),
+                (0.12, 0.160 / nominal_height, "rhen_catacomb_frost_curb", floor_edge_material, True),
+                (0.28, 0.650 / nominal_height, "rhen_catacomb_heavy_plinth", utility_material, False),
+                (0.44, 2.650 / nominal_height, "rhen_catacomb_recessed_stone_field", accent_material, False),
+                (0.76, 3.750 / nominal_height, "rhen_catacomb_canted_vault", wall_material, False),
+                (1.16, 1.000, "rhen_catacomb_corbelled_ceiling", ceiling_material, False),
+            )
+            rib_projection = 0.28
+            bay_target = 8.00
+            rib_role = "rhen_catacomb_module_pier"
     elif shell_profile.startswith("onderon_"):
         # The Onderon profiles are measured as architectural sections rather
         # than texture swaps. Iziz exteriors use a battered masonry base and
@@ -3724,6 +3815,9 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
         openings = openings_by_edge.get(edge_index, ())
         if edge_length <= 0.05:
             continue
+        tx = (end[0] - start[0]) / edge_length
+        ty = (end[1] - start[1]) / edge_length
+        nx, ny = -ty, tx
         for band_index in range(1, len(levels)):
             bottom_depth, bottom_fraction, _previous_role, _previous_material, _previous_floor = levels[band_index - 1]
             top_depth, top_fraction, role, material, floor_facing = levels[band_index]
@@ -4007,6 +4101,7 @@ def build_floor_plan_profiled_shell_meshes(primitive: FloorPlanRoomPrimitive) ->
                     common=common,
                 )
             )
+        if shell_profile in korriban_profiles or shell_profile.startswith("rhen_var_"):
             for opening in openings:
                 meshes.extend(
                     _module_transition_shell_meshes(
@@ -4290,6 +4385,25 @@ def _shadowlands_opening_half_width(opening: FloorPlanWallOpening, z_value: floa
     """
 
     bottom = float(opening.bottom)
+    transition_asset = str(
+        dict(opening.metadata or {}).get("module_transition_asset_id") or ""
+    ).strip().lower()
+    if transition_asset:
+        from .map_studio_terrain_kit import module_transition_fit_contract
+
+        fit = module_transition_fit_contract(
+            transition_asset,
+            float(opening.width),
+            float(opening.height),
+            "K1",
+        )
+        top = bottom + float(fit.host_opening_height_m)
+        if z_value < bottom - 1.0e-8 or z_value > top + 1.0e-8:
+            return 0.0
+        # The supplied organic facade owns the visible silhouette.  Give it a
+        # full measured recess instead of forcing its wide roots through the
+        # smaller, rounded WOK aperture.
+        return max(0.01, float(fit.host_opening_width_m) * 0.5)
     top = bottom + float(opening.height)
     half_width = max(0.01, float(opening.width) * 0.5)
     if z_value < bottom - 1.0e-8 or z_value > top + 1.0e-8:
@@ -4676,12 +4790,36 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
                 # straight across the walkable opening.
                 split_fractions = [strip_lower, strip_upper]
                 for opening in openings:
-                    radius = min(float(opening.width) * 0.5, max(0.18, float(opening.height) * 0.48))
-                    for split_z in (
-                        float(opening.bottom),
-                        max(float(opening.bottom), float(opening.bottom) + float(opening.height) - radius),
-                        float(opening.bottom) + float(opening.height),
-                    ):
+                    transition_asset = str(
+                        dict(opening.metadata or {}).get("module_transition_asset_id") or ""
+                    ).strip().lower()
+                    if transition_asset:
+                        from .map_studio_terrain_kit import module_transition_fit_contract
+
+                        transition_fit = module_transition_fit_contract(
+                            transition_asset,
+                            float(opening.width),
+                            float(opening.height),
+                            "K1",
+                        )
+                        split_heights = (
+                            float(opening.bottom),
+                            float(opening.bottom) + float(transition_fit.host_opening_height_m),
+                        )
+                    else:
+                        radius = min(
+                            float(opening.width) * 0.5,
+                            max(0.18, float(opening.height) * 0.48),
+                        )
+                        split_heights = (
+                            float(opening.bottom),
+                            max(
+                                float(opening.bottom),
+                                float(opening.bottom) + float(opening.height) - radius,
+                            ),
+                            float(opening.bottom) + float(opening.height),
+                        )
+                    for split_z in split_heights:
                         normalized = (float(split_z) / height - z0f) / max(1.0e-8, z1f - z0f)
                         if strip_lower + 1.0e-7 < normalized < strip_upper - 1.0e-7:
                             split_fractions.append(normalized)
@@ -4773,49 +4911,52 @@ def build_floor_plan_shadowlands_meshes(primitive: FloorPlanRoomPrimitive) -> tu
                 )
 
         for opening_index, opening in enumerate(openings):
-            meshes.append(
-                _architecture_wall_mesh(
-                    name=f"{room_resref}_shadowlands_e{edge_index + 1:02d}_cave_portal_lip_{opening_index + 1:02d}",
-                    start=start,
-                    end=end,
-                    span_bottom=(
-                        max(0.0, float(opening.center_fraction) * edge_length - float(opening.width) * 0.5 - 0.12),
-                        min(edge_length, float(opening.center_fraction) * edge_length + float(opening.width) * 0.5 + 0.12),
-                    ),
-                    span_top=None,
-                    depth_bottom=berm_width * 0.42,
-                    depth_top=berm_width * 0.57,
-                    # The lip begins *above* the arch apex.  Starting it at
-                    # the spring line would turn the opening back into a
-                    # rectangular lintel and block the cave silhouette.
-                    z_bottom=floor_z + min(height, float(opening.bottom) + float(opening.height)),
-                    z_top=floor_z + min(height, float(opening.bottom) + float(opening.height) + 0.18),
-                    material=root_material,
-                    metadata={
-                        **common,
-                        "edge_index": edge_index,
-                        "architecture_role": "shadowlands_cave_portal_lip",
-                        "opening_name": str(opening.name or ""),
-                        "source_modules": ("m24aa", "m25aa"),
-                        "surface_role": "terrain_wall",
-                    },
+            transition_asset = str(
+                dict(opening.metadata or {}).get("module_transition_asset_id") or ""
+            ).strip().lower()
+            if not transition_asset:
+                meshes.append(
+                    _architecture_wall_mesh(
+                        name=f"{room_resref}_shadowlands_e{edge_index + 1:02d}_cave_portal_lip_{opening_index + 1:02d}",
+                        start=start,
+                        end=end,
+                        span_bottom=(
+                            max(0.0, float(opening.center_fraction) * edge_length - float(opening.width) * 0.5 - 0.12),
+                            min(edge_length, float(opening.center_fraction) * edge_length + float(opening.width) * 0.5 + 0.12),
+                        ),
+                        span_top=None,
+                        depth_bottom=berm_width * 0.42,
+                        depth_top=berm_width * 0.57,
+                        # The generated connector owns this lip.  A supplied
+                        # facade already contains its own detailed crown.
+                        z_bottom=floor_z + min(height, float(opening.bottom) + float(opening.height)),
+                        z_top=floor_z + min(height, float(opening.bottom) + float(opening.height) + 0.18),
+                        material=root_material,
+                        metadata={
+                            **common,
+                            "edge_index": edge_index,
+                            "architecture_role": "shadowlands_cave_portal_lip",
+                            "opening_name": str(opening.name or ""),
+                            "source_modules": ("m24aa", "m25aa"),
+                            "surface_role": "terrain_wall",
+                        },
+                    )
                 )
-            )
-            meshes.extend(
-                _shadowlands_connected_cave_connector_meshes(
-                    room_resref=room_resref,
-                    edge_index=edge_index,
-                    start=start,
-                    tangent=(tx, ty),
-                    inward_normal=(nx, ny),
-                    edge_length=edge_length,
-                    opening=opening,
-                    floor_z=floor_z,
-                    berm_width=berm_width,
-                    material=earth_material,
-                    common=common,
+                meshes.extend(
+                    _shadowlands_connected_cave_connector_meshes(
+                        room_resref=room_resref,
+                        edge_index=edge_index,
+                        start=start,
+                        tangent=(tx, ty),
+                        inward_normal=(nx, ny),
+                        edge_length=edge_length,
+                        opening=opening,
+                        floor_z=floor_z,
+                        berm_width=berm_width,
+                        material=earth_material,
+                        common=common,
+                    )
                 )
-            )
             meshes.extend(
                 _module_transition_shell_meshes(
                     room_resref=room_resref,
@@ -5867,6 +6008,7 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
         "harbinger",
         "taris_apartments",
         "telos_citadel",
+        "rhen_var",
         "onderon_city",
         "onderon_cantina",
         "onderon_sky_ramp",
@@ -5910,6 +6052,9 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
             if architecture_shell_profile(primitive) == "telos_citadel_civic"
             else 4.00
         )
+    elif profile == "rhen_var":
+        defaults = ("gr_rvstone", "gr_rvfloor", "gr_rvsnow", "gr_rvstone")
+        bay_target = 8.00
     elif profile == "onderon_city":
         defaults = ("ond_tr04", "ond_wl08", "ond_lt02", "ond_wl06")
         bay_target = (
@@ -5947,6 +6092,10 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
     wall_material = primitive.wall_material or primitive.material
     ceiling_material = primitive.ceiling_material or wall_material
     shell_profile = architecture_shell_profile(primitive)
+    if profile == "rhen_var":
+        # Snow and frost are reflective surface accents, not emissive strips.
+        # Preserve the shared detail pass while preventing a glowing snow band.
+        light_material = _architecture_material(textures[2])
     meshes: list[PrimitiveMesh] = list(build_floor_plan_profiled_shell_meshes(primitive))
     openings_by_edge: dict[int, tuple[FloorPlanWallOpening, ...]] = {
         edge_index: tuple(opening for opening in primitive.openings if int(opening.edge_index) == edge_index)
@@ -6178,6 +6327,74 @@ def build_floor_plan_architecture_meshes(primitive: FloorPlanRoomPrimitive) -> t
                 light_bottom = max(1.25, panel_top - 0.42)
                 light_top = min(panel_top - 0.12, light_bottom + 0.16)
                 light_span = (max(bay_span[0], center - 0.42), min(bay_span[1], center + 0.42))
+            elif profile == "rhen_var":
+                inset_bottom = 0.62 if shell_profile == "rhen_var_catacomb_tunnel" else 0.82
+                inset_top = max(inset_bottom + 0.80, panel_top - max(0.56, height * 0.11))
+                shoulder = min(0.48, bay_width * 0.10)
+                inset_span = (bay_span[0] + shoulder, bay_span[1] - shoulder)
+                for ordinal, span in enumerate(
+                    _architecture_intersections(
+                        _architecture_visible_intervals(edge_length, openings, z0=inset_bottom, z1=inset_top),
+                        inset_span,
+                    ),
+                    1,
+                ):
+                    bevel = min(0.24, (span[1] - span[0]) * 0.08)
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_relief_{bay_index + 1:02d}_{ordinal:02d}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=(span[0] + bevel, span[1] - bevel),
+                            depth_bottom=0.16,
+                            depth_top=0.26,
+                            z_bottom=floor_z + inset_bottom,
+                            z_top=floor_z + inset_top,
+                            material=accent_material,
+                            metadata={
+                                **common,
+                                "architecture_role": "rhen_var_beveled_frost_stone_relief",
+                                "beveled_geometry": True,
+                                "texture_stretching_prevented": True,
+                                "module_rhythm_m": 8.0,
+                            },
+                        )
+                    )
+                course_bottom = min(max(1.15, height * 0.28), panel_top - 0.38)
+                course_top = min(panel_top - 0.10, course_bottom + max(0.18, height * 0.03))
+                for ordinal, span in enumerate(
+                    _architecture_intersections(
+                        _architecture_visible_intervals(edge_length, openings, z0=course_bottom, z1=course_top),
+                        bay_span,
+                    ),
+                    1,
+                ):
+                    meshes.append(
+                        _architecture_wall_mesh(
+                            name=f"{room_resref}_{profile}_e{edge_index + 1:02d}_course_{bay_index + 1:02d}_{ordinal:02d}",
+                            start=start,
+                            end=end,
+                            span_bottom=span,
+                            span_top=None,
+                            depth_bottom=0.21,
+                            depth_top=0.21,
+                            z_bottom=floor_z + course_bottom,
+                            z_top=floor_z + course_top,
+                            material=trim_material,
+                            metadata={
+                                **common,
+                                "architecture_role": "rhen_var_projecting_stone_course",
+                                "module_rhythm_m": 8.0,
+                            },
+                        )
+                    )
+                light_bottom = max(0.46, panel_top - max(0.70, height * 0.09))
+                light_top = min(panel_top - 0.14, light_bottom + max(0.14, height * 0.022))
+                light_span = (
+                    max(bay_span[0], center - min(0.72, bay_width * 0.20)),
+                    min(bay_span[1], center + min(0.72, bay_width * 0.20)),
+                )
             elif profile.startswith("onderon_"):
                 # One framed relief per measured bay keeps the authored wall
                 # readable as Iziz architecture even before dressing pieces are
@@ -6584,6 +6801,9 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
                         "telos_citadel_residential",
                         "telos_citadel_civic",
                         "telos_citadel_concourse",
+                        "rhen_var_landing_courtyard",
+                        "rhen_var_temple_interior",
+                        "rhen_var_catacomb_tunnel",
                         "taris_apartment",
                         "korriban_tomb",
                         "korriban_tomb_chamber",

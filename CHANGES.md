@@ -11,6 +11,43 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-25
 
+### [2026-07-25] T2909 complete the Rhen Var landing-zone kit and alpine vista proof
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Rhen Var terrain-kit import, landed-vehicle staging,
+authored WOK readiness, runtime texture packaging, spatial level design, and
+style-aware skybox authoring.
+
+Added explicit collision contracts and exact OBJ-material texture mappings for
+the optional, permission-tracked 40-piece Rhen Var kit. Packaged 20 imported
+Citadel, Colony, and Temple assets with author/source provenance. Added the
+retail K2 `v_ehawk` as a movable **Vehicles & Landing Craft** browser entry;
+it resolves from the user's installation and packages no retail source bytes.
+
+Built a purpose-led first area around a clear arrival-to-temple route: the
+landed Hawk establishes the narrative origin, settlement silhouettes frame the
+perimeter, paired statues mark the threshold, and a tomb plinth terminates the
+route. Added a five-face KOTOR sky generated from Andreas Mischok's CC0
+**Lago d'Isola** 4K HDRI, with the alpine vista aligned behind the temple.
+Telos `261TEL` remains the polar lighting/atmosphere reference.
+
+Affected: Scene/Tools authored-room, Pascal-style, environment-kit,
+terrain-kit, controller, and skybox modules; Display/Tools terrain browsers;
+`src/core/modules/authored_skybox.py`; optional Rhen Var asset/proof scripts.
+
+Verification:
+
+- Rhen Var focused suite: 6 passed.
+- Deterministic proof: 3 separate playable rooms, 2 zero-gap reciprocal
+  portals, 18 walkable faces, movable Hawk plus 7 authorized placements, and
+  no route-clearance issues.
+- Headless PIE reached the destination and observed both door-open/close events.
+- Strict K2 `.mod` export, packaging, and package readback all passed with no
+  blockers.
+- Asset validation: 40 meshes and 56 packaged textures, including 5 CC0
+  skybox faces with verified hashes and complete provenance.
+
 ### [2026-07-25] T2909 trim, align, and tile Shadowlands transition tunnels
 
 Owner: LordVaderCW

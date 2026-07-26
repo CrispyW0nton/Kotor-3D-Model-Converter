@@ -1512,6 +1512,11 @@ def environment_kit_builder_style_id(game: str, module_resref: str, collection_i
     ):
         return "architecture:k2_telos_citadel"
     if target_game == "K2" and (
+        module == "261tel"
+        or collection.startswith(("k2_261tel", "k2_rhen_var"))
+    ):
+        return "architecture:k2_rhen_var"
+    if target_game == "K2" and (
         module in {"501ond", "502ond", "511ond", "512ond"}
         or collection.startswith(
             (
@@ -1553,6 +1558,10 @@ def environment_kit_builder_style_label(style_id: str) -> str:
         "architecture:k2_korriban_caves": "K2 Shyrack Caves — All Corridors, Caverns & Webbed Passages",
         "architecture:k2_harbinger": "Harbinger — All Vanilla Rooms + Dressing",
         "architecture:k2_telos_citadel": "Telos Citadel Station — All Public, Residential & Entertainment Rooms + Dressing",
+        "architecture:k2_rhen_var": (
+            "Rhen Var — Authorized Citadel, Colony & Temple Mod Collection "
+            "+ Telos Polar Atmosphere Reference"
+        ),
         "architecture:k2_onderon_city": "Onderon City — Spaceport, Merchant Quarter, Western Square, Buildings & Street Props",
         "architecture:k2_onderon_cantina": "Onderon Cantina — All Vanilla Rooms, Bar, Seating & Hospitality Props",
         "architecture:k2_onderon_sky_ramp": "Onderon Sky Ramp — Monumental Exterior Rooms, Towers & Ramp Dressing",

@@ -27,7 +27,7 @@ from .authored_module_preview_model import build_authored_module_preview_model
 from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
 from .authored_obj_room_import import ObjRoomAuthoringOptions, build_obj_room_primitive
 from .authored_room_geometry import PrimitiveMesh
-from .module_format import WOKData
+from .module_format import WOKData, WOKFace
 
 
 TERRAIN_KIT_MIME_TYPE = "application/x-ghostrigger-map-terrain-kit+json"
@@ -44,12 +44,40 @@ class TerrainKitAsset:
     category: str
     obj_name: str
     texture_resref: str = "lda_rock06"
+    material_textures: tuple[tuple[str, str, str], ...] = ()
+    collision_intent: str = ""
+    collision_mode: str = ""
+    provenance: str = ""
+    source_author: str = ""
+    source_mod_id: str = ""
     source_units: str = "centimeters"
     source_up_axis: str = "y"
     asset_path: str = ""
     triangle_count: int = 0
     dimensions_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
     tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModuleTransitionFitContract:
+    """Shared visual-fit contract for a supplied module transition.
+
+    The walkmesh portal width remains engine truth.  ``host_opening_*`` is the
+    larger visual recess required to expose the supplied facade without
+    driving its roots/rocks through the authored wall.
+    """
+
+    asset_id: str
+    uniform_scale: float
+    source_yaw_degrees: float
+    source_width_m: float
+    source_depth_m: float
+    source_height_m: float
+    host_opening_width_m: float
+    host_opening_height_m: float
+    actor_clearance_width_m: float
+    actor_clearance_height_m: float
+    ground_embed_m: float
 
 
 @dataclass(frozen=True)
@@ -75,6 +103,38 @@ class VanillaTerrainKitAsset:
     dimensions_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
     confidence: float = 0.0
     tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RetailModelTerrainKitAsset:
+    """A complete retail model exposed as movable environment dressing.
+
+    The catalog stores only the resref and presentation metadata. Model and
+    texture bytes continue to resolve from the user's configured game install.
+    """
+
+    asset_id: str
+    label: str
+    category: str
+    game: str
+    model_resref: str
+    suggested_scale: float = 1.0
+    source_yaw_degrees: float = 0.0
+    tags: tuple[str, ...] = ()
+
+
+_RETAIL_MODEL_ASSETS = (
+    RetailModelTerrainKitAsset(
+        asset_id="retail:k2:v_ehawk",
+        label="Landed Ebon Hawk",
+        category="Vehicles & Landing Craft",
+        game="K2",
+        model_resref="v_ehawk",
+        suggested_scale=0.58,
+        source_yaw_degrees=90.0,
+        tags=("rhen var", "vehicle", "spacecraft", "landing landmark"),
+    ),
+)
 
 
 _DANTOOINE_ASSETS = (
@@ -122,7 +182,7 @@ _CAVE_PORTAL_ASSETS = (
         "Shadowlands Tree Tunnel Transition",
         "Module Transitions",
         "ShadowlandsModuleTransition.obj",
-        texture_resref="gr_shadentr",
+        texture_resref="gr_shadwarm",
         source_units="meters",
         source_up_axis="y",
         asset_path=str(_CAVE_PORTAL_ASSET_ROOT / "ShadowlandsModuleTransition.obj"),
@@ -132,6 +192,112 @@ _CAVE_PORTAL_ASSETS = (
     ),
 )
 _MODULE_TRANSITION_ASSET_IDS = frozenset(asset.asset_id for asset in _CAVE_PORTAL_ASSETS)
+_RHEN_VAR_ASSET_ROOT = Path("assets/map_studio/terrain_kits/rhen_var")
+_RHEN_VAR_MANIFEST_SCHEMA = "ghostrigger.rhen-var-asset-pack/v1"
+
+
+def _manifest_material_textures(value: Any) -> tuple[tuple[str, str, str], ...]:
+    """Normalize exact OBJ-material texture rows from an asset manifest.
+
+    The legacy ``texture_resref`` remains the fallback for single-material
+    assets. New imported packs may map each exact ``usemtl`` name to its own
+    KOTOR-safe resref and packaged TGA path.
+    """
+
+    rows: list[tuple[str, str, str]] = []
+    if isinstance(value, dict):
+        entries = tuple(value.items())
+    else:
+        entries = tuple(
+            (
+                str(dict(row or {}).get("material_name") or dict(row or {}).get("material") or ""),
+                row,
+            )
+            for row in tuple(value or ())
+            if isinstance(row, dict)
+        )
+    for material_name, raw in entries:
+        material = str(material_name or "").strip()
+        details = dict(raw or {}) if isinstance(raw, dict) else {"texture_resref": raw}
+        resref = str(details.get("texture_resref") or "").strip().lower()
+        if (
+            not material
+            or not resref
+            or len(resref) > 16
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_" for character in resref)
+        ):
+            continue
+        texture_file = str(details.get("texture_file") or f"{resref}.tga").strip()
+        if not texture_file:
+            texture_file = f"{resref}.tga"
+        rows.append((material, resref, texture_file))
+    return tuple(dict.fromkeys(rows))
+
+
+@lru_cache(maxsize=1)
+def _rhen_var_assets() -> tuple[TerrainKitAsset, ...]:
+    """Load the optional, provenance-tracked Rhen Var pack manifest."""
+
+    manifest = next(
+        (
+            root / _RHEN_VAR_ASSET_ROOT / "manifest.json"
+            for root in _candidate_roots()
+            if (root / _RHEN_VAR_ASSET_ROOT / "manifest.json").is_file()
+        ),
+        Path.cwd() / _RHEN_VAR_ASSET_ROOT / "manifest.json",
+    )
+    if not manifest.is_file():
+        return ()
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return ()
+    if str(payload.get("schema") or "") != _RHEN_VAR_MANIFEST_SCHEMA:
+        return ()
+    assets: list[TerrainKitAsset] = []
+    for raw in tuple(payload.get("assets") or ()):
+        row = dict(raw or {})
+        asset_id = str(row.get("asset_id") or "").strip().lower()
+        obj_name = str(row.get("obj_name") or "").strip()
+        dimensions = tuple(float(value) for value in tuple(row.get("dimensions_m") or ())[:3])
+        if not asset_id or not obj_name or len(dimensions) != 3:
+            continue
+        provenance = str(row.get("provenance") or "").strip()
+        source_author = str(row.get("source_author") or "").strip()
+        source_mod_id = str(row.get("source_mod_id") or "").strip()
+        assets.append(
+            TerrainKitAsset(
+                asset_id=asset_id,
+                label=str(row.get("label") or asset_id),
+                category=str(row.get("category") or "Rhen Var"),
+                obj_name=obj_name,
+                texture_resref=str(row.get("texture_resref") or "gr_rvstone").strip().lower(),
+                material_textures=_manifest_material_textures(row.get("material_textures")),
+                collision_intent=str(row.get("collision_intent") or "").strip(),
+                collision_mode=str(row.get("collision_mode") or "").strip().lower(),
+                provenance=provenance,
+                source_author=source_author,
+                source_mod_id=source_mod_id,
+                source_units=str(row.get("source_units") or "meters"),
+                source_up_axis=str(row.get("source_up_axis") or "z"),
+                asset_path=str(_RHEN_VAR_ASSET_ROOT / obj_name),
+                triangle_count=max(0, int(row.get("triangle_count") or 0)),
+                dimensions_m=dimensions,
+                tags=tuple(
+                    dict.fromkeys(
+                        (
+                            "rhen var",
+                            "snow",
+                            *((provenance,) if provenance else ()),
+                            *((source_author,) if source_author else ()),
+                            *((source_mod_id,) if source_mod_id else ()),
+                            *(str(value) for value in tuple(row.get("tags") or ())),
+                        )
+                    )
+                ),
+            )
+        )
+    return tuple(assets)
 
 _DATHOMIR_ROOT_FALLBACK = Path(
     r"C:\Users\NewAdmin\Documents\KotorMods\ModdersResourceFiles\FallenOrder\Dathomir\Converted\Models\Models"
@@ -418,6 +584,7 @@ _OUTDOOR_MODULE_PREFIXES = {
     "K2": (
         "104per",                       # Peragus exterior
         "231tel", "232tel", "233tel", # Telos surface
+        "261tel",                       # Telos polar plateau / Rhen Var reference
         "400dxn", "401dxn", "402dxn", "403dxn", "410dxn", "411dxn", "421dxn",
         "501ond", "502ond", "503ond", "504ond", "505ond", "506ond",
         "601dan", "602dan", "604dan", "605dan", "610dan", "650dan",
@@ -641,17 +808,34 @@ def terrain_kit_asset_root() -> Path:
     return Path.cwd() / _ASSET_ROOT
 
 
-def terrain_kit_assets(*, game: str = "") -> tuple[TerrainKitAsset | VanillaTerrainKitAsset, ...]:
+def terrain_kit_assets(
+    *,
+    game: str = "",
+) -> tuple[TerrainKitAsset | VanillaTerrainKitAsset | RetailModelTerrainKitAsset, ...]:
     wanted_game = str(game or "").strip().upper()
     vanilla = tuple(
         asset
         for asset in vanilla_terrain_kit_assets()
         if not wanted_game or asset.game == wanted_game
     )
-    return _DANTOOINE_ASSETS + _CAVE_PORTAL_ASSETS + _dathomir_assets() + vanilla
+    retail_models = tuple(
+        asset
+        for asset in _RETAIL_MODEL_ASSETS
+        if not wanted_game or asset.game == wanted_game
+    )
+    return (
+        _DANTOOINE_ASSETS
+        + _CAVE_PORTAL_ASSETS
+        + _rhen_var_assets()
+        + _dathomir_assets()
+        + retail_models
+        + vanilla
+    )
 
 
-def terrain_kit_asset(asset_id: str) -> TerrainKitAsset | VanillaTerrainKitAsset:
+def terrain_kit_asset(
+    asset_id: str,
+) -> TerrainKitAsset | VanillaTerrainKitAsset | RetailModelTerrainKitAsset:
     wanted = str(asset_id or "").strip().lower()
     for asset in terrain_kit_assets():
         if asset.asset_id == wanted:
@@ -674,6 +858,45 @@ def terrain_kit_asset_path(asset: TerrainKitAsset | str) -> Path:
     return path
 
 
+def _terrain_kit_texture_rows(asset: TerrainKitAsset) -> tuple[tuple[str, str, str], ...]:
+    """Return exact material/resref/file rows with a legacy fallback."""
+
+    rows = tuple(asset.material_textures or ())
+    if rows:
+        return rows
+    resref = str(asset.texture_resref or "").strip().lower()
+    return (("", resref, f"{resref}.tga"),) if resref else ()
+
+
+def _terrain_kit_texture_path(asset: TerrainKitAsset, texture_file: str, texture_resref: str) -> Path:
+    """Resolve one packaged TGA without assuming it sits beside the OBJ."""
+
+    raw_path = Path(str(texture_file or "").strip())
+    obj_path = terrain_kit_asset_path(asset)
+    candidates: list[Path] = []
+    if raw_path.is_absolute():
+        candidates.append(raw_path)
+    else:
+        candidates.extend(
+            root / _RHEN_VAR_ASSET_ROOT / raw_path
+            for root in _candidate_roots()
+        )
+        candidates.extend(
+            (
+                obj_path.parent / raw_path,
+                obj_path.parent / raw_path.name,
+                obj_path.with_name(f"{texture_resref}.tga"),
+            )
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(
+        f"Packaged terrain texture {texture_file or f'{texture_resref}.tga'} "
+        f"for {asset.obj_name} could not be resolved."
+    )
+
+
 def terrain_kit_runtime_resources(project: Any) -> tuple[tuple[str, str, bytes], ...]:
     """Return custom KOTOR TGA resources used by placed loose-OBJ kit pieces.
 
@@ -682,7 +905,10 @@ def terrain_kit_runtime_resources(project: Any) -> tuple[tuple[str, str, bytes],
     final MOD only when an authored room actually references that kit asset.
     """
 
-    portal_assets = {asset.asset_id: asset for asset in _CAVE_PORTAL_ASSETS}
+    packaged_assets = {
+        asset.asset_id: asset
+        for asset in _CAVE_PORTAL_ASSETS + _rhen_var_assets()
+    }
     required: set[str] = set()
     for room in tuple(getattr(project, "rooms", ()) or ()):
         metadata = dict(getattr(room, "metadata", {}) or {})
@@ -692,24 +918,25 @@ def terrain_kit_runtime_resources(project: Any) -> tuple[tuple[str, str, bytes],
             or primitive_metadata.get("terrain_kit_asset_id")
             or ""
         ).strip().lower()
-        if asset_id in portal_assets:
+        if asset_id in packaged_assets:
             required.add(asset_id)
         for opening in tuple(getattr(getattr(room, "primitive", None), "openings", ()) or ()):
             transition_asset = str(
                 dict(getattr(opening, "metadata", {}) or {}).get("module_transition_asset_id")
                 or ""
             ).strip().lower()
-            if transition_asset in portal_assets:
+            if transition_asset in packaged_assets:
                 required.add(transition_asset)
     resources: list[tuple[str, str, bytes]] = []
+    emitted_resrefs: set[str] = set()
     for asset_id in sorted(required):
-        asset = portal_assets[asset_id]
-        texture_path = terrain_kit_asset_path(asset).with_name(f"{asset.texture_resref}.tga")
-        if not texture_path.is_file():
-            raise FileNotFoundError(
-                f"Cave portal texture {asset.texture_resref}.tga is missing beside {asset.obj_name}."
-            )
-        resources.append((asset.texture_resref, "tga", texture_path.read_bytes()))
+        asset = packaged_assets[asset_id]
+        for _material_name, texture_resref, texture_file in _terrain_kit_texture_rows(asset):
+            if texture_resref in emitted_resrefs:
+                continue
+            texture_path = _terrain_kit_texture_path(asset, texture_file, texture_resref)
+            resources.append((texture_resref, "tga", texture_path.read_bytes()))
+            emitted_resrefs.add(texture_resref)
     return tuple(resources)
 
 
@@ -745,6 +972,102 @@ def _module_transition_source_primitive(
     )
 
 
+@lru_cache(maxsize=96)
+def module_transition_fit_contract(
+    asset_id: str,
+    opening_width: float,
+    opening_height: float = 2.60,
+    game: str = "K1",
+) -> ModuleTransitionFitContract:
+    """Measure one supplied transition and define its shared host-wall fit.
+
+    Shadowlands uses a stable authored scale.  Scaling that tree facade from
+    the much narrower retail WOK portal made every attachment a different
+    size and guaranteed that the decorative walls protruded through the host
+    berm.  Other transition families retain their established proportional
+    fit until their own visual contracts are revised.
+    """
+
+    clean_asset = str(asset_id or "").strip().lower()
+    if clean_asset not in _MODULE_TRANSITION_ASSET_IDS:
+        raise ValueError(f"Unknown module transition asset: {asset_id!r}")
+    nominal_scale = {
+        "korriban_cave_entrance": 9.50,
+        "shyrack_cave_entrance": 8.25,
+        "shadowlands_module_transition": 8.00,
+    }[clean_asset]
+    source_yaw_degrees = {
+        "korriban_cave_entrance": 180.0,
+        "shyrack_cave_entrance": 90.0,
+        "shadowlands_module_transition": 90.0,
+    }[clean_asset]
+    if clean_asset == "shadowlands_module_transition":
+        # The supplied root tunnel was authored at a deliberately neutral unit
+        # scale.  At 5.60 m wide its trees read smaller than the surrounding
+        # retail Shadowlands trunks.  The 6.30 m fit keeps the passage human
+        # scale while restoring the heavy forest silhouette.
+        uniform_scale = 6.30
+    else:
+        uniform_scale = nominal_scale * max(
+            0.65,
+            min(1.65, float(opening_width) / 5.25),
+        )
+    source = _module_transition_source_primitive(
+        clean_asset,
+        "grtransitionfit",
+        str(game or "K1").upper(),
+        round(uniform_scale, 6),
+    )
+    yaw = math.radians(source_yaw_degrees)
+    yaw_cos = math.cos(yaw)
+    yaw_sin = math.sin(yaw)
+    points = tuple(
+        (
+            yaw_cos * float(vertex[0]) - yaw_sin * float(vertex[1]),
+            yaw_sin * float(vertex[0]) + yaw_cos * float(vertex[1]),
+            float(vertex[2]),
+        )
+        for surface in source.surfaces
+        for vertex in tuple(surface.vertices or ())
+    )
+    if not points:
+        raise ValueError(f"Module transition asset {clean_asset!r} has no geometry.")
+    width = max(point[0] for point in points) - min(point[0] for point in points)
+    depth = max(point[1] for point in points) - min(point[1] for point in points)
+    height = max(point[2] for point in points) - min(point[2] for point in points)
+    if clean_asset == "shadowlands_module_transition":
+        # Preserve the full tree silhouette in a deliberately wider host
+        # recess.  The root plinth is embedded into the terrain so it reads as
+        # grown from the berm instead of resting on top of it.
+        ground_embed = 0.46
+        host_width = width + 0.18
+        host_height = max(float(opening_height), height - ground_embed + 0.12)
+        clearance_width = max(3.40, min(width - 1.10, float(opening_width) + 0.20))
+        clearance_height = max(2.75, min(2.90, float(opening_height) - 0.12))
+    else:
+        ground_embed = 0.0
+        host_width = max(float(opening_width), width) + 0.10
+        host_height = max(float(opening_height), height) + 0.08
+        clearance_width = max(
+            2.00,
+            min(float(opening_width) * 0.60, max(2.00, float(opening_width) - 0.70)),
+        )
+        clearance_height = max(2.15, min(2.75, float(opening_height) - 0.18))
+    return ModuleTransitionFitContract(
+        asset_id=clean_asset,
+        uniform_scale=float(uniform_scale),
+        source_yaw_degrees=float(source_yaw_degrees),
+        source_width_m=float(width),
+        source_depth_m=float(depth),
+        source_height_m=float(height),
+        host_opening_width_m=float(host_width),
+        host_opening_height_m=float(host_height),
+        actor_clearance_width_m=float(clearance_width),
+        actor_clearance_height_m=float(clearance_height),
+        ground_embed_m=float(ground_embed),
+    )
+
+
 def build_module_transition_shell_meshes(
     asset_id: str,
     *,
@@ -774,23 +1097,14 @@ def build_module_transition_shell_meshes(
     clean_asset = str(asset_id or "").strip().lower()
     if clean_asset not in _MODULE_TRANSITION_ASSET_IDS:
         return ()
-    nominal_scale = {
-        "korriban_cave_entrance": 9.50,
-        "shyrack_cave_entrance": 8.25,
-        "shadowlands_module_transition": 8.00,
-    }[clean_asset]
-    source_yaw_degrees = {
-        # The carved Korriban shell presents its authored front toward source
-        # -Y.  The Shyrack shell is authored a quarter-turn from the portal
-        # tangent and needs that correction before it is fitted.
-        "korriban_cave_entrance": 180.0,
-        "shyrack_cave_entrance": 90.0,
-        # The supplied tree tunnel was authored with its passage running on
-        # source X. Align that axis with portal depth; leaving it at zero turns
-        # the tunnel across the route (visible near X 11.81 / Y 51.61 in PIE).
-        "shadowlands_module_transition": 90.0,
-    }[clean_asset]
-    uniform_scale = nominal_scale * max(0.65, min(1.65, float(opening_width) / 5.25))
+    fit = module_transition_fit_contract(
+        clean_asset,
+        float(opening_width),
+        float(opening_height),
+        str(game or "K1").upper(),
+    )
+    source_yaw_degrees = float(fit.source_yaw_degrees)
+    uniform_scale = float(fit.uniform_scale)
     source = _module_transition_source_primitive(
         clean_asset,
         str(room_resref or "grtransition")[:16],
@@ -803,6 +1117,7 @@ def build_module_transition_shell_meshes(
     yaw_cos = math.cos(yaw)
     yaw_sin = math.sin(yaw)
     cx, cy, cz = (float(value) for value in center)
+    ground_embed = float(fit.ground_embed_m)
 
     def portal_point(value: tuple[float, float, float]) -> tuple[float, float, float]:
         source_x = yaw_cos * float(value[0]) - yaw_sin * float(value[1])
@@ -813,7 +1128,7 @@ def build_module_transition_shell_meshes(
         return (
             cx + tx * float(value[0]) + nx * float(value[1]),
             cy + ty * float(value[0]) + ny * float(value[1]),
-            cz + float(value[2]),
+            cz + float(value[2]) - ground_embed,
         )
 
     def portal_normal(value: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -846,12 +1161,10 @@ def build_module_transition_shell_meshes(
     )
     depth_limit_min = -max(requested_length, tiled_depth_span) * 0.5
     depth_limit_max = max(requested_length, tiled_depth_span) * 0.5
-    shell_half_width = max(float(opening_width) * 0.66, float(opening_width) * 0.5 + 0.65)
-    clearance_half_width = max(
-        1.00,
-        min(float(opening_width) * 0.30, max(1.00, float(opening_width) * 0.5 - 0.35)),
-    )
-    clearance_height = max(2.15, min(2.75, float(opening_height) - 0.18))
+    shell_half_width = float(fit.host_opening_width_m) * 0.5
+    clearance_half_width = float(fit.actor_clearance_width_m) * 0.5
+    clearance_height = float(fit.actor_clearance_height_m)
+    preserve_source_opening = clean_asset == "shadowlands_module_transition"
     tolerance = 1.0e-6
 
     def normalise(value: tuple[float, ...]) -> tuple[float, float, float]:
@@ -988,7 +1301,8 @@ def build_module_transition_shell_meshes(
                 bounded = clip_to_envelope(polygon)
                 if len(bounded) < 3:
                     continue
-                for fragment in subtract_clearance(bounded):
+                fragments = [bounded] if preserve_source_opening else subtract_clearance(bounded)
+                for fragment in fragments:
                     for fragment_index in range(1, len(fragment) - 1):
                         triangle = (fragment[0], fragment[fragment_index], fragment[fragment_index + 1])
                         first_index = len(vertices)
@@ -1034,21 +1348,35 @@ def build_module_transition_shell_meshes(
                         "source_face_count": int(source_face_count),
                         "trimmed_face_count": len(faces),
                         "portal_envelope_half_width_m": float(shell_half_width),
+                        "host_opening_width_m": float(fit.host_opening_width_m),
+                        "host_opening_height_m": float(fit.host_opening_height_m),
+                        "source_detail_width_m": float(fit.source_width_m),
+                        "source_detail_depth_m": float(fit.source_depth_m),
+                        "source_detail_height_m": float(fit.source_height_m),
+                        "ground_embed_m": float(ground_embed),
                         "player_clearance_half_width_m": float(clearance_half_width),
                         "player_clearance_height_m": float(clearance_height),
                         "transition_length_m": float(max(requested_length, tiled_depth_span)),
                         "transition_tile_index": int(tile_index),
                         "transition_tile_count": int(tile_count),
                         "transition_tile_offset_m": float(tile_offset),
-                        "geometry_trim_policy": "portal_envelope_minus_player_clearance",
+                        "geometry_trim_policy": (
+                            "measured_host_recess_preserve_source_opening"
+                            if preserve_source_opening
+                            else "detail_preserving_host_recess_minus_actor_clearance"
+                        ),
                         "host_surface_overlap_trimmed": True,
+                        "host_wall_recess_required": True,
+                        "source_opening_preserved": bool(preserve_source_opening),
                     },
                 )
             )
     return tuple(meshes)
 
 
-def _terrain_asset_is_browser_ready(asset: TerrainKitAsset | VanillaTerrainKitAsset) -> bool:
+def _terrain_asset_is_browser_ready(
+    asset: TerrainKitAsset | VanillaTerrainKitAsset | RetailModelTerrainKitAsset,
+) -> bool:
     """Keep malformed micro-surfaces off the author-facing staging shelf."""
 
     if (
@@ -1065,11 +1393,39 @@ def _terrain_asset_is_browser_ready(asset: TerrainKitAsset | VanillaTerrainKitAs
     return True
 
 
+def _terrain_asset_collision_mode(asset: TerrainKitAsset) -> str:
+    explicit = str(asset.collision_mode or "").strip().lower()
+    if explicit in {
+        "walkable_floor_quad",
+        "walkable_stair_ramp",
+        "visual_only",
+        "host_wok_required",
+    }:
+        return explicit
+    intent = str(asset.collision_intent or "").casefold().replace("_", " ")
+    if "walkable top plane" in intent:
+        return "walkable_floor_quad"
+    if "walkable simplified stair ramp" in intent or ("walkable" in intent and "stair" in intent):
+        return "walkable_stair_ramp"
+    if not intent or "nonblocking" in intent or "visual only" in intent or "visual-only" in intent:
+        return "visual_only"
+    return "host_wok_required"
+
+
+def _terrain_asset_collision_status(asset: TerrainKitAsset) -> str:
+    mode = _terrain_asset_collision_mode(asset)
+    if mode in {"walkable_floor_quad", "walkable_stair_ramp"}:
+        return "generated_walkmesh"
+    if mode == "visual_only":
+        return "visual_only"
+    return "authoring_required"
+
+
 def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
     """Return presentation-neutral records for the Terrain content browser."""
 
     root = terrain_kit_asset_root()
-    supplied_assets = _DANTOOINE_ASSETS + _CAVE_PORTAL_ASSETS + _dathomir_assets()
+    supplied_assets = _DANTOOINE_ASSETS + _CAVE_PORTAL_ASSETS + _rhen_var_assets() + _dathomir_assets()
     transition_styles = {
         "korriban_cave_entrance": (
             "architecture:k1_korriban_tombs",
@@ -1084,7 +1440,7 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
         "shadowlands_module_transition": (
             "architecture:k1_shadowlands",
             "Kashyyyk Shadowlands — Earthen Clearings, Roots & Foliage",
-            8.00,
+            6.30,
         ),
     }
     supplied = tuple(
@@ -1095,12 +1451,38 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
             "source": (
                 "Ghost Studio / Module Transitions"
                 if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
+                else (
+                    f"Rhen Var Asset Pack / {asset.source_author}"
+                    if str(asset.source_author or "").strip()
+                    else "Rhen Var Asset Pack"
+                )
+                if "rhen var" in asset.tags
                 else "Fallen Order / Dathomir"
                 if "dathomir" in asset.tags
                 else "Ghost Studio Terrain Kit / Dantooine"
             ),
             "asset_path": str(Path(asset.asset_path) if str(asset.asset_path or "").strip() else root / asset.obj_name),
             "texture_resref": asset.texture_resref,
+            "texture_resrefs": tuple(
+                dict.fromkeys(
+                    texture_resref
+                    for _material_name, texture_resref, _texture_file in _terrain_kit_texture_rows(asset)
+                )
+            ),
+            "material_textures": {
+                material_name: {
+                    "texture_resref": texture_resref,
+                    "texture_file": texture_file,
+                }
+                for material_name, texture_resref, texture_file in tuple(asset.material_textures or ())
+            },
+            "collision_intent": str(asset.collision_intent or ""),
+            "collision_mode": _terrain_asset_collision_mode(asset),
+            "provenance": str(asset.provenance or ""),
+            "source_author": str(asset.source_author or ""),
+            "source_mod_id": str(asset.source_mod_id or ""),
+            "collision_status": _terrain_asset_collision_status(asset),
+            "collision_ready": _terrain_asset_collision_status(asset) != "authoring_required",
             "triangle_count": int(asset.triangle_count),
             "dimensions_m": tuple(asset.dimensions_m),
             "tags": tuple(asset.tags),
@@ -1114,6 +1496,8 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
             "staging_role": (
                 "Two-way module transition"
                 if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
+                else "Rhen Var environment staging"
+                if "rhen var" in asset.tags
                 else "Dathomir environment staging"
                 if "dathomir" in asset.tags
                 else "Terrain kit staging"
@@ -1122,6 +1506,15 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
                 "Drag onto a room doorway to stage the visual shell; the snapped rooms retain walkmesh ownership."
                 if asset.asset_id in _MODULE_TRANSITION_ASSET_IDS
                 else
+                (
+                    "Drag onto the snowy landscape; keep buildings and ruins on the 8 m grid and keep the central traversal path clear. "
+                    "This solid piece still requires host-walkmesh collision authoring before game export."
+                    if _terrain_asset_collision_status(asset) == "authoring_required"
+                    else
+                    "Drag onto the snowy landscape; keep buildings and ruins on the 8 m grid and keep the central traversal path clear."
+                )
+                if "rhen var" in asset.tags
+                else
                 "Drag into a Dathomir map as visual world dressing; surface-snap foliage to terrain and place the planet as a distant vista."
                 if "dathomir" in asset.tags
                 else "Drag onto terrain or another visible level surface."
@@ -1129,6 +1522,8 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
             "building_style_id": (
                 transition_styles[asset.asset_id][0]
                 if asset.asset_id in transition_styles
+                else "architecture:k2_rhen_var"
+                if "rhen var" in asset.tags
                 else "environment:dathomir"
                 if "dathomir" in asset.tags
                 else ""
@@ -1136,6 +1531,8 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
             "building_style_label": (
                 transition_styles[asset.asset_id][1]
                 if asset.asset_id in transition_styles
+                else "Rhen Var — Authorized Citadel, Colony & Temple Collection"
+                if "rhen var" in asset.tags
                 else "Dathomir — Fallen Order Extraction"
                 if "dathomir" in asset.tags
                 else ""
@@ -1144,6 +1541,41 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
         for asset in supplied_assets
     )
     wanted_game = str(game or "").strip().upper()
+    retail_models = tuple(
+        {
+            "asset_id": asset.asset_id,
+            "label": asset.label,
+            "category": asset.category,
+            "source": f"{asset.game} retail model · {asset.model_resref}",
+            "source_kind": "retail_model",
+            "asset_path": "",
+            "requires_game": asset.game,
+            "texture_resref": "",
+            "texture_resrefs": (),
+            "material_textures": {},
+            "collision_intent": "Visual-only landmark; surrounding authored WOK owns traversal.",
+            "collision_mode": "visual_only",
+            "collision_status": "visual_only",
+            "collision_ready": True,
+            "triangle_count": 0,
+            "dimensions_m": (0.0, 0.0, 0.0),
+            "tags": asset.tags,
+            "suggested_scale": float(asset.suggested_scale),
+            "suggested_rotation_degrees_z": float(asset.source_yaw_degrees),
+            "staging_role": "Movable arrival landmark",
+            "staging_hint": (
+                "Drag the landed ship onto a clear exterior pad. Keep the ramp "
+                "side and the primary route unobstructed."
+            ),
+            "building_style_id": "architecture:k2_rhen_var",
+            "building_style_label": "Rhen Var — Authorized Citadel, Colony & Temple Collection",
+            "provenance": "Resolved from the user's KOTOR II installation; no retail bytes are packaged.",
+            "source_author": "BioWare / LucasArts",
+            "source_mod_id": "",
+        }
+        for asset in _RETAIL_MODEL_ASSETS
+        if (not wanted_game or asset.game == wanted_game)
+    )
     vanilla = tuple(
         {
             **_vanilla_asset_payload(asset),
@@ -1160,7 +1592,7 @@ def terrain_kit_asset_rows(*, game: str = "") -> tuple[dict[str, Any], ...]:
         for asset in vanilla_terrain_kit_assets()
         if (not wanted_game or asset.game == wanted_game) and _terrain_asset_is_browser_ready(asset)
     )
-    return supplied + vanilla
+    return supplied + retail_models + vanilla
 
 
 def terrain_kit_builder_style_id(game: str, module_resref: str) -> str:
@@ -1170,17 +1602,20 @@ def terrain_kit_builder_style_id(game: str, module_resref: str) -> str:
     module = str(module_resref or "").strip().lower()
     if tag == "K1" and module in {"m24aa", "m25aa"}:
         return "architecture:k1_shadowlands"
+    if tag == "K2" and module == "261tel":
+        return "architecture:k2_rhen_var"
     return ""
 
 
 def terrain_kit_builder_style_label(style_id: str) -> str:
     return {
         "architecture:k1_shadowlands": "Kashyyyk Shadowlands — Earthen Clearings, Roots & Foliage",
+        "architecture:k2_rhen_var": "Rhen Var — Authorized Citadel, Colony & Temple Collection",
     }.get(str(style_id or "").strip().lower(), "")
 
 
 def terrain_kit_drag_payload(
-    asset: TerrainKitAsset | VanillaTerrainKitAsset | str,
+    asset: TerrainKitAsset | VanillaTerrainKitAsset | RetailModelTerrainKitAsset | str,
     *,
     rotation_degrees_z: float = 0.0,
     scale: float = 1.0,
@@ -1192,7 +1627,13 @@ def terrain_kit_drag_payload(
         "label": entry.label,
         "category": entry.category,
         "game": str(getattr(entry, "game", "") or ""),
-        "source_kind": "vanilla_game" if isinstance(entry, VanillaTerrainKitAsset) else "supplied_obj",
+        "source_kind": (
+            "vanilla_game"
+            if isinstance(entry, VanillaTerrainKitAsset)
+            else "retail_model"
+            if isinstance(entry, RetailModelTerrainKitAsset)
+            else "supplied_obj"
+        ),
         "rotation_degrees_z": float(rotation_degrees_z),
         "scale": float(scale),
         "snap_to_surface": True,
@@ -1263,6 +1704,116 @@ def transform_terrain_kit_primitive(
     return replace(primitive, surfaces=surfaces, wok=wok, metadata=metadata)
 
 
+def _supplied_terrain_bounds(
+    primitive: ImportedMeshRoomPrimitive,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    points = tuple(
+        vertex
+        for surface in tuple(primitive.surfaces or ())
+        for vertex in tuple(surface.vertices or ())
+    )
+    if not points:
+        return ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+    return (
+        tuple(min(float(point[axis]) for point in points) for axis in range(3)),
+        tuple(max(float(point[axis]) for point in points) for axis in range(3)),
+    )
+
+
+def _walkable_quad_wok(
+    room_resref: str,
+    vertices: tuple[
+        tuple[float, float, float],
+        tuple[float, float, float],
+        tuple[float, float, float],
+        tuple[float, float, float],
+    ],
+    *,
+    provenance: str,
+) -> WOKData:
+    wok = WOKData(
+        name=str(room_resref or "grterrain")[:16],
+        verts=list(vertices),
+        faces=[
+            WOKFace(0, 1, 2, surface=4, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=4, adj1=0, adj2=-1, adj3=-1),
+        ],
+    )
+    wok.provenance = provenance
+    wok.readiness_blocking = False
+    return wok
+
+
+def _supplied_terrain_collision_contract(
+    asset: TerrainKitAsset,
+    primitive: ImportedMeshRoomPrimitive,
+) -> tuple[WOKData | None, str, bool, str]:
+    """Return an honest KOTOR WOK contract for one supplied OBJ.
+
+    KOTOR room collision is a floor walkmesh, not arbitrary render-mesh
+    collision. Traversal tiles therefore receive small authored floor/ramp
+    WOKs. Solid props stay authorable but explicitly block export until Map
+    Studio can subtract their footprint from the owning room WOK; pretending
+    they were visual-only would silently let the player walk through them.
+    """
+
+    intent = str(asset.collision_intent or "").strip()
+    collision_mode = _terrain_asset_collision_mode(asset)
+    if collision_mode == "walkable_floor_quad":
+        minimum, maximum = _supplied_terrain_bounds(primitive)
+        floor_z = min(float(maximum[2]), float(minimum[2]) + 0.30)
+        return (
+            _walkable_quad_wok(
+                primitive.room_resref,
+                (
+                    (minimum[0], minimum[1], floor_z),
+                    (maximum[0], minimum[1], floor_z),
+                    (maximum[0], maximum[1], floor_z),
+                    (minimum[0], maximum[1], floor_z),
+                ),
+                provenance="rhen_var_manifest_walkable_floor",
+            ),
+            "generated_walkmesh",
+            False,
+            "",
+        )
+    if collision_mode == "walkable_stair_ramp":
+        minimum, maximum = _supplied_terrain_bounds(primitive)
+        clear_half_width = max(0.25, min(abs(minimum[0]), abs(maximum[0]), 3.85))
+        lower_y = max(float(minimum[1]), -4.0)
+        upper_y = min(float(maximum[1]), 4.0)
+        lower_z = max(float(minimum[2]), 0.0)
+        upper_z = min(float(maximum[2]), 3.20)
+        return (
+            _walkable_quad_wok(
+                primitive.room_resref,
+                (
+                    (-clear_half_width, lower_y, lower_z),
+                    (clear_half_width, lower_y, lower_z),
+                    (clear_half_width, upper_y, upper_z),
+                    (-clear_half_width, upper_y, upper_z),
+                ),
+                provenance="rhen_var_manifest_walkable_stair_ramp",
+            ),
+            "generated_walkmesh",
+            False,
+            "",
+        )
+    if collision_mode == "visual_only":
+        return (
+            WOKData(name=str(primitive.room_resref or "grterrain")[:16]),
+            "visual_only",
+            True,
+            "",
+        )
+    reason = (
+        f"{asset.label} declares collision intent '{intent}', but arbitrary solid OBJ collision cannot be "
+        "represented safely by an independent room WOK without cutting its footprint from the owning room. "
+        "Generate/trim the host walkmesh collision before game export."
+    )
+    return (None, "authoring_required", False, reason)
+
+
 @lru_cache(maxsize=32)
 def _build_supplied_terrain_kit_primitive(
     asset_id: str,
@@ -1277,6 +1828,22 @@ def _build_supplied_terrain_kit_primitive(
     if not isinstance(asset, TerrainKitAsset):
         raise ValueError(f"Terrain Kit asset {asset_id!r} is not a supplied OBJ asset.")
     document = load_obj_room_document(terrain_kit_asset_path(asset))
+    exact_materials = {
+        material_name: texture_resref
+        for material_name, texture_resref, _texture_file in tuple(asset.material_textures or ())
+    }
+    folded_materials = {
+        material_name.casefold(): texture_resref
+        for material_name, texture_resref in exact_materials.items()
+    }
+    material_texture_resrefs = {
+        surface.material_name: (
+            exact_materials.get(surface.material_name)
+            or folded_materials.get(str(surface.material_name or "").casefold())
+            or asset.texture_resref
+        )
+        for surface in document.surfaces
+    }
     primitive, report = build_obj_room_primitive(
         document,
         ObjRoomAuthoringOptions(
@@ -1287,8 +1854,13 @@ def _build_supplied_terrain_kit_primitive(
             center_xy=True,
             ground_to_zero=True,
         ),
-        material_texture_resrefs={surface.material_name: asset.texture_resref for surface in document.surfaces},
+        material_texture_resrefs=material_texture_resrefs,
     )
+    collision_wok, collision_status, visual_only, collision_reason = _supplied_terrain_collision_contract(
+        asset,
+        primitive,
+    )
+    primitive = replace(primitive, wok=collision_wok)
     primitive = transform_terrain_kit_primitive(
         primitive,
         rotation_degrees_z=float(rotation_degrees_z),
@@ -1296,18 +1868,31 @@ def _build_supplied_terrain_kit_primitive(
     )
     return replace(
         primitive,
-        # A present zero-face WOK is Odyssey's valid visual-only room form.
-        # The sculpted terrain below retains collision ownership.
-        wok=WOKData(name=str(room_resref or "grterrain")[:16]),
         metadata={
             **dict(primitive.metadata),
             "source": "map_studio:terrain_kit",
             "terrain_kit_asset_id": asset.asset_id,
             "terrain_kit_category": asset.category,
             "terrain_kit_texture_resref": asset.texture_resref,
+            "terrain_kit_texture_resrefs": tuple(
+                dict.fromkeys(material_texture_resrefs.values())
+            ),
+            "terrain_kit_material_textures": tuple(
+                {
+                    "material_name": material_name,
+                    "texture_resref": texture_resref,
+                    "texture_file": texture_file,
+                }
+                for material_name, texture_resref, texture_file in tuple(asset.material_textures or ())
+            ),
             "terrain_kit_rotation_degrees_z": float(rotation_degrees_z),
             "terrain_kit_scale": float(scale),
-            "terrain_kit_visual_only": True,
+            "terrain_kit_collision_intent": str(asset.collision_intent or ""),
+            "terrain_kit_collision_mode": _terrain_asset_collision_mode(asset),
+            "terrain_kit_collision_status": collision_status,
+            "terrain_kit_collision_ready": collision_status in {"generated_walkmesh", "visual_only"},
+            "terrain_kit_collision_blocking_reason": collision_reason,
+            "terrain_kit_visual_only": visual_only,
             "module_transition_asset": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
             "module_transition_floor_required": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
             "mirrored_two_way_transition": asset.asset_id in _MODULE_TRANSITION_ASSET_IDS,
@@ -1402,6 +1987,92 @@ def _build_vanilla_terrain_kit_primitive(
     )
 
 
+def _build_retail_model_terrain_kit_primitive(
+    asset: RetailModelTerrainKitAsset,
+    room_resref: str,
+    *,
+    resource_manager: Any,
+    rotation_degrees_z: float,
+    scale: float,
+) -> ImportedMeshRoomPrimitive:
+    if resource_manager is None:
+        raise ValueError(f"Connect the {asset.game} game installation to use {asset.label}.")
+    loader = getattr(resource_manager, "load_model_strict", None)
+    if not callable(loader):
+        loader = getattr(resource_manager, "load_model", None)
+    if not callable(loader):
+        raise ValueError("The active game resource library cannot load retail models.")
+    try:
+        model = loader(asset.model_resref, asset.game, prefer_base_archive=True)
+    except TypeError:
+        model = loader(asset.model_resref, asset.game)
+    if model is None:
+        raise ValueError(
+            f"Retail model {asset.model_resref} was not found in the configured {asset.game} installation."
+        )
+    primitive = build_imported_mesh_primitive_from_stock_model(
+        model,
+        room_resref=str(room_resref or "grterrain")[:16],
+        source_model=asset.model_resref,
+        game=asset.game,
+    )
+    vertices = tuple(
+        vertex
+        for surface in primitive.surfaces
+        for vertex in tuple(surface.vertices or ())
+    )
+    if not vertices:
+        raise ValueError(f"{asset.label} has no renderable geometry.")
+    min_x = min(float(vertex[0]) for vertex in vertices)
+    max_x = max(float(vertex[0]) for vertex in vertices)
+    min_y = min(float(vertex[1]) for vertex in vertices)
+    max_y = max(float(vertex[1]) for vertex in vertices)
+    min_z = min(float(vertex[2]) for vertex in vertices)
+    center_x = (min_x + max_x) * 0.5
+    center_y = (min_y + max_y) * 0.5
+    grounded_surfaces = tuple(
+        replace(
+            surface,
+            vertices=tuple(
+                (
+                    float(vertex[0]) - center_x,
+                    float(vertex[1]) - center_y,
+                    float(vertex[2]) - min_z,
+                )
+                for vertex in tuple(surface.vertices or ())
+            ),
+            lightmap="",
+            uvs_lm=(),
+            backdrop=False,
+            background_geometry=False,
+        )
+        for surface in primitive.surfaces
+    )
+    grounded = replace(
+        primitive,
+        surfaces=grounded_surfaces,
+        wok=WOKData(name=str(room_resref or "grterrain")[:16]),
+        metadata={
+            **dict(primitive.metadata or {}),
+            "source": "map_studio:terrain_kit:retail_model",
+            "terrain_kit_asset_id": asset.asset_id,
+            "terrain_kit_category": asset.category,
+            "terrain_kit_source_game": asset.game,
+            "terrain_kit_source_model": asset.model_resref,
+            "terrain_kit_collision_mode": "visual_only",
+            "terrain_kit_collision_status": "visual_only",
+            "terrain_kit_collision_ready": True,
+            "terrain_kit_visual_only": True,
+            "retail_bytes_packaged": False,
+        },
+    )
+    return transform_terrain_kit_primitive(
+        grounded,
+        rotation_degrees_z=float(rotation_degrees_z),
+        scale=float(scale),
+    )
+
+
 def build_terrain_kit_primitive(
     asset_id: str,
     room_resref: str,
@@ -1414,6 +2085,19 @@ def build_terrain_kit_primitive(
     """Decode a supplied or locally indexed terrain asset as a visual room."""
 
     asset = terrain_kit_asset(asset_id)
+    if isinstance(asset, RetailModelTerrainKitAsset):
+        requested_game = str(game or asset.game).upper()
+        if requested_game != asset.game:
+            raise ValueError(
+                f"{asset.label} is a {asset.game} asset and cannot be exported into {requested_game}."
+            )
+        return _build_retail_model_terrain_kit_primitive(
+            asset,
+            room_resref,
+            resource_manager=resource_manager,
+            rotation_degrees_z=float(rotation_degrees_z),
+            scale=float(scale),
+        )
     if isinstance(asset, VanillaTerrainKitAsset):
         requested_game = str(game or asset.game).upper()
         if requested_game != asset.game:
@@ -1467,6 +2151,7 @@ __all__ = [
     "TERRAIN_KIT_PAYLOAD_SCHEMA",
     "TerrainKitAsset",
     "VanillaTerrainKitAsset",
+    "RetailModelTerrainKitAsset",
     "build_terrain_kit_preview_model",
     "build_terrain_kit_primitive",
     "scan_vanilla_terrain_kit_assets",

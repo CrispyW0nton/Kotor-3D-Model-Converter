@@ -44,6 +44,22 @@ _SHADOWLANDS_STYLE_PRESET = {
         "prob_ur": 0.25,
     },
 }
+_RHEN_VAR_STYLE_ID = "architecture:k2_rhen_var"
+_RHEN_VAR_STYLE_PRESET = {
+    # 261TEL supplies the KOTOR-native polar lighting reference. Its packed
+    # DynAmbientColor is 0x725143 (RGB 67, 81, 114 in Odyssey byte order);
+    # Ghost Studio adds a restrained blue-grey distance haze so an authored
+    # snowfield meets the five-face polar sky without a black horizon seam.
+    "fog_enabled": True,
+    "fog_color": (91, 107, 128),
+    "fog_near": 32.0,
+    "fog_far": 220.0,
+    "sun_ambient": (0, 0, 0),
+    "sun_diffuse": (0, 0, 0),
+    "dynamic_ambient": (67, 81, 114),
+    "shadow_opacity": 205,
+    "sun_shadows": False,
+}
 
 
 @dataclass(frozen=True)
@@ -288,24 +304,33 @@ def apply_authored_environment_style_defaults(
 ) -> AuthoredEnvironmentStyleUpdate:
     """Apply a measured vanilla atmosphere for a newly built exterior style.
 
-    This is intentionally conservative: selecting Shadowlands does not erase
-    a creator's existing Environment-tab lighting.  The preset is only
-    written for an untouched authored area, and it remains exact enough for a
-    generated clearing to meet an appended m24aa/m25aa room without a sudden
-    loss of K1 grass or 70 m distance fog at the seam.
+    This is intentionally conservative: selecting an exterior kit does not
+    erase a creator's existing Environment-tab lighting. Presets are only
+    written for an untouched authored area, keeping Shadowlands joins and
+    Rhen Var polar horizons visually continuous without taking ownership from
+    an imported or manually tuned ARE.
     """
 
     normalized = str(style_id or "").strip().lower()
-    if normalized != _SHADOWLANDS_STYLE_ID:
+    if normalized not in {_SHADOWLANDS_STYLE_ID, _RHEN_VAR_STYLE_ID}:
         return AuthoredEnvironmentStyleUpdate(project, False, "No exterior atmosphere preset is required for this kit.")
-    if str(project.game or "K1").strip().upper() != "K1":
-        return AuthoredEnvironmentStyleUpdate(project, False, "Shadowlands atmosphere is a K1-only preset.")
+    expected_game = "K1" if normalized == _SHADOWLANDS_STYLE_ID else "K2"
+    if str(project.game or "K1").strip().upper() != expected_game:
+        style_name = "Shadowlands" if normalized == _SHADOWLANDS_STYLE_ID else "Rhen Var"
+        return AuthoredEnvironmentStyleUpdate(
+            project,
+            False,
+            f"{style_name} atmosphere is a {expected_game}-only preset.",
+        )
+    preset = _SHADOWLANDS_STYLE_PRESET if normalized == _SHADOWLANDS_STYLE_ID else _RHEN_VAR_STYLE_PRESET
+    preset_name = "Shadowlands" if normalized == _SHADOWLANDS_STYLE_ID else "Rhen Var"
+    preset_source = "k1:m24aa/m25aa" if normalized == _SHADOWLANDS_STYLE_ID else "k2:261tel + Ghost Studio polar haze"
 
     module_metadata = dict(project.metadata.metadata)
     existing_area = dict(module_metadata.get("area") or {})
     current_preset = str(existing_area.get("environment_style_preset") or "").strip().lower()
-    if current_preset == _SHADOWLANDS_STYLE_ID:
-        return AuthoredEnvironmentStyleUpdate(project, False, "Shadowlands grass and fog are already configured.")
+    if current_preset == normalized:
+        return AuthoredEnvironmentStyleUpdate(project, False, f"{preset_name} atmosphere is already configured.")
     # Do not overwrite a custom world configuration or an imported vanilla
     # area that already carries grass.  Those ARE values are the authority.
     if existing_area and (
@@ -317,24 +342,21 @@ def apply_authored_environment_style_defaults(
         return AuthoredEnvironmentStyleUpdate(
             project,
             False,
-            "Kept the existing world environment; Shadowlands grass/fog was not overwritten.",
+            f"Kept the existing world environment; {preset_name} atmosphere was not overwritten.",
         )
 
     lighting_update = update_authored_world_lighting_settings(
         project,
         {
             "profile": "standard",
-            **{key: value for key, value in _SHADOWLANDS_STYLE_PRESET.items() if key != "grass"},
+            **{key: value for key, value in preset.items() if key != "grass"},
         },
     )
     module_metadata = dict(lighting_update.project.metadata.metadata)
     area = dict(module_metadata.get("area") or {})
-    area.update(
-        {
-            "environment_style_preset": _SHADOWLANDS_STYLE_ID,
-            "grass": {**dict(_SHADOWLANDS_STYLE_PRESET["grass"]), "source": "k1:m24aa/m25aa"},
-        }
-    )
+    area["environment_style_preset"] = normalized
+    if normalized == _SHADOWLANDS_STYLE_ID:
+        area["grass"] = {**dict(_SHADOWLANDS_STYLE_PRESET["grass"]), "source": preset_source}
     module_metadata["area"] = area
     updated = replace(
         lighting_update.project,
@@ -342,17 +364,21 @@ def apply_authored_environment_style_defaults(
         extra={
             **dict(lighting_update.project.extra),
             "last_environment_style_update": {
-                "style_id": _SHADOWLANDS_STYLE_ID,
-                "source": "k1:m24aa/m25aa",
-                "grass_texture": "lka_grass",
-                "fog_far": 70.0,
+                "style_id": normalized,
+                "source": preset_source,
+                "grass_texture": "lka_grass" if normalized == _SHADOWLANDS_STYLE_ID else "",
+                "fog_far": float(preset["fog_far"]),
             },
         },
     )
     return AuthoredEnvironmentStyleUpdate(
         updated,
         True,
-        "Applied measured K1 Shadowlands atmosphere: lka_grass and 70 m distance fog.",
+        (
+            "Applied measured K1 Shadowlands atmosphere: lka_grass and 70 m distance fog."
+            if normalized == _SHADOWLANDS_STYLE_ID
+            else "Applied Rhen Var polar atmosphere: 261TEL cold ambient light and 220 m blue-grey haze."
+        ),
     )
 
 
