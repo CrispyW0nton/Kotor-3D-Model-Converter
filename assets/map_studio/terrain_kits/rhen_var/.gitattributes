@@ -1,0 +1,6 @@
+# Keep the permission-tracked manifest hashes stable in GitHub ZIP downloads.
+.gitattributes -text
+*.obj -text
+*.mtl -text
+*.json -text
+*.md -text

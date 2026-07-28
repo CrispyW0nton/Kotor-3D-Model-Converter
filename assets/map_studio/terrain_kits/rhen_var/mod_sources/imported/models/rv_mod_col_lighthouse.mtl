@@ -1,0 +1,92 @@
+# Authorized Rhen Var source material repackaged for Ghost Studio
+# Diffuse textures are power-of-two TGA; UVs and material slots are preserved.
+
+newmtl material1
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvb09106e8d5e8.tga
+
+newmtl material2
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvb5c231d4ad45.tga
+
+newmtl material3
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv4601e8d50171.tga
+
+newmtl material4
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv22d66807b31d.tga
+
+newmtl material5
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv63f18782f8b7.tga
+
+newmtl material6
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rveeb0bfa1943d.tga
+
+newmtl material7
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvc2ffb6eda88a.tga
+
+newmtl material8
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv05d179532625.tga
+
+newmtl material9
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvdbd10925061d.tga
+
+newmtl material10
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv57bbf4af58c8.tga
