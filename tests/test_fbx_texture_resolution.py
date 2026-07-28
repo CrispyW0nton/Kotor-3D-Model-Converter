@@ -374,6 +374,56 @@ def test_texture_cache_loads_unique_long_sidecar_for_truncated_stem(tmp_path):
     assert cache.get("RancorTamedConceptFinal_basecolo") is not None
 
 
+def test_texture_cache_publishes_png_bytes_under_output_resref(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    from io import BytesIO
+
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    encoded = BytesIO()
+    Image.new("RGBA", (4, 4), (80, 40, 20, 255)).save(
+        encoded,
+        format="PNG",
+    )
+
+    cache = TextureCache()
+    published = cache.publish_bytes("p_xaria06", encoded.getvalue())
+
+    assert published is not None
+    assert cache.get("p_xaria06") is published
+
+
+def test_published_preview_survives_resource_manager_revision(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    from io import BytesIO
+
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    class Manager:
+        revision = 1
+
+        @staticmethod
+        def get_k1():
+            return None
+
+    encoded = BytesIO()
+    Image.new("RGBA", (4, 4), (80, 40, 20, 255)).save(
+        encoded,
+        format="PNG",
+    )
+    manager = Manager()
+    cache = TextureCache()
+    cache.set_resource_manager(manager, "K1")
+    published = cache.publish_bytes("p_xaria06", encoded.getvalue())
+
+    manager.revision += 1
+    cache.set_resource_manager(manager, "K1")
+
+    assert cache.get("p_xaria06") is published
+    cache.clear_published_images()
+    assert "p_xaria06" not in cache._cache
+
+
 def test_node_splitter_prefers_authored_donor_skin_regions():
     bones = [f"Bone{i:02d}" for i in range(17)]
     source = _FakeNode(

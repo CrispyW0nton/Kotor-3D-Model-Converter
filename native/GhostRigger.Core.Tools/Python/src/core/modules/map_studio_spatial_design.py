@@ -20,7 +20,6 @@ from .authored_gameplay_marker_geometry import (
 )
 from .authored_module_project import AuthoredModuleProject
 
-
 SPATIAL_DESIGN_EXTRA_KEY = "map_studio_spatial_design"
 SPATIAL_DESIGN_VERSION = 1
 Vec2 = tuple[float, float]

@@ -231,19 +231,19 @@
             "resource_name": "PYTHON_PAYLOAD_IO_HEAD_ART_IMPORTER",
             "source_path": "src/io/head_art_importer.py",
             "packaged_path": "Python/src/io/head_art_importer.py",
-            "sha256": "3ac74829ebe68c3c8d195db6d6c3ecc7655b4802f46e71cc50452d444f5ac2d0"
+            "sha256": "a6df56042aef674c9d1f93b74b703f5fa9f035c6728b84b399e031845f2ea693"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_HEAD_BINARY_EXPORT",
             "source_path": "src/io/head_binary_export.py",
             "packaged_path": "Python/src/io/head_binary_export.py",
-            "sha256": "32e89e2b137f6dc89b7680a32a7d048de3dae695b4b832e2f642a9f93d1295aa"
+            "sha256": "02bdbe43c1584ca745c4b51a040d775164e4b365e30483bec19e199a5f5f672a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_HEAD_BUILDER_PACKAGE",
             "source_path": "src/io/head_builder_package.py",
             "packaged_path": "Python/src/io/head_builder_package.py",
-            "sha256": "03edf94165316ccddee53d8b3db2c125e9b43b8944df8b9f5703d10351308155"
+            "sha256": "aa9b451ad07fa376ffe8ed9a4d7a5a3728c75de43a188730b9497b6e863e4212"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_HEAD_GAME_RECORDS",
@@ -255,7 +255,7 @@
             "resource_name": "PYTHON_PAYLOAD_IO_HEAD_TEXTURE_ASSET",
             "source_path": "src/io/head_texture_asset.py",
             "packaged_path": "Python/src/io/head_texture_asset.py",
-            "sha256": "54d0dde3ea5e286f824652545d422c90cf1d2758c85da61ce4cd8b5b16c94852"
+            "sha256": "e6491d6ac727aaef99b9a05bc6e5b3e6e16d1ecd1d34a8dad2592f203d71f765"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_KOTOR_GUI_IO",

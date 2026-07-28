@@ -5,9 +5,13 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from src.core.characters.head_facial_transplant import (
+    _disable_replaced_donor_render_nodes,
+)
 from src.core.characters.head_donor_snapshot import (
     capture_head_donor_snapshot,
 )
@@ -218,6 +222,66 @@ def test_binary_readback_hashes_every_certified_component_payload() -> None:
     reloaded_eye = build.inspection.reloaded_model.find_node("eyeLA")
     assert reloaded_eye is not None
     assert reloaded_eye.texture.casefold() == "pfha02eye"
+
+
+def test_disabled_donor_mesh_serializes_static_alpha_controller() -> None:
+    node = SimpleNamespace(
+        name="donor_component",
+        render=True,
+        alpha=1.0,
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+        controllers=[
+            {
+                "type": 132,
+                "name": "alpha",
+                "columns": 1,
+                "times": [0.0],
+                "values": [[1.0]],
+                "binary_unknown0": 0xFFFF,
+                "binary_column_count": 1,
+                "binary_unknown1": [0, 0, 0],
+            }
+        ],
+    )
+
+    disabled = _disable_replaced_donor_render_nodes(
+        [node],
+        assigned_node_ids=set(),
+    )
+
+    assert disabled == ("donor_component",)
+    assert node.render is False
+    assert node.alpha == 0.0
+    assert node.controllers[0]["type"] == 132
+    assert node.controllers[0]["times"] == [0.0]
+    assert node.controllers[0]["values"] == [[0.0]]
+
+
+def test_disabled_donor_mesh_creates_missing_alpha_controller() -> None:
+    node = SimpleNamespace(
+        name="donor_component",
+        render=True,
+        alpha=1.0,
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+        controllers=[],
+    )
+
+    _disable_replaced_donor_render_nodes([node], assigned_node_ids=set())
+
+    assert node.controllers == [
+        {
+            "type": 132,
+            "name": "alpha",
+            "columns": 1,
+            "times": [0.0],
+            "values": [[0.0]],
+            "binary_unknown0": 0xFFFF,
+            "binary_column_count": 1,
+            "binary_unknown1": [0, 0, 0],
+        }
+    ]
 
 
 def test_verified_binary_publish_is_atomic_and_requires_explicit_overwrite(

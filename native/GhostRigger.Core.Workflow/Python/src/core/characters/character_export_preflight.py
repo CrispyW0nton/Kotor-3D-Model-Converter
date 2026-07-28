@@ -9,6 +9,8 @@ helpers, supermodel inheritance, and skin payload requirements.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import math
 from typing import Any
 
@@ -66,6 +68,66 @@ _AUTO_FIT_ROTATION_BASES = frozenset({
 
 
 @dataclass(frozen=True)
+class CharacterEffectPayloadContract:
+    """Exact allow-list entry for one model-owned Odyssey emitter payload."""
+
+    name: str
+    parent_name: str
+    position: tuple[float, float, float]
+    rotation: tuple[float, float, float, float]
+    supernode_number: int
+    payload_sha256: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "name", str(self.name or ""))
+        object.__setattr__(self, "parent_name", str(self.parent_name or ""))
+        object.__setattr__(
+            self,
+            "position",
+            tuple(float(value) for value in self.position),
+        )
+        object.__setattr__(
+            self,
+            "rotation",
+            tuple(float(value) for value in self.rotation),
+        )
+        object.__setattr__(
+            self,
+            "supernode_number",
+            int(self.supernode_number),
+        )
+        object.__setattr__(
+            self,
+            "payload_sha256",
+            str(self.payload_sha256 or "").upper(),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "parent_name": self.parent_name,
+            "position": list(self.position),
+            "rotation": list(self.rotation),
+            "supernode_number": self.supernode_number,
+            "payload_sha256": self.payload_sha256,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: dict[str, Any],
+    ) -> "CharacterEffectPayloadContract":
+        return cls(
+            name=str(value.get("name") or ""),
+            parent_name=str(value.get("parent_name") or ""),
+            position=tuple(value.get("position") or ()),
+            rotation=tuple(value.get("rotation") or ()),
+            supernode_number=int(value.get("supernode_number", -1)),
+            payload_sha256=str(value.get("payload_sha256") or ""),
+        )
+
+
+@dataclass(frozen=True)
 class CharacterExportPreflightOptions:
     """Tunable checks for Character Builder MDL/MDX export readiness."""
 
@@ -100,6 +162,7 @@ class CharacterExportPreflightOptions:
         "camera",
         "headgear",
     )
+    allowed_effect_payloads: tuple[CharacterEffectPayloadContract, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1713,6 +1776,27 @@ def _validate_no_non_native_skeleton_nodes(
 
     native_paths = {tuple(node.full_path) for node in snapshot.nodes}
     native_names = set(snapshot.node_names())
+    effect_contracts = {
+        contract.name: contract
+        for contract in opts.allowed_effect_payloads
+    }
+    if (
+        len(effect_contracts) != len(opts.allowed_effect_payloads)
+        or any(not name for name in effect_contracts)
+    ):
+        report.add(_issue(
+            "blocking",
+            "character.export.invalid_effect_payload_contract",
+            "Character effect-payload allow-list contains empty or duplicate names.",
+            details={
+                "contract_names": [
+                    contract.name
+                    for contract in opts.allowed_effect_payloads
+                ],
+            },
+        ))
+        return
+    matched_effects: set[str] = set()
     for node in _iter_nodes(model):
         actual_path = _node_path(node)
         path = normalize_model_path_to_native_snapshot(
@@ -1726,7 +1810,23 @@ def _validate_no_non_native_skeleton_nodes(
         if name in native_names:
             # The exact-name/path mismatch is reported by _validate_native_dag.
             continue
-        if _is_exportable_mesh_payload(node):
+        effect_contract = effect_contracts.get(name)
+        effect_contract_mismatch = (
+            _character_effect_payload_contract_mismatch(
+                node,
+                parent_path_is_native=tuple(path[:-1]) in native_paths,
+                effect_contract=effect_contract,
+            )
+            if effect_contract is not None
+            else None
+        )
+        if _is_exportable_character_payload(
+            node,
+            parent_path_is_native=tuple(path[:-1]) in native_paths,
+            effect_contract=effect_contract,
+        ):
+            if effect_contract is not None:
+                matched_effects.add(name)
             continue
         report.add(_issue(
             "blocking",
@@ -1746,16 +1846,230 @@ def _validate_no_non_native_skeleton_nodes(
                 "actual_path": list(actual_path),
                 "native_snapshot_model": snapshot.model_name,
                 "native_snapshot_game": snapshot.game,
-                "allowed_non_native_role": "mesh_or_skin_payload",
+                "allowed_non_native_role": (
+                    "mesh_skin_or_exact_registered_effect_payload"
+                ),
+                "registered_effect_contract": (
+                    effect_contract.to_dict()
+                    if effect_contract is not None
+                    else None
+                ),
+                "registered_effect_contract_mismatch": effect_contract_mismatch,
                 "engine_evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
             },
         ))
+    missing_effects = sorted(set(effect_contracts) - matched_effects)
+    if missing_effects:
+        report.add(_issue(
+            "blocking",
+            "character.export.registered_effect_payload_missing",
+            (
+                "One or more registered character effect payloads are absent "
+                "from the final DAG."
+            ),
+            details={"missing_effect_payloads": missing_effects},
+        ))
 
 
-def _is_exportable_mesh_payload(node: Any) -> bool:
+def _is_exportable_character_payload(
+    node: Any,
+    *,
+    parent_path_is_native: bool,
+    effect_contract: CharacterEffectPayloadContract | None = None,
+) -> bool:
+    """Return whether a non-native node is legitimate character payload.
+
+    Imported mesh/skin nodes have always been allowed to live under the native
+    KOTOR skeleton. Odyssey emitter nodes are payload as well: they are neither
+    bones nor attachment sockets, and character models legitimately parent
+    them to native animated helpers. Keep that exception deliberately narrow
+    so an imported armature cannot masquerade as effects data: only a named,
+    childless emitter whose immediate parent resolves to the selected native
+    DAG is accepted.
+    """
+
     vertices = list(getattr(node, "vertices", []) or [])
     faces = list(getattr(node, "faces", []) or [])
-    return bool(vertices or faces)
+    if vertices or faces:
+        return True
+    if effect_contract is None:
+        return False
+    return not _character_effect_payload_contract_mismatch(
+        node,
+        parent_path_is_native=parent_path_is_native,
+        effect_contract=effect_contract,
+    )["mismatches"]
+
+
+def _character_effect_payload_contract_mismatch(
+    node: Any,
+    *,
+    parent_path_is_native: bool,
+    effect_contract: CharacterEffectPayloadContract,
+) -> dict[str, Any]:
+    """Explain an exact registered-emitter mismatch without relaxing it."""
+
+    parent = getattr(node, "parent", None)
+    position = tuple(float(value) for value in getattr(node, "position", ()) or ())
+    rotation = tuple(float(value) for value in getattr(node, "rotation", ()) or ())
+    actual_digest = character_effect_payload_sha256(node)
+    actual_name = str(getattr(node, "name", "") or "")
+    actual_parent_name = (
+        str(getattr(parent, "name", "") or "")
+        if parent is not None
+        else ""
+    )
+    actual_number = int(getattr(node, "number", -1))
+    comparisons = {
+        "native_parent_path": bool(parent_path_is_native),
+        "name": actual_name == effect_contract.name,
+        "parent_name": (
+            parent is not None
+            and actual_parent_name == effect_contract.parent_name
+        ),
+        "is_emitter": bool(getattr(node, "is_emitter", False)),
+        "no_skin_data": not bool(getattr(node, "skin_data", None)),
+        "childless": not list(getattr(node, "children", []) or []),
+        "position_arity": len(position) == 3,
+        "rotation_arity": len(rotation) == 4,
+        "position": (
+            len(position) == 3
+            and all(
+                abs(actual - expected) <= 1.0e-6
+                for actual, expected in zip(
+                    position,
+                    effect_contract.position,
+                )
+            )
+        ),
+        "rotation": (
+            len(rotation) == 4
+            and all(
+                abs(actual - expected) <= 1.0e-6
+                for actual, expected in zip(
+                    rotation,
+                    effect_contract.rotation,
+                )
+            )
+        ),
+        "supernode_number": actual_number == effect_contract.supernode_number,
+        "payload_sha256": actual_digest == effect_contract.payload_sha256,
+    }
+    return {
+        "mismatches": [
+            field
+            for field, matched in comparisons.items()
+            if not matched
+        ],
+        "comparisons": comparisons,
+        "actual": {
+            "name": actual_name,
+            "parent_name": actual_parent_name,
+            "position": list(position),
+            "rotation": list(rotation),
+            "supernode_number": actual_number,
+            "payload_sha256": actual_digest,
+        },
+    }
+
+
+def character_effect_payload_sha256(node: Any) -> str:
+    """Return a stable digest of the emitter fields serialized to Odyssey.
+
+    The binary loader legitimately adds ``unknown1=0`` and ``binary_*``
+    controller provenance that were not present on a newly-authored node.
+    Conversely, Ghost-only ``gr_*`` fields are not written to MDL.  Hash the
+    fixed emitter header and semantic controller rows that the writer
+    actually serializes so the same payload compares equal before and after a
+    real MDL/MDX round-trip while any engine-visible change still fails.
+    """
+
+    def normalized(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): normalized(item)
+                for key, item in sorted(
+                    value.items(),
+                    key=lambda pair: str(pair[0]),
+                )
+                if not str(key).startswith(("gr_", "binary_"))
+            }
+        if isinstance(value, (list, tuple)):
+            return [normalized(item) for item in value]
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                raise ValueError(
+                    "Effect payload contains a non-finite float"
+                )
+            return round(float(value), 6)
+        if isinstance(value, (str, int, bool)) or value is None:
+            return value
+        return str(value)
+
+    raw_params = dict(getattr(node, "emitter_params", {}) or {})
+    emitter_params = {
+        "deadspace": float(raw_params.get("deadspace", 0.0) or 0.0),
+        "blastradius": float(raw_params.get("blastradius", 0.0) or 0.0),
+        "blastlength": float(raw_params.get("blastlength", 0.0) or 0.0),
+        "numbranches": int(raw_params.get("numbranches", 0) or 0),
+        "controlptsmoothing": int(
+            raw_params.get("controlptsmoothing", 0) or 0
+        ),
+        "xgrid": int(raw_params.get("xgrid", 0) or 0),
+        "ygrid": int(raw_params.get("ygrid", 0) or 0),
+        "spawntype": int(raw_params.get("spawntype", 0) or 0),
+        "update": str(raw_params.get("update", "") or ""),
+        "emitter_render": str(
+            raw_params.get("emitter_render", "") or ""
+        ),
+        "blend": str(raw_params.get("blend", "") or ""),
+        "texture": str(raw_params.get("texture", "") or ""),
+        "chunkname": str(raw_params.get("chunkname", "") or ""),
+        "twosidedtex": int(raw_params.get("twosidedtex", 0) or 0),
+        "loop": int(raw_params.get("loop", 0) or 0),
+        "renderorder": int(raw_params.get("renderorder", 0) or 0),
+        "frameblending": int(raw_params.get("frameblending", 0) or 0),
+        "depth_texture_name": str(
+            raw_params.get("depth_texture_name", "") or ""
+        ),
+        "unknown1": int(raw_params.get("unknown1", 0) or 0) & 0xFF,
+        "flags": int(
+            raw_params.get(
+                "flags",
+                raw_params.get("emitter_flags", 0),
+            )
+            or 0
+        ),
+    }
+    controllers = []
+    for controller in list(getattr(node, "controllers", []) or []):
+        controllers.append({
+            "type": int(controller.get("type", -1)),
+            "columns": int(controller.get("columns", 1) or 1),
+            "times": list(controller.get("times", []) or []),
+            "values": list(controller.get("values", []) or []),
+        })
+    controllers.sort(
+        key=lambda controller: (
+            controller["type"],
+            controller["columns"],
+            repr(controller["times"]),
+            repr(controller["values"]),
+        ),
+    )
+    payload = {
+        "flags": int(getattr(node, "flags", 0) or 0),
+        "emitter_params": normalized(emitter_params),
+        "controllers": normalized(controllers),
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    ).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest().upper()
 
 
 def _socket_category_evidence_details(

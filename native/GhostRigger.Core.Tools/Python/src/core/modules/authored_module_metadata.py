@@ -13,8 +13,11 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .authored_module_objects import ModuleEntryPoint, apply_entry_point_to_ifo
-from .authored_module_project import AuthoredModuleMetadata, authored_resref_blocking_issue, normalise_resref
-
+from .authored_module_project import (
+    AuthoredModuleMetadata,
+    authored_resref_blocking_issue,
+    normalise_resref,
+)
 
 RGB = tuple[int, int, int]
 FULLBRIGHT_LIGHTING_PROFILE = "fullbright"
@@ -707,12 +710,15 @@ def build_authored_ifo_gff(
     time = time or AuthoredModuleTimeMetadata()
     root_resref = module.normalised_root()
     display_name = str(module.display_name or root_resref)
+    voice_over_id = normalise_resref(
+        str(module.metadata.get("voice_over_id") or root_resref)
+    )
     gff = _new_gff("IFO")
     root = gff.root
     root.set_binary("Mod_ID", _module_id_bytes(root_resref))
     root.set_int32("Mod_Creator_ID", 0)
     root.set_uint32("Mod_Version", 3)
-    root.set_string("Mod_VO_ID", root_resref)
+    root.set_string("Mod_VO_ID", voice_over_id)
     root.set_uint16("Expansion_Pack", int(time.expansion_pack))
     _set_loc(root, "Mod_Name", display_name)
     root.set_string("Mod_Tag", "MODULE")

@@ -27,6 +27,12 @@
         <panelSpacing value="6"/>
         <toolbarSpacing value="5"/>
         <splitterHandleWidth value="8"/>
+        <menuBarHeight value="26"/>
+        <menuMinimumWidth value="200"/>
+        <menuHorizontalPadding value="14"/>
+        <menuShortcutGap value="28"/>
+        <menuIndicatorWidth value="24"/>
+        <menuSubmenuArrowWidth value="18"/>
         <inputHeight value="28"/>
         <comboHeight value="28"/>
         <spinboxHeight value="28"/>

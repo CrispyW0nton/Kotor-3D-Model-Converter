@@ -19,6 +19,7 @@ def _install_native_payload_paths() -> None:
 def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     _install_native_payload_paths()
 
+    from pykotor.resource.formats.gff import read_gff
     from src.core.modules.authored_module_metadata import (
         AuthoredAreaMetadata,
         AuthoredModuleTimeMetadata,
@@ -28,7 +29,6 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
     from src.core.modules.module_format import AREData, IFOData
-    from pykotor.resource.formats.gff import read_gff
 
     module = AuthoredModuleMetadata(
         module_root="grdev01",
@@ -83,13 +83,38 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     assert len(raw_ifo.root.get("Mod_ID")) == 16
 
 
+def test_authored_ifo_accepts_an_explicit_three_character_voice_folder_id() -> None:
+    _install_native_payload_paths()
+
+    from pykotor.resource.formats.gff import read_gff
+    from src.core.modules.authored_module_metadata import (
+        compile_authored_module_metadata,
+    )
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+
+    compiled = compile_authored_module_metadata(
+        AuthoredModuleMetadata(
+            module_root="xartease",
+            game="K2",
+            metadata={"voice_over_id": "xar"},
+        ),
+        ModuleEntryPoint(area_resref="xartease"),
+    )
+
+    assert read_gff(compiled.ifo_bytes).root.get("Mod_VO_ID") == "xar"
+
+
 def test_t3105_fullbright_lighting_profile_compiles_game_visible_are_values() -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
+    from pykotor.resource.formats.gff import read_gff
+    from src.core.modules.authored_module_metadata import (
+        AuthoredAreaMetadata,
+        compile_authored_module_metadata,
+    )
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
-    from pykotor.resource.formats.gff import read_gff
 
     module = AuthoredModuleMetadata(
         module_root="grlight",
@@ -124,10 +149,10 @@ def test_legacy_stock_are_world_lighting_metadata_compiles_without_normalized_fi
 
     _install_native_payload_paths()
 
+    from pykotor.resource.formats.gff import read_gff
     from src.core.modules.authored_module_metadata import compile_authored_module_metadata
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
-    from pykotor.resource.formats.gff import read_gff
 
     module = AuthoredModuleMetadata(
         module_root="grlegacy",
@@ -166,11 +191,11 @@ def test_stock_are_world_lighting_roundtrips_through_authored_compiler() -> None
 
     _install_native_payload_paths()
 
+    from pykotor.resource.formats.gff import read_gff
     from src.core.modules.authored_module_metadata import compile_authored_module_metadata
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
     from src.core.modules.stock_module_importer import are_gff_to_metadata
-    from pykotor.resource.formats.gff import read_gff
 
     class MockGFF:
         def __init__(self, data):
@@ -246,6 +271,7 @@ def test_stock_are_world_lighting_roundtrips_through_authored_compiler() -> None
 def test_t2600_compiles_authored_script_hooks_into_are_and_ifo() -> None:
     _install_native_payload_paths()
 
+    from pykotor.resource.formats.gff import read_gff
     from src.core.modules.authored_module_metadata import (
         AuthoredAreaMetadata,
         compile_authored_module_metadata,
@@ -253,7 +279,6 @@ def test_t2600_compiles_authored_script_hooks_into_are_and_ifo() -> None:
     )
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
-    from pykotor.resource.formats.gff import read_gff
 
     module = AuthoredModuleMetadata(
         module_root="grdev01",
@@ -312,7 +337,10 @@ def test_t2607_blocks_invalid_authored_metadata_before_serialization() -> None:
 def test_t2633_metadata_validation_blocks_silent_resref_truncation() -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.authored_module_metadata import compile_authored_module_metadata, validate_authored_module_metadata
+    from src.core.modules.authored_module_metadata import (
+        compile_authored_module_metadata,
+        validate_authored_module_metadata,
+    )
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
 

@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import math
+import os
 from pathlib import Path
+import re
+from types import SimpleNamespace
 from typing import Optional
 
 try:
@@ -563,6 +568,214 @@ class ViewportToolsMixin:
             "resources": self._ipc_resource_state_snapshot() if hasattr(self, "_ipc_resource_state_snapshot") else {},
             "docks": dock_visibility,
         }
+    def _ipc_spatial_snapshot(self, payload: object = None) -> dict:
+        """Return semantic scene truth plus the currently observed viewport."""
+
+        from src.core.scene.spatial_snapshot import build_scene_spatial_snapshot
+        from src.math.gpu_math import _mat4_lookat, _mat4_perspective
+
+        options = dict(payload) if isinstance(payload, dict) else {}
+        scene_manager = getattr(self, "scene_manager", None)
+        scene = getattr(scene_manager, "active_scene", None)
+        if scene is None:
+            scene = SimpleNamespace(
+                id="ghoststudio-empty-scene",
+                units={"system_unit": "cm", "display_unit": "cm"},
+                objects=[],
+            )
+
+        viewport_widget = getattr(self, "viewport", None)
+        canvas = getattr(viewport_widget, "canvas", None)
+        camera = getattr(viewport_widget, "camera", None)
+        viewport_payload = None
+        if canvas is not None and camera is not None:
+            width = max(1, int(canvas.width()))
+            height = max(1, int(canvas.height()))
+            eye = tuple(float(v) for v in camera.eye()[:3])
+            target = tuple(float(v) for v in tuple(camera.target)[:3])
+            near_clip = max(
+                0.001,
+                float(getattr(camera, "_near", 0.01) or 0.01),
+            )
+            far_clip = max(
+                near_clip + 1.0,
+                float(getattr(camera, "_far", 1000.0) or 1000.0),
+            )
+            field_of_view = max(
+                0.01,
+                min(179.0, float(getattr(camera, "fov", 45.0) or 45.0)),
+            )
+            view_matrix = _mat4_lookat(
+                eye,
+                target,
+                (0.0, 0.0, 1.0),
+            )
+            projection_matrix = _mat4_perspective(
+                math.radians(field_of_view),
+                float(width) / float(height),
+                near_clip,
+                far_clip,
+            )
+            camera_manager = getattr(viewport_widget, "camera_manager", None)
+            active_camera = (
+                camera_manager.get_active_camera()
+                if camera_manager is not None
+                and callable(getattr(camera_manager, "get_active_camera", None))
+                else None
+            )
+            viewport_payload = {
+                "id": "ghoststudio-main-viewport",
+                "rectangle": {
+                    "x": 0.0,
+                    "y": 0.0,
+                    "width": float(width),
+                    "height": float(height),
+                },
+                "pixelOrigin": "top-left",
+                "devicePixelRatio": float(canvas.devicePixelRatioF()),
+                "cameraStableId": (
+                    str(getattr(active_camera, "id", "") or "") or None
+                ),
+                # The current "ortho" UI deliberately simulates orthographic
+                # viewing by narrowing a perspective FOV. Report the matrix
+                # that is actually used rather than upgrading UI intent to fact.
+                "projection": "perspective",
+                "viewMatrix": view_matrix.tolist(),
+                "projectionMatrix": projection_matrix.tolist(),
+                "nearClip": near_clip,
+                "farClip": far_clip,
+            }
+
+        settings = getattr(viewport_widget, "measurement_settings", None)
+        grid_payload = None
+        if settings is not None:
+            minor_spacing = max(
+                1e-6,
+                float(getattr(settings, "minor_grid_spacing", 10.0) or 10.0),
+            )
+            major_spacing = max(
+                minor_spacing,
+                float(getattr(settings, "major_grid_spacing", 100.0) or 100.0),
+            )
+            display_options = getattr(viewport_widget, "display_options", None)
+            grid_payload = {
+                "origin": [0.0, 0.0, 0.0],
+                "spacing": [
+                    minor_spacing,
+                    minor_spacing,
+                    minor_spacing,
+                ],
+                "subdivisions": max(1, int(round(major_spacing / minor_spacing))),
+                "visible": bool(
+                    getattr(display_options, "show_grid", True)
+                ),
+                "snapEnabled": bool(
+                    getattr(settings, "snap_enabled", False)
+                ),
+            }
+
+        snapshot = build_scene_spatial_snapshot(
+            scene,
+            application_version="2.8",
+            viewport=viewport_payload,
+            grid=grid_payload,
+        )
+        if bool(getattr(viewport_widget, "_ortho_mode", False)):
+            snapshot["evidence"].append({
+                "kind": "semantic-api",
+                "claim": (
+                    "The viewport UI reports orthographic mode, but the active "
+                    "renderer uses a narrowed perspective projection."
+                ),
+                "epistemicStatus": "observed",
+                "confidence": 1.0,
+            })
+        if options.get("includeSelection") is False:
+            snapshot["selection"] = {"mode": "object", "stableIds": []}
+        if options.get("includeBounds") is False:
+            for entity in snapshot["entities"]:
+                entity.pop("bounds", None)
+        return snapshot
+    def _ipc_capture_spatial_evidence(self, payload: object = None) -> dict:
+        """Capture one PNG and bind it to exact semantic/viewport revisions."""
+
+        from src.ipc.spatial_auth import (
+            prepare_private_spatial_directory,
+            write_private_spatial_artifact,
+        )
+
+        data = dict(payload) if isinstance(payload, dict) else {}
+        capture_id = str(data.get("captureId") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", capture_id):
+            raise ValueError("captureId must be a 16-128 character safe token")
+        snapshot = self._ipc_spatial_snapshot({})
+        root_text = str(
+            os.environ.get("GHOSTSTUDIO_SPATIAL_CAPTURE_ROOT")
+            or (
+                Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+                / "GhostMCPStudio"
+                / "captures"
+            )
+        )
+        capture_root = prepare_private_spatial_directory(
+            Path(root_text).expanduser()
+        )
+        target = capture_root / f"{capture_id}.png"
+        if target.parent != capture_root:
+            raise ValueError("captureId resolved outside the private capture root")
+
+        viewport_widget = getattr(self, "viewport", None)
+        canvas = getattr(viewport_widget, "canvas", None)
+        if canvas is None:
+            raise RuntimeError("Ghost Studio viewport is unavailable")
+        pixmap = canvas.grab()
+        byte_array = QtCore.QByteArray()
+        buffer = QtCore.QBuffer(byte_array)
+        if not buffer.open(QtCore.QIODevice.OpenModeFlag.WriteOnly):
+            raise RuntimeError("Could not open the in-memory PNG buffer")
+        try:
+            if not pixmap.save(buffer, "PNG"):
+                raise RuntimeError("Ghost Studio viewport PNG encoding failed")
+        finally:
+            buffer.close()
+        png_bytes = bytes(byte_array)
+        write_private_spatial_artifact(target, png_bytes)
+
+        viewport_rows = snapshot.get("viewports") or []
+        viewport_revision = (
+            str(viewport_rows[0].get("revision") or "")
+            if viewport_rows
+            else None
+        )
+        capture = {
+            "path": str(target),
+            "sha256": hashlib.sha256(png_bytes).hexdigest(),
+            "width": int(pixmap.width()),
+            "height": int(pixmap.height()),
+            "sceneRevision": snapshot["sceneRevision"],
+            "viewportRevision": viewport_revision,
+        }
+        snapshot["capture"] = dict(capture)
+        snapshot["evidence"].append({
+            "kind": "screenshot",
+            "claim": (
+                "The PNG records the visible viewport at the attached scene "
+                "and viewport revisions; it does not by itself prove a GUI action."
+            ),
+            "epistemicStatus": "observed",
+            "confidence": 1.0,
+            "sourcePath": str(target),
+            "sourceSha256": capture["sha256"],
+        })
+        return {
+            "schema": "ghoststudio-spatial-capture/v1",
+            "capture": capture,
+            "snapshot": snapshot,
+        }
+    def _ipc_spatial_evidence_gaps(self, _payload: object = None) -> dict:
+        from src.core.scene.spatial_snapshot import spatial_evidence_gaps
+
+        return spatial_evidence_gaps(self._ipc_spatial_snapshot({}))
     def _clear_model(self):
         if not self._prompt_save_dirty_scene():
             return

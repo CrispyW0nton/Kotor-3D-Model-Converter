@@ -22,6 +22,11 @@ _TERRAIN_CATEGORY_ROLE = _TERRAIN_SEARCH_ROLE + 1
 _TERRAIN_COLLECTION_ROLE = _TERRAIN_CATEGORY_ROLE + 1
 _TERRAIN_STYLE_ROLE = _TERRAIN_COLLECTION_ROLE + 1
 _TERRAIN_CATEGORY_ORDER = (
+    "Snow Terrain",
+    "Cliffs & Rocks",
+    "Exterior Buildings",
+    "Ruins",
+    "Interior Architecture",
     "Terrain Forms",
     "Rock Formations",
     "Roots & Tree Trunks",

@@ -1,0 +1,9 @@
+# Ghost Studio original Rhen Var material: gr_rvsnow
+newmtl gr_rvsnow_material
+illum 2
+Ka 0.280000 0.300000 0.330000
+Kd 1.000000 1.000000 1.000000
+Ks 0.080000 0.100000 0.120000
+Ns 18.000000
+d 1.000000
+map_Kd gr_rvsnow.tga

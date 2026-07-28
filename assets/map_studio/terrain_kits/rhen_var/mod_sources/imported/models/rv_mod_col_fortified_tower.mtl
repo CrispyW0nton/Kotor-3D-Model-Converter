@@ -1,0 +1,173 @@
+# Authorized Rhen Var source material repackaged for Ghost Studio
+# Diffuse textures are power-of-two TGA; UVs and material slots are preserved.
+
+newmtl material1
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvc2ffb6eda88a.tga
+
+newmtl material2
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv57bbf4af58c8.tga
+
+newmtl material3
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rva0f51ab211f9.tga
+
+newmtl material4
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvb84a32cceb88.tga
+
+newmtl material5
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rveeb0bfa1943d.tga
+
+newmtl material6
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv0107a38b7d43.tga
+
+newmtl material1.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvc2ffb6eda88a.tga
+
+newmtl material4.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvb84a32cceb88.tga
+
+newmtl material5.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rveeb0bfa1943d.tga
+
+newmtl material7
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv44af2bc70572.tga
+
+newmtl material8
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv18adde0e960f.tga
+
+newmtl material3.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rva0f51ab211f9.tga
+
+newmtl material9
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv9bb767356364.tga
+
+newmtl material6.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv0107a38b7d43.tga
+
+newmtl material10
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rvdaa9f3eec9be.tga
+
+newmtl material11
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv9fabbac08ad3.tga
+
+newmtl material2.001
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv57bbf4af58c8.tga
+
+newmtl material12
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv11a44d240e6b.tga
+
+newmtl material13
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.020000 0.020000 0.020000
+Ns 4.000000
+d 1.000000
+map_Kd ../textures/rv22d66807b31d.tga

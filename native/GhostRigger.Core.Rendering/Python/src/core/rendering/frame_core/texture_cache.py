@@ -71,6 +71,12 @@ class TextureCache:
 
     def __init__(self):
         self._cache: Dict[str, Optional['Image.Image']] = {}
+        # Explicit authored previews (for example a Head Builder PNG published
+        # under its final KOTOR ResRef) are not archive-cache entries.  Keep
+        # them in a separate residency layer so a ResourceManager revision or
+        # search-path refresh cannot silently replace them with the white
+        # missing-texture fallback while the same preview model is still live.
+        self._published_images: Dict[str, 'Image.Image'] = {}
         self._txi_cache: Dict[str, str] = {}   # name → TXI string ('' if absent)
         self._search_dirs: List[str] = []
         self._game_library = None   # Optional GameLibrary for BIF-backed loading
@@ -94,6 +100,7 @@ class TextureCache:
             if new_dirs != self._search_dirs:
                 self._search_dirs = new_dirs
                 self._cache.clear()
+                self._cache.update(self._published_images)
                 self._txi_cache.clear()
                 # Clear per-key load locks too (keys may no longer be relevant)
                 with self._load_locks_lock:
@@ -111,6 +118,7 @@ class TextureCache:
                 self._game_library = library
                 self._game_tag = game_tag
                 self._cache.clear()
+                self._cache.update(self._published_images)
                 self._txi_cache.clear()
                 with self._load_locks_lock:
                     self._load_locks.clear()
@@ -121,6 +129,7 @@ class TextureCache:
                 # from the correct game's archives.
                 self._game_tag = game_tag
                 self._cache.clear()
+                self._cache.update(self._published_images)
                 self._txi_cache.clear()
                 with self._load_locks_lock:
                     self._load_locks.clear()
@@ -137,6 +146,7 @@ class TextureCache:
                 self._installation = installation
                 self._game_tag = game_tag
                 self._cache.clear()
+                self._cache.update(self._published_images)
                 self._txi_cache.clear()
                 with self._load_locks_lock:
                     self._load_locks.clear()
@@ -169,6 +179,7 @@ class TextureCache:
                     # We don't set it here to avoid the old path running — the new
                     # _resource_manager path takes priority in _load().
                 self._cache.clear()
+                self._cache.update(self._published_images)
                 self._txi_cache.clear()
                 with self._load_locks_lock:
                     self._load_locks.clear()
@@ -499,6 +510,56 @@ class TextureCache:
                 self._mip_bias_cache.pop(id(previous), None)
 
         return target, requested
+
+    def publish_bytes(
+        self,
+        name: str,
+        raw: bytes,
+    ) -> Optional['Image.Image']:
+        """Publish authored bytes under an explicit preview texture ResRef.
+
+        A Head Builder source PNG can keep its descriptive filename while the
+        candidate model references its final KOTOR ResRef. Decode through the
+        normal loose-texture orientation path and cache it under that ResRef;
+        no source rename or copy is required.
+        """
+
+        clean = _clean_tex_name(name or "")
+        if not clean or not isinstance(raw, (bytes, bytearray)) or not raw:
+            return None
+        payload = bytes(raw)
+        image = self._load_bytes(payload)
+        if image is None:
+            return None
+        image = self._resize_if_needed(image, clean)
+        try:
+            image = self._apply_kotor_alpha(
+                payload,
+                image,
+                _parse_txi_string(""),
+            )
+        except Exception:
+            pass
+        published, _regions = self.update_image_regions(clean, image, None)
+        with self._lock:
+            self._published_images[clean.lower()] = published
+        return published
+
+    def clear_published_images(self) -> None:
+        """Release model-scoped authored preview aliases.
+
+        Viewports call this before loading a different model, then republish
+        that model's explicit texture map.  Archive/resource invalidation keeps
+        the active aliases resident, but changing the preview model does not
+        leak them into unrelated work.
+        """
+
+        with self._lock:
+            for key, published in tuple(self._published_images.items()):
+                if self._cache.get(key) is published:
+                    self._cache.pop(key, None)
+                self._mip_bias_cache.pop(id(published), None)
+            self._published_images.clear()
 
     def _load(self, name: str) -> Optional['Image.Image']:
         """Load texture by name: disk search dirs first, then BIF archives.

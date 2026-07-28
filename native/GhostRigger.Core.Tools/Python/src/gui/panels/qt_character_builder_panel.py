@@ -555,8 +555,18 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             target = mode
         else:
             key = str(mode or "").strip().lower().replace("-", "_").replace(" ", "_")
+            facial_mode = key in {
+                "facial_performance_head",
+                "advanced_facial_head",
+                "custom_facial_head",
+            }
+            if facial_mode:
+                self._set_head_facial_output_mode("custom_patch_curves")
             aliases = {
                 "native_kotor_head": "HEAD",
+                "facial_performance_head": "HEAD",
+                "advanced_facial_head": "HEAD",
+                "custom_facial_head": "HEAD",
                 "head_builder": "HEAD",
                 "custom_head": "HEAD",
                 "modular_head": "HEAD",
@@ -573,8 +583,26 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 target = CharacterMode[enum_name]
             except KeyError as exc:
                 raise ValueError(f"Unknown Character Builder mode: {mode!r}") from exc
+            if target == CharacterMode.HEAD and not facial_mode:
+                setter = getattr(self, "_set_head_facial_output_mode", None)
+                if callable(setter):
+                    setter("vanilla_lip")
         self._apply_mode(target, locked=True, source="public_entry")
         return target
+
+    def _set_head_facial_output_mode(self, mode: str) -> None:
+        """Configure vanilla or patch-required output for the Head Builder."""
+
+        normalized = (
+            "custom_patch_curves"
+            if str(mode).strip().lower() == "custom_patch_curves"
+            else "vanilla_lip"
+        )
+        self._head_facial_output_mode = normalized
+        workspace = getattr(self, "head_builder_properties", None)
+        setter = getattr(workspace, "set_facial_performance_mode", None)
+        if callable(setter):
+            setter(normalized == "custom_patch_curves")
 
     def set_legacy_acurig_enabled(self, enabled: bool) -> None:
         """Opt into the experimental AcuRig body-generation path.
@@ -5311,7 +5339,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except ImportError:                                 # pragma: no cover
             from src.core.characters import head_workflow as _hw       # type: ignore
         try:
-            ok, message = _hw.apply_viseme(self.scene, int(viseme_index))
+            # Xaria and normal modular heads inherit ``talk`` from their
+            # supermodel; configure that resolver before evaluating a slot.
+            self._ensure_game_resource_manager()
+            ok, message = _hw.apply_viseme(
+                self.scene,
+                int(viseme_index),
+                viewport=getattr(self, "viewport", None),
+            )
         except Exception as exc:                            # pragma: no cover
             log.exception("apply_viseme failed for viseme=%s", viseme_index)
             ok, message = False, f"apply_viseme raised: {exc}"
@@ -5340,7 +5375,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception:                                   # pragma: no cover
             pass
         if ok:
-            self._schedule_live_validation("phoneme_calibrated")
+            self._schedule_live_validation("viseme_previewed")
 
     @QtCore.Slot(str, int)
     def _on_calibrate_phoneme_requested(

@@ -302,10 +302,44 @@ def source_axis_to_imported_matrix(
             ),
             dtype=np.float64,
         )
+    elif mode in {
+        "tripo_y_up_z_forward",
+        "y_up_z_forward",
+    }:
+        # Tripo OBJ character exports use +Y for height and +Z for facial
+        # forward.  KOTOR uses +Z for height and the opposite front-view X
+        # convention.  The X flip keeps this conversion a proper rotation,
+        # so later similarity fitting never introduces a reflection.
+        rotation = np.asarray(
+            (
+                (-1.0, 0.0, 0.0),
+                (0.0, 0.0, 1.0),
+                (0.0, 1.0, 0.0),
+            ),
+            dtype=np.float64,
+        )
+    elif mode in {
+        "maya_y_up_x_forward",
+        "y_up_x_forward",
+    }:
+        # Maya character scenes commonly use +Y for height, +X for facial
+        # forward, and +Z for character right. KOTOR uses +Z for height,
+        # +Y for facial forward, and +X for character right. This cyclic
+        # permutation is a proper rotation (determinant +1); centimeters are
+        # handled separately through ``unit_scale_to_kotor=0.01``.
+        rotation = np.asarray(
+            (
+                (0.0, 0.0, 1.0),
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+            ),
+            dtype=np.float64,
+        )
     else:
         raise HeadAlignmentError(
-            "Unsupported source axis. Choose kotor_z_up or "
-            "blender_xyz_to_kotor_xz_minus_y explicitly."
+            "Unsupported source axis. Choose kotor_z_up, "
+            "blender_xyz_to_kotor_xz_minus_y, or "
+            "tripo_y_up_z_forward, or maya_y_up_x_forward explicitly."
         )
     matrix = np.eye(4, dtype=np.float64)
     matrix[:3, :3] = scale * rotation

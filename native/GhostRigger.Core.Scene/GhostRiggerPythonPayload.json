@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 135,
+    "file_count": 136,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -87,7 +87,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_INIT",
             "source_path": "src/core/modules/__init__.py",
             "packaged_path": "Python/src/core/modules/__init__.py",
-            "sha256": "2166b6332275c418ced4f805a0d4d8e97aec5340f7b5c5f7deb31fcb014325b5"
+            "sha256": "6e30bd5f3a37d2eb5af54c57967ff322a497daa7aca4038132ae26cc48b15702"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AREA_WOK_INTEGRATION",
@@ -153,7 +153,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_METADATA",
             "source_path": "src/core/modules/authored_module_metadata.py",
             "packaged_path": "Python/src/core/modules/authored_module_metadata.py",
-            "sha256": "c1623fd59b190a1d297a004682c794549b0f87e0249774a777b532950de9d887"
+            "sha256": "5ecff5827a3066234e951458b8f388c408689b3a7b43bd7ecbefc70944d07364"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_OBJECTS",
@@ -213,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_WORLD_LIGHTING",
             "source_path": "src/core/modules/authored_module_world_lighting.py",
             "packaged_path": "Python/src/core/modules/authored_module_world_lighting.py",
-            "sha256": "c3e42502bc2a796ab1b9471bd571eff15b644532c9644a702904520a1c940d49"
+            "sha256": "65be184c1afad77d32e35bf85724b0d060718d47d748724f7dc166e5a032f602"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_OBJ_ROOM_IMPORT",
@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "c636b1d24389438ed134bcf2a6bc06eabc27cb4b4d40e0f0dac38b659708682c"
+            "sha256": "f14d1c8bdd13d849a3cbcdde609b89cd9dfb37f9616f058b22198c5b1c5c2e72"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -297,7 +297,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_SKYBOX",
             "source_path": "src/core/modules/authored_skybox.py",
             "packaged_path": "Python/src/core/modules/authored_skybox.py",
-            "sha256": "0af7fcfbe6ab356bcc50fe495e675414b836faf8368f771e63789ab4c4852ae4"
+            "sha256": "66555cd119950db54ff5df42366679b7d77ee40d92d9846545dcd1e356b81292"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_TERRAIN_BUILDER",
@@ -375,7 +375,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ENVIRONMENT_KITS",
             "source_path": "src/core/modules/map_studio_environment_kits.py",
             "packaged_path": "Python/src/core/modules/map_studio_environment_kits.py",
-            "sha256": "b6ae8111637dc638f9e200970680ed891e8d5ea3f5018592a09e6c922dea3210"
+            "sha256": "c05281611d9ae7d1b21d983b0470351e42796f974be1adec6def182c85861f54"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS",
@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "fcf03556460a2b537211d19d5b6e40e621afd6b60c3ae159a437ef52a3c95e64"
+            "sha256": "57ca75256024e40900d08849d82fb5f0e57cb4b4b1a169ef9d3400649c264e4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
@@ -555,7 +555,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_SPATIAL_DESIGN",
             "source_path": "src/core/modules/map_studio_spatial_design.py",
             "packaged_path": "Python/src/core/modules/map_studio_spatial_design.py",
-            "sha256": "9048e810f738e04f545435436214df80843fd759140d08803088475fe64a98f5"
+            "sha256": "fd3b08409c625a8849e2de73476f62901ef70709c23d3e01368085327d9c4423"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
@@ -567,7 +567,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_KIT",
             "source_path": "src/core/modules/map_studio_terrain_kit.py",
             "packaged_path": "Python/src/core/modules/map_studio_terrain_kit.py",
-            "sha256": "0e156649b08d9b92b36a49d787aa0346f5ba4b4203fa7eb27f6fc8ac654bf27e"
+            "sha256": "c027585d734ca198b0872de7e34f03221b25affd8744d078e6a67e3ec72ec821"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION",
@@ -627,7 +627,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "19ada27278b989bc967b417558d2550a995ed19ca8fca960949cb7f0f22b3bff"
+            "sha256": "837df811082a70d6de98a2656e95f3370cdc631b094db59c21cb03f6efdbc47e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -778,6 +778,12 @@
             "source_path": "src/core/scene/scene_resource_ref.py",
             "packaged_path": "Python/src/core/scene/scene_resource_ref.py",
             "sha256": "2a7d1d876b47d669660d3bcf1166249df0d30861caa023bd8223b70509141580"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SPATIAL_SNAPSHOT",
+            "source_path": "src/core/scene/spatial_snapshot.py",
+            "packaged_path": "Python/src/core/scene/spatial_snapshot.py",
+            "sha256": "1b4ddbcef41ed5585137c64e3954389951958eaaf7e67ca7585d4137244fb877"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_VIS_EDITOR",

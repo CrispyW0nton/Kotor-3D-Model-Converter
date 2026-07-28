@@ -9,33 +9,114 @@ real engine (K1/K2 GFF field semantics, script events, module loading).
 """
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
 import sys
+import urllib.parse
 import urllib.request
 
-URL = "http://170.9.241.140:8080/mcp/"
-HEADERS = {
+BASE_HEADERS = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream",
     "User-Agent": "PyKotorAgent/1.0",
     "X-Agent-Version": "1.0",
-    "X-Agent-Server-Username": "OpenKotOR",
-    "X-Agent-Server-Password": "revanlives",
-    "X-Ghidra-Repository": "Odyssey",
-    "X-Agent-Server-Repository": "Odyssey",
-    "X-Ghidra-Server-Host": "170.9.241.140",
-    "X-Ghidra-Server-Port": "13100",
 }
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        del request, file_pointer, code, message, headers, new_url
+        raise RuntimeError("AgentDecompile MCP redirects are not allowed.")
+
+
+OPENER = urllib.request.build_opener(
+    urllib.request.ProxyHandler({}),
+    _NoRedirectHandler(),
+)
+
+
+def _is_local_host(hostname: str) -> bool:
+    normalized = hostname.strip().casefold().rstrip(".")
+    if (
+        normalized in {"localhost", "ip6-localhost"}
+        or normalized.endswith(".localhost")
+        or normalized.endswith(".local")
+        or "." not in normalized
+    ):
+        return True
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+    return bool(
+        address.is_loopback
+        or address.is_private
+        or address.is_link_local
+    )
+
+
+def _connection() -> tuple[str, dict[str, str]]:
+    url = os.environ.get("AGENTDECOMPILE_MCP_SERVER_URL", "").strip()
+    parsed = urllib.parse.urlsplit(url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or not _is_local_host(parsed.hostname)
+    ):
+        raise RuntimeError(
+            "Set AGENTDECOMPILE_MCP_SERVER_URL to the reviewed local MCP endpoint."
+        )
+    raw_headers = os.environ.get("AGENTDECOMPILE_MCP_HEADERS_JSON", "").strip()
+    if not raw_headers:
+        raise RuntimeError(
+            "Set AGENTDECOMPILE_MCP_HEADERS_JSON from a private local secret store."
+        )
+    try:
+        configured = json.loads(raw_headers)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "AGENTDECOMPILE_MCP_HEADERS_JSON must be valid JSON."
+        ) from exc
+    if (
+        not isinstance(configured, dict)
+        or any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or "\r" in key
+            or "\n" in key
+            or "\r" in value
+            or "\n" in value
+            for key, value in configured.items()
+        )
+    ):
+        raise RuntimeError(
+            "AGENTDECOMPILE_MCP_HEADERS_JSON must contain only safe string headers."
+        )
+    return url, {**BASE_HEADERS, **configured}
 
 
 def _post(payload: dict, session: str | None = None, timeout: float = 60.0):
-    headers = dict(HEADERS)
+    url, headers = _connection()
     if session:
         headers["Mcp-Session-Id"] = session
-    request = urllib.request.Request(URL, data=json.dumps(payload).encode("utf-8"), headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+    )
+    with OPENER.open(request, timeout=timeout) as response:
         session_id = response.headers.get("Mcp-Session-Id", session)
-        body = response.read().decode("utf-8", errors="replace")
+        encoded = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(encoded) > MAX_RESPONSE_BYTES:
+        raise RuntimeError("AgentDecompile MCP response exceeded the local bound.")
+    body = encoded.decode("utf-8", errors="replace")
     # Streamable HTTP may wrap JSON in SSE ("data: {...}").
     for line in body.splitlines():
         line = line.strip()

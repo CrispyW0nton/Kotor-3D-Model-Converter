@@ -117,6 +117,23 @@ log = logging.getLogger(__name__)
 _SUBMISSION_CACHE_EMPTY = object()
 
 
+def _effective_diffuse_uv_v_flip(node, diffuse_image) -> float:
+    """Return the shader's single effective diffuse V-flip.
+
+    TextureCache normalizes loose raster rows to OpenGL's bottom-up upload
+    order. Native KOTOR/D3D UVs therefore request one shader inversion, while
+    imported DCC/OpenGL UVs explicitly opt out with ``uv_v_flip=False``.
+    Texture provenance may also opt out when its decoded rows already encode a
+    bottom-left-authored loose-atlas profile.
+    """
+
+    node_uses_kotor_uvs = bool(getattr(node, "uv_v_flip", True))
+    texture_needs_kotor_uv_conversion = bool(
+        getattr(diffuse_image, "_gr_gpu_uv_v_flip", True)
+    )
+    return 1.0 if node_uses_kotor_uvs and texture_needs_kotor_uv_conversion else 0.0
+
+
 def _uniform_value_stamp(value):
     """Return an exact, comparison-safe stamp for one uniform value."""
     if np is not None and isinstance(value, np.ndarray):
@@ -3198,10 +3215,7 @@ class GpuRenderer:
                     # 1x4 samples at oblique angles.  Sample the authored mask
                     # directly and let its black edge provide the smooth fade.
                     _configure_lightsaber_blade_sampler(gl_diff)
-                _tex_gpu_v_flip = bool(getattr(diff_img, '_gr_gpu_uv_v_flip', True))
-                _u['u_uv_v_flip'].value = (
-                    1.0 if bool(getattr(node, 'uv_v_flip', True)) and _tex_gpu_v_flip else 0.0
-                )
+                _u['u_uv_v_flip'].value = _effective_diffuse_uv_v_flip(node, diff_img)
 
                 _texture_allowed = bool(self.show_texture and self.show_diffuse_map)
                 _detail_texture_allowed = bool(self.show_texture and _render_mode_int == 0)

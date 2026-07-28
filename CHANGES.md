@@ -9,7 +9,1200 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-28
+
+### [2026-07-28] make application menus content-safe and expand Map Studio's viewport
+
+Owner: LordVaderCW
+
+Task: T2904
+
+Subsystem: Core GUI Display layout engine and Map Studio workbench shell.
+
+Intersects: current Xaria Head Builder/facial-performance, spatial MCP, and
+T2909/Rhen Var payload work already present in the shared `ghost-studio`
+worktree.
+
+GhostStudio now sizes every main and runtime-created context menu from the
+active font, full action labels, shortcut column, icon/check gutter, and
+submenu arrow. The corresponding minimums and spacing are tuneable in every
+packaged XML layout. Text-bearing toolbar buttons also retain their complete
+labels instead of being capped to a clipping-prone fixed width.
+
+Map Studio's side rails now use readable, layout-driven expanded widths but
+remain fully collapsible. **View > Maximize Viewport** (`Ctrl+Space`) hides both
+rails, the upper authoring strips, and lower docks so the editor fills the
+workbench; toggling it again restores the recorded splitter, chrome, and dock
+state. Layout changes made while focused become the restored normal layout.
+
+Affected:
+
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/libtheme/layout_applier.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py`
+- `config/themes/layouts/*.xml`
+- `config/themes/README.md`
+- `knowledge_base/theme_layout_system.md`
+- `tests/test_theme_layout_loading.py`
+- `tests/test_map_studio_level_editor_identity.py`
+- regenerated native GUI Display, Tools, Runtime Host, and root payload
+  manifests
+
+Verification:
+
+- Theme/layout validation: all 6 themes and 9 layouts passed.
+- Focused menu/layout and Map Studio runtime tests: 4 passed, then 2 passed
+  after the readable-rail refinement.
+- Native payload coverage and byte-identity checks: 2 passed.
+- Debug x64 rebuilds passed for Core GUI Display, Core Tools, Runtime Core
+  Host, and the real Native Core Host; the host staged and SHA-verified all
+  18 manifest-owned payload DLLs.
+- Visible Debug-app QA passed in Default, Light/Compact, and Matrix/Wide.
+  The View menu exposed every full label and `Ctrl+Space`; Matrix/Wide measured
+  each popup row at 312 px. Maximize and restore captures proved the viewport,
+  side rails, top strips, and workflow dock change and return in the actual
+  application.
+
+### [2026-07-28] gate Xaria's final cinematic shot and refresh production dependencies
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser encounter packaging and dependency proof.
+
+Added an explicit camera-114 handoff latch to the death-driven teaser
+controller so production dialogue cannot race or bypass the last cinematic
+shot. Refreshed the external dependency contract for the locked nine-line
+DXD_003 story dialogue, seven lesson lines, question-state scripts, and the
+v2 Xaria power pack containing seven lesson-taught base powers plus six
+level-up-only tiers.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `artifacts/xaria_teaser/`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+
+Verification:
+
+- Two clean builds produced matching `xartease.mod` bytes at SHA-256
+  `718072EA3F8B1C386B06A69A876025DC97FBDEB0BF6007BAF84AD46868652E32`.
+- Binary readback retained 55 resources and cameras 110 through 115.
+- Ghost teaser tests: 26 passed.
+- Paired Patch Manager candidate tests: 72 passed.
+- Python compilation and Ruff checks passed.
+- This is offline structural evidence; retail camera and level-up behavior
+  remain unverified.
+
+## 2026-07-27
+
+### [2026-07-27] preserve retail lower-left TGA origin in Head Builder packages
+
+Owner: LordVaderCW
+
+Subsystem: Core IO Head Builder texture packaging.
+
+Xaria's packaged atlas was vertically inverted because the generic PyKotor TGA
+writer changed Pillow's retail-compatible lower-left origin to top-origin.
+Head Builder now delivers Pillow-produced PNG/TGA conversions directly for TGA
+output, preserving the lower-left descriptor, while retaining the existing
+PyKotor path for TPC output. The Core IO embedded copy and payload manifest were
+regenerated from the canonical source.
+
+Affected:
+
+- `src/io/head_builder_package.py`
+- `native/GhostRigger.Core.IO/Python/src/io/head_builder_package.py`
+- `native/GhostRigger.Core.IO/GhostRiggerPythonPayload.json`
+- `tests/test_head_texture_asset.py`
+
+Verification:
+
+- Head texture asset/package tests: 12 passed.
+- Native payload resource-name and Visual Studio inclusion tests: 2 passed.
+- Canonical and Core IO packaged source SHA-256 values match, and both modules
+  passed Python bytecode compilation.
+- The all-project byte-identity test remains blocked only by the unrelated,
+  pre-existing Runtime Core Host `src/__init__.py` mismatch.
+
+### [2026-07-27] bind the Xaria teaser to the verified head and XariaBodyv2 package
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser external-resource contract and deterministic package
+proof.
+
+Intersects: Xaria verified facial-performance head delivery, XariaBodyv2
+character integration, and the Patch Manager transactional encounter stager.
+
+Replaced the teaser builder's retired `p_xariah`/`p_xaria01` dependency with
+the delivered `p_xariah6`/`p_xaria06` facial package, added the required head
+TXI, and moved the global head-row contract from 198 to 199. Regenerated both
+teaser proof documents from Patch Manager candidate `20260727T215514` so the
+encounter now hash-binds the verified head and the XariaBodyv2-derived
+`p_xariabb` body plus the final opaque portrait
+`DF0B6F5A1BD02EF441F6502A91844EE3127A8519DA2393A2F60F810CCB9A0C9D`,
+while preserving its dialogue, camera, recruitment, and three-power showcase
+resources.
+
+The packed `xartease.mod` remained byte-identical at SHA-256
+`DD43597065617A5CA312BB29CB8DB82D18EC83106EA59989F59776E45449D569`.
+Because Xaria's meshes resolve through global appearance row 725 rather than
+being embedded in the module, an installation that already has this module
+digest needs only the latest global Xaria Override/2DA transaction.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `artifacts/xaria_teaser/structural_proof.json`
+- `artifacts/xaria_teaser/xaria_teaser_manifest.json`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+
+Verification:
+
+- Proof-first dependency regression failed against the retired head package
+  and passed after the contract correction.
+- Ghost teaser tests: 25 passed.
+- Patch Manager teaser-stager tests: 33 passed.
+- A complete no-install teaser staging rehearsal accepted all 108 external
+  dependencies with `installed=false` and `install_state=not_requested`.
+- No live game file was installed or replaced.
+
+### [2026-07-27] make Xaria main-window proof captures fail closed
+
+Owner: LordVaderCW
+
+Subsystem: Xaria verified-character visible proof capture.
+
+Intersects: Xaria verified-character viewport integration and its immutable
+authored-UV preview profile.
+
+The Xaria proof matrix now captures the real Qt main-window backing store
+instead of depending on the desktop compositor's native-window snapshot.
+Capture retries are bounded, every frame must meet the visible main-window
+dimensions, and an invalid 1x1 backing store fails immediately without leaving
+a misleading proof image. Each evidence row records the capture method and
+logical window dimensions. Main-window construction can re-index a preloaded
+resource manager, so the proof now republishes the immutable candidate after
+construction and fails unless the attached model, attachment pose owner, and
+viewport layer are exactly `p_xariah6`. The body MDL/MDX/TGA and head
+MDL/MDX/TGA/TXI are hash-pinned through the same manager, and the viewport body
+root must retain identity with the verified `p_xariabb` load.
+
+Xaria's packaged MDX deliberately preserves the source OBJ V rows under the
+retail material contract. Binary reload cannot serialize that provenance, so
+the proof restores the build-specific `xaria_source_preserved_obj_v` hint on
+both the BAS preview and its deep-copied scene submission. A controlled
+ModernGL comparison rejected the generic binary default because it visibly
+fragmented the face, hair, arms, and torso atlas.
+
+Affected:
+
+- `scripts/capture_xaria_verified_character_proof.py`
+- `tests/test_xaria_verified_character_proof.py`
+
+Verification:
+
+- Both focused capture-contract tests passed.
+- A real ModernGL main-window run captured all 28 Xaria animation/view samples
+  at 1500x950, including idle, walk, run, dialogue, combat, and casting.
+- Every sample reports `head_attachment_model=p_xariah6`,
+  `head_pose_owner_model=p_xariah6`, the `S_Female03` inherited supermodel,
+  and zero headhook/root positional delta.
+- The run retained the editor-only
+  `xaria_source_preserved_obj_v` UV profile, verified all seven immutable
+  body/head resource hashes, and made no game or runtime-asset writes.
+
+### [2026-07-27] certify loose-TGA origin and DCC UV behavior in ModernGL
+
+Owner: LordVaderCW
+
+Subsystem: Core Rendering texture decode and ModernGL diffuse UV policy.
+
+Intersects: Xaria verified-character viewport integration, which uses a
+bottom-origin body TGA and a top-origin head TGA.
+
+Added a focused regression proving that Pillow plus `TextureCache` normalize
+equivalent top-origin and bottom-origin TGAs to the same canonical bottom-up GPU
+rows. The test now exercises the renderer's actual effective diffuse UV policy:
+authored DCC nodes with `uv_v_flip=False` apply no shader inversion, while
+native KOTOR UVs apply exactly one inversion. The existing ModernGL decision was
+extracted into a named renderer-owned function without changing behavior.
+
+Affected:
+
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- `native/GhostRigger.Core.Rendering/GhostRiggerPythonPayload.json`
+- `tests/test_tpc_viewport_mip_fast_path.py`
+
+Verification:
+
+- The new regression failed before the renderer policy was exposed, then
+  passed after the extraction.
+- Three focused loose-texture/TGA origin tests passed.
+- The changed renderer module passed Python bytecode compilation.
+
+### [2026-07-27] T3504-T3506 certify Xaria's corrected facial head and portable package
+
+Owner: LordVaderCW
+
+Subsystem: Custom Head Builder semantic facial rigging, dialogue preview,
+binary MDL/MDX readback, texture delivery, and downstream character handoff.
+
+Intersects: Codex task `019f8547-7e43-70a0-a48c-38b38850244f`, which owns
+Xaria's final body integration, clean portrait render, and in-game acceptance.
+
+Rebuilt Xaria from the corrected `XariaHead.obj` as a donor-preserving
+`PFHA04` facial-performance head. The custom face, eyes, lids, teeth, tongue,
+hair, and horns now use the native facial hierarchy and inherited
+`S_Female03` talk animation while the 4K `p_xaria06` texture is registered
+under the material ResRef used by both viewport and evidence renderers.
+
+Dialogue poses are scoped to the attached head so head-local nodes cannot
+drive the body composite. Stopping dialogue now also clears the temporary
+animation bind used by the preview skinning path. Disabled donor render meshes
+keep their static alpha field and serialized alpha controller synchronized;
+binary preflight additionally certifies render state. This removed the last
+candidate/readback mismatch and prevents retired donor components from
+reappearing in game.
+
+The accepted `p_xariah6` binary and a portable, append-only K2 package were
+published under `artifacts/xaria_facial_rebuild/candidate_v7/output/`. The
+package carries MDL, MDX, 4096x4096 TGA/TXI texture delivery, stable
+heads/appearance merge metadata, and a TSLPatcher alternative. It does not
+install into the live game. `XariaBodyv2.obj` was fingerprinted separately for
+the owning character task; that task must finish body animation/smoothing and
+produce the clean portrait before retail integration. Facial Performance mode
+continues to state that enhanced curves require the Custom Animation Patch,
+with native 16-viseme LIP as the fallback.
+
+Affected:
+
+- `src/core/characters/head_facial_transplant.py`
+- `src/io/head_binary_export.py`
+- `scripts/audit_head_facial_performance.py`
+- Core Workflow and Core IO embedded-Python payload copies/manifests
+- Head Builder dialogue controller and GPU skinning preview fixes
+- Focused Head Builder, facial, binary, package, and regression tests
+- `artifacts/xaria_facial_rebuild/candidate_v7/`
+
+Verification:
+
+- The Debug GhostStudio Head Builder visibly rehydrated Xaria, rendered the
+  authored texture, played the full dialogue without body corruption or
+  post-stop collapse, accepted preflight with zero blocking issues, exported
+  the binary, and built the portable package.
+- Exported candidate/readback payload SHA-256 values both equal
+  `12ABD104857F5A0F3187EBB5F7171C0C9BA2BAD334910C0C8697408072C2D570`.
+  MDL SHA-256 is
+  `35E8CDD7D3790F3E8171C82FEE650FBCC8E4FD7BD6EBB238C04E9A70CCA202E2`;
+  MDX SHA-256 is
+  `B188292D04199C57824817150E106485BBEB9DB435385B4FEECC53B8750C2E6A`.
+- The exported head passes all 16 talk slots with 15 active non-neutral
+  shapes. `AH` opens by `0.013214`, `OH` by `0.013879`, and the full
+  7.384-second `xv_intro` LIP/audio pair passes synchronization.
+- Every one of the 177 frames in the binary dialogue proof decoded at
+  512x512; 174 of 176 transitions contained measured mouth-region motion.
+- The package report verified all 14 file hashes, preserved unrelated 2DA
+  rows, appended rather than overwrote records, and contained no absolute
+  developer paths. Its report SHA-256 is
+  `D79DF68F3BC00DF99F49933C29384706F1432748D3C363BC1576EB4169DD05C2`.
+- 18 focused dialogue, transplant, binary, package, and stale-bind tests
+  passed. Core Workflow/Core IO Debug packages built, and their changed
+  payload copies match canonical source hashes.
+- The broad payload-copy test remains blocked only by the unrelated,
+  pre-existing Runtime Core Host `src/__init__.py` mismatch. No live KOTOR
+  file was modified, so retail visual acceptance remains for the downstream
+  character task.
+
+### [2026-07-27] T3108 keep one camera owner alive for Xaria's full combat timeline
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser cinematic ownership and death-gated camera pacing.
+
+The retail schema-10 run invalidated the assumption that a queued
+`ActionPauseConversation` plus a three-second first-node dwell would keep the
+placed-camera dialogue alive. Combat continued after that dialogue had already
+ended, so later camera selections had no owner, and the death cuts occurred
+only 0.20-0.45 seconds after each kill.
+
+Schema 11 replaces that race with one silent, unskippable camera-111 entry. It
+has no replies or links, lasts 30 seconds, and therefore outlives the
+18.40-second maximum combat timeline without pause/resume actions. Camera 111
+receives the same 1.25-second establishing pre-roll as cameras 112 and 113.
+Each confirmed death now holds the outgoing composition for 0.85 seconds, and
+camera 114 holds 2.25 seconds. The final branch explicitly ends the director
+conversation through `k_oei_endconv` before the guarded production-dialogue
+handoff.
+
+The same candidate now declares both textures required by the replacement
+location-native Miststep plume. `fx_xmist1.tga` joins `fx_xmist.tga` in the
+hash-bound external dependency set, preventing the teaser from validating or
+staging an incomplete six-emitter effect.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+
+Verification:
+
+- Focused red tests first rejected schema 10, the linked dialogue shell, and
+  conversation pause/resume routines.
+- Focused implementation tests then passed for schema 11, its single-node
+  dialogue, exact death holds/pre-rolls/final hold, explicit dialogue end, and
+  compiled-script exclusion of action routines 205/206.
+- The coordinated Patch Manager power/VFX and teaser-stager suites passed 45
+  tests; the standalone power-pack suite passed 12 tests.
+- Two clean Ghost builds matched, and the Patch Manager stager rehashed 206
+  live dependencies before installing the exact 1,236,132-byte module at
+  `DD43597065617A5CA312BB29CB8DB82D18EC83106EA59989F59776E45449D569`.
+- Retail visual confirmation of the new camera pacing and both Miststep plumes
+  remains required.
+
+### [2026-07-27] T3108 keep Xaria's combat cameras alive through confirmed deaths
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser cinematic ownership, death-gated camera progression,
+and coordinated Patch Manager validation.
+
+The schema-9 retail capture showed only a brief camera clip because the first
+silent `xt_dlg` entry used delay zero. Its queued conversation pause did not
+take ownership before the blank dialogue link advanced to camera 114. Schema
+10 gives camera 111 an explicit three-second dwell, keeps the director paused
+through the combat timeline, and retains the existing confirmed-death cuts:
+camera 112 after Wraid 1, camera 113 after Wraid 2, and camera 114 after Wraid
+3. The final composition now holds 1.50 seconds before the director resumes.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Patch Manager teaser stager and focused tests
+
+Verification:
+
+- Focused Ghost and Patch Manager tests cover schema 10, dialogue delays
+  `3/1`, confirmed-death camera ordering, and rejection of the superseded
+  zero-delay shell.
+- No module was built or staged and no game file was touched. Retail visual
+  confirmation remains required.
+
+### [2026-07-27] T1701-T2205 Xaria facial-performance Head Builder foundation
+
+Owner: LordVaderCW
+
+Subsystem: Character Studio Head Builder, inherited KOTOR facial playback,
+source-agnostic facial performance, external coefficient adapters, and
+geometry-backed facial QA.
+
+Intersects: the active shared-worktree spatial/MCP payload changes and the
+existing Xaria Custom Head Builder implementation. Canonical sources and
+package ownership were preserved while the affected native payloads were
+regenerated.
+
+Added a distinct **Facial Performance Head** entry that reuses the existing
+Custom Head Builder and visibly states that full facial curves require the
+Custom Animation Patch. The same surface retains a truthful vanilla
+16-viseme LIP fallback and now provides synchronized dialogue-audio/LIP preview
+controls driven by the actual audio playback clock.
+
+Repaired the underlying LIP path so custom heads resolve an inherited `talk`
+animation, use the modern LIP duration field, evaluate the real 16 controller
+slots, interpolate directly between surrounding viseme poses, use the correct
+KOTOR phoneme indices, and submit the evaluated pose to the viewport. Added a
+renderer-neutral multi-source facial clip, ARKit-52/Audio2Face JSON input,
+MediaPipe-compatible coefficient normalization, KOTOR fallback projection,
+and composition points for openFACS/manual edits, NFR retargeting, and a later
+approved learned-deformer layer.
+
+Added model-agnostic facial range and LIP timeline audits plus an evidence
+renderer. Xaria (`p_xariah`) is the production fixture: her actual skinned mouth
+passes 16-pose geometry checks with 15 active non-neutral shapes, `AH` opening
+by `0.015697`, `OH` by `0.012125`, and `MPB` closing by `0.010328`. All ten
+production Xaria dialogue LIPs pass active-shape/timeline validation. The
+18.02-second `xv_sphere` proof contains 432 synchronized video frames and
+audible dialogue; the complete mouth crop changes on all 431 frame
+transitions.
+
+Affected:
+
+- `src/core/animation/facial_performance.py`
+- `src/core/characters/facial_rig_qa.py`
+- `src/adapters/facial/`
+- Core Workflow `character_builder.py` and `head_workflow.py`
+- Core Tools Head Builder controller and Character Builder panel
+- Core GUI Display mode selector, lifecycle route, Head Builder workspace,
+  and Character Builder panel
+- `scripts/audit_head_facial_performance.py`
+- Workflow/Tools/GUI Display native payload manifests and project resources
+- Focused facial-performance, Head Builder, and payload contract tests
+- Theme/layout documentation
+
+Verification:
+
+- 47 focused facial-performance, Head Builder, custom-rigged selector, and
+  native-payload tests passed.
+- Relevant Python sources compiled successfully and all new/changed facial
+  Workflow payload copies matched their canonical source hashes.
+- Core Workflow, Core Tools, and Core GUI Display native Debug packages built
+  successfully; shared-worktree dependencies needed by the real launch were
+  also staged from their current source.
+- The actual `GhostStudio.exe` Debug host visibly showed the four-card mode
+  selector, the **Custom Animation Patch Required** badge, the in-workflow patch
+  warning, and Step 7's **Synchronized dialogue facial preview** controls.
+- The broad byte-identity payload check remains blocked only by an unrelated
+  pre-existing Runtime Core Host `src/__init__.py` package-copy mismatch; the
+  affected facial payload rows were checked independently and matched.
+- This is editor/asset evidence, not retail-game proof. Custom-patch curve
+  export and a final in-game Xaria dialogue acceptance pass remain required.
+
+### [2026-07-27] T3108 pin the Xaria teaser to one prepared runtime snapshot
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser dependency resolution, deterministic proof, and
+closed-game staging handoff.
+
+Ghost Studio can now build `xartease` against an explicit, uninstalled KPM
+candidate by setting `XARIA_CANDIDATE_ROOT` to that staging session's
+`candidates` directory. The builder sources every Xaria-owned loose dependency
+from that one `Override`/`GameRoot` snapshot, validates it against the sibling
+KPM `stage-manifest.json`, and refuses mixed live/candidate files, wrong
+operations, installed manifests, missing records, or hash/size drift. Both
+clean builds must now agree on the complete external dependency evidence as
+well as the packed module digest. The three bundled combat-director wrappers
+are also read exclusively from that selected snapshot, never from the mutable
+power-build work directory.
+
+The coordinated KPM teaser verifier now permits read-only candidate validation
+while KOTOR II is running. Installation still requires the game closed at the
+initial gate and at every transactional revalidation boundary. Incomplete
+transaction recovery now repeats the closed-game check inside the staging lock
+and immediately before each live rollback write.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Patch Manager teaser stager, recovery tests, and Xaria knowledge
+  base
+
+Verification:
+
+- Ghost focused teaser suite: 25 passed; Ruff passed.
+- Coordinated Patch Manager focused suite: 63 passed; Ruff passed.
+- Both clean builds matched 71 prepared file records and retained 15 deferred
+  live/runtime gates.
+- Read-only KPM validation accepted all 86 dependencies while KOTOR II
+  remained open.
+- `xartease.mod`: 1,238,480 bytes, SHA-256
+  `650D7E48E08C5727E97CBC17D8F824B754F3119B520874DEDDEBD8F958B483EF`.
+- Closed-game production session `20260727T101034` installed the exact
+  2,870,408-byte PLCaa candidate and numeric voice/LIP package.
+- Closed-game teaser session `20260727T101102222702` rehashed 201 live
+  dependencies and committed the exact module above. Retail behavior remains
+  pending.
+
+### [2026-07-27] T3108 correct Xaria's retail voice lookup and cinematic anchoring
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser voice/LIP contract, dialogue facial isolation, live
+caster effects, and combat-camera pacing.
+
+The first positive schema-8 retail run reached combat, but the three shots cut
+too quickly, caster effects appeared at Xaria's original position after she
+moved, and the post-combat close-up was silent with a sealed, deforming mouth.
+Frame-by-frame review confirmed that the lips never separated in any speaking
+frame and that the MP4 contained no normal voice signal.
+
+Disassembly of KOTOR II's voice resolver at `0x006CC140` showed that the old
+alphabetic `xar/xv_*` layout could not enter the stock nested StreamVoice
+branch. The corrected build maps all 17 verified Voice Design 1 pairs to
+`997xaria001..997xaria017`, uses `Mod_VO_ID=997`, stores WAVs under
+`StreamVoice/997/xaria`, and stages identically named LIPs. Voiced DLG nodes
+temporarily use neutral facial overlays so the next run isolates phoneme
+motion.
+
+Miststep, Lightning, and Drain now resolve caster-side mist from Xaria's live
+object instead of cached world positions. Lightning and Drain also use retail
+`EffectBeam` with Xaria as the live effector, while their green custom impact
+models remain isolated overlays. The three camera beats and post-combat
+handoff have longer, explicit dwell times while preserving the working
+schema-8 trigger and death progression. A new LocalNumber-21 in-flight latch
+prevents heartbeat/click recovery from replaying a cast during those longer
+holds.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Patch Manager encounter, power, teaser-stager, tests, and Xaria
+  knowledge base
+
+Verification:
+
+- Ghost focused teaser suite: 20 passed.
+- Coordinated Patch Manager suite: 58 passed.
+- PLCaa no-install candidate contains all 17 exact numeric WAV/LIP pairs and
+  passed packed dialogue/readback validation.
+- KOTOR II remained open, so no live file was replaced and no audible/facial
+  runtime success is claimed.
+
+### [2026-07-27] T3108 decouple Xaria's combat from the camera dialogue
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser trigger, cinematic combat controller, retry behavior,
+packed validation, and transactional staging.
+
+The schema-7 retail run could become permanently inert because `xt_begin`
+destroyed its trigger and committed state 1 before its unique terminal camera
+DLG proved it had started. The replacement uses only states 0/1/2, retains the
+trigger through confirmed completion, gives Xaria a conventional
+`Conversation=xaria` plus `ScriptDialogue=xt_click`, and launches Miststep
+synchronously before requesting presentation. A linked two-entry camera shell
+is now presentation-only. Explicit deaths advance the three power beats
+directly; wraid OnDeath scripts are blank; click and heartbeat retry the first
+unfinished beat; the production dialogue handoff is independent of root
+`OnEnd`.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Patch Manager Xaria teaser stager, tests, and knowledge base
+
+Verification:
+
+- Ghost focused suite: 20 passed; Ruff passed.
+- Patch Manager focused stager suite: 32 passed; Ruff passed.
+- Two clean builds matched; 55 packed resources passed readback.
+- Candidate and installed `xartease.mod`: 1,237,017 bytes, SHA-256
+  `B599BBF777DE8250C8E757EA8E264F0FC464AF878490FF507622CECE1AF00E3B`.
+- Closed-game transaction
+  `20260727T014150203208` committed after 201 live dependencies passed rehash
+  validation. Its stage-manifest SHA-256 is
+  `A01EEEDF96206D488643831BB5A2D545E601C77DF4712ADD39F0468D17F03555`.
+- Runtime proof remains pending. No camera, combat, death, voice,
+  recruitment, or cleanup success is claimed by this entry.
+
+## 2026-07-26
+
+### [2026-07-26] T3107 move the Xaria encounter state machine into retail-safe local storage
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser state/proof latching and shared witch-power director
+handoff.
+
+The schema-5 retail test showed cameras 111–114 repeatedly cycling while
+Xaria and the wraids never entered combat. The packed DLG is acyclic, and
+vanilla `303nar/hk50.dlg` proves that an `Entry.Script` can execute
+`CutsceneAttack` during an active cinematic. Packed NCS instead exposed the
+shared boundary defect: the teaser used local Number slots
+`60/61/62/64/66/67/68`, although KOTOR II documents only `12..28`, and stored
+`-2/287/290/291` in byte-sized values limited to `0..255`.
+
+Schema 6 uses target marker 22 and encounter locals 23–28. Failure is positive
+state 99. Miststep, Lightning, and Drain store compact tokens `1/2/3`; their
+real rows `287/290/291` remain only in `ExecuteScript` run vars. Both builders
+now reject unsafe local slots and values before compilation. This closes the
+observed causal chain: beat 1 can read accepted state 1, while heartbeat can no
+longer read an invalid state as zero and restart the otherwise linear DLG.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Patch Manager power builder, PLCaa stager, tests, manifest,
+  README, and Xaria knowledge base
+
+Verification:
+
+- Focused Ghost teaser suite: `20 passed`.
+- Coordinated Patch Manager power/stager suite: `33 passed`.
+- Two clean Ghost builds and package readback: pass, 54 resources.
+- Semantic digest:
+  `cf1af671f70cd6e2d518ab6f5f1966760ffef1785f9ac8218437a73c9ccc76f5`.
+- Candidate `xartease.mod` SHA-256:
+  `89D6832D72F8D83F22287B51FC6A0DD57871BF9CC62F95678BD253A69D0E02B9`.
+- Rebuilt wrapper SHA-256 values:
+  `DDE03EC16FC2E46813E73500251F839BC30E4DDC13859D40C2A8088452E6DC15`,
+  `12F7D40E08BAE376F0FD692D1E941C379287AD53909D2E134488F9C9BF42E49A`,
+  and
+  `2FDDC015E06AA8E17FC84A9A88CBDA03E06EEB0917280A9887C2493855227CC3`.
+- Closed-game transaction `20260726T183613495671` committed the exact
+  schema-6 module and 17 voice files after 201 live dependencies passed
+  validation. Its 59,138-byte stage manifest SHA-256 is
+  `59D94C425CDFAE2919226B102055E1E27468424807AA40C787908C99885208D6`;
+  installed `xartease.mod` exactly matches the candidate hash above.
+- Installed wrapper hashes were independently re-read and match the three
+  corrected candidate hashes above.
+- Runtime proof remains pending; no combat, death, voice, recruitment, or
+  cleanup pass is claimed.
+
+### [2026-07-26] T3106 replace the looping Xaria camera shell with a one-shot cutscene combat director
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser cinematic combat, production power handoff, and
+terminal encounter-state control.
+
+Retail schema 4 proved that the placed cameras worked but the encounter did
+not. Xaria and all three wraids remained in `pause1`/`cpause1`, no spell or
+attack animation ran, no target died, and the failed end/click path restarted
+the same cameras. Observer session
+`20260726-134624-custom-animation-flurry-plcaa` and
+`xaria_schema4_full_encounter.mp4` preserve that failed result. It must not be
+cited as combat proof.
+
+Schema 5 removes ordinary spell actions from the active cinematic DLG. Its
+three entry scripts use KOTOR II's cutscene-safe `CutsceneAttack` with
+animation rows `135/62/62`, while direct row-287/290/291 wrappers invoke the
+same production `KpxApply...` effect boundaries and write local-64 proof only
+after successful application. Every target must be dead and ordered sequence
+proof must equal `7` before `xt_post` can launch production `xaria.dlg`.
+
+The trigger destroys itself when the shared starter accepts the encounter.
+The root, all four empty entries, and all three glue replies are unskippable.
+Failure latches state `-2`; heartbeat cannot retry it, and click reports it
+once without resetting state. This removes both the blocked actor-action
+boundary and the visible repeat loop.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Xaria power-pack wrappers and Patch Manager teaser validation
+
+Verification:
+
+- Focused Ghost tests: `16 passed`.
+- Ruff: clean.
+- Two clean builds and package readback: pass, 54 resources.
+- Semantic digest:
+  `352fe3caedca7e7942c5951fb32d158a109faebb34b2c4c11ef3e1ef49a5bd80`.
+- Candidate SHA-256:
+  `166A87BE5F82F489CDC5E5643D15A5644F41FCBBFE30F3760405566947CCBB73`.
+- Closed-game transaction `20260726T152548505146`: committed after 201
+  live dependency records passed; stage-manifest SHA-256
+  `46BBD92F15224BEEA000FC5962408963B5CCCB8C8C077178EBF0698FAEB6F6A2`.
+- Runtime proof remains pending; no combat, voice, recruitment, or cleanup
+  pass is claimed here.
+
+### [2026-07-26] T3105 give the Xaria silent combat spine vanilla dwell timing and a recoverable retry
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser DLG timing, encounter-state migration, and failed-start
+recovery.
+
+The installed `EB0286305F793BCF1C04C33647FA7E382F2F938550FF594E76A8EBF54BB38445`
+candidate reached the encounter boundary in retail, but the user visibly saw
+only a one-frame camera flicker. No combat followed, and clicking Xaria after
+the failure did nothing. Observer session
+`20260726-115432-custom-animation-flurry-plcaa` showed only two `pause1`
+events approximately 63 ms apart, with no cast or attack animation. This is a
+failed runtime candidate and must not be reused as proof of a working
+encounter.
+
+The private DLG's textless entries had inherited `Delay=-1` while their links
+remained unconditional. With no text, VO, or serialized dwell, retail advanced
+the camera chain in essentially one update before the queued
+`ActionPauseConversation` could take ownership. A second defect made that miss
+sticky: the starter had already latched encounter state `1`, but the recovery
+paths did not accept state `1` or a terminal failure, so both proximity and
+click became no-ops.
+
+Vanilla comparison established the timing contract. K1
+`kas_m24aa_s.rim::kas24_jolee_01.dlg`, SHA-256
+`5086E944855F7452BFD8A01743673CB580F98B23A465DE591F41F32FAE0C0DCA`,
+uses explicit silent-camera delays `5/3/3`. The same-engine K2 control
+`106per.mod::106droid.dlg` uses explicit `3/3` delays on silent
+ActionPauseConversation camera nodes. Comparable blank K2 pause starters are
+also skippable.
+
+The teaser DLG is now `Skippable=1`, uses entry delays `5/4/4/1`, binds
+`xt_b1`, `xt_b2`, and `xt_b3` to the first three entries, and leaves the
+one-second camera-114 bridge scriptless. Root `OnEnd=xt_post` performs the
+death/state gate and only then launches production `xaria.dlg`. The private
+encounter schema was bumped from `2` to `3`, resetting saves that retained the
+old latched state. Rejected handoffs enter explicit failure state `-1`;
+clicking Xaria clears encounter-owned retry locals and invokes the common
+starter again.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Kotor-Patch-Manager teaser validation and durable record
+
+Verification:
+
+- Current source/readback requires `Skippable=1`, delays `5/4/4/1`,
+  scripts `xt_b1/xt_b2/xt_b3/<blank>`, and root `OnEnd=xt_post`.
+- Current schema/readback requires version `3` and the `-1` click-retry path.
+- The closed-game transaction
+  `20260726T124759383864` committed module SHA-256
+  `024E0AE430533A674F5C87953FD803EB76C1FC15EEA8C1699AF03E726D1E2026`
+  after 195 live dependencies passed validation; its manifest still labels
+  runtime proof `not tested in game`.
+- The next retail-visible encounter test is pending. No combat, camera, voice,
+  recruitment, or cleanup pass is claimed by this entry.
+
+### [2026-07-26] T3105 finalize packed factions and the retail voice identifier
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser packed UTC/IFO contracts, independent installed
+readback, and final transactional staging.
+
+Independent review of the installed intermediate candidate found two remaining
+invalid assumptions. Changing factions only at script runtime did not prove
+the packed actors were born with hostile relationships: the private templates
+were still all friendly. The private module also used
+`Mod_VO_ID=xartease`, although the retail voice-folder identifier for this
+module is `xar`.
+
+The final candidate writes packed faction ID `2` for `XT_Xaria` and faction ID
+`1` for `XT_Wraid_1`, `XT_Wraid_2`, and `XT_Wraid_3`; `xt_start` keeps the
+same Friendly 1/Hostile 1 runtime correction as defense in depth. The packed
+IFO now stores `Mod_VO_ID=xar`, matching module folder `xar`, dialogue ResRef
+`xt_dlg`, and runtime voice path `StreamVoice/xar/xt_dlg`. The exact
+`xv_intro` and `xv_name` DLG bindings and WAV bytes are unchanged.
+
+An independent readback of the installed MOD passed every final boundary:
+packed factions `2/1/1/1`; private Xaria's blank Conversation, `xt_hb`
+heartbeat, appearance 725, portrait 64, and class 17; `xt_intro` OnEnter
+`xt_start` with local geometry center `[0, 0, 0.0069395]`; cameras 110–115;
+three silent combat entries followed by voiced `xv_intro`/`xv_name`; director
+and impact scripts for rows 287/290/291 carrying the local-64 proof; and all 11
+exact external model, texture, LIP, and WAV dependencies.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Kotor-Patch-Manager teaser validation and staging tests
+- Generated, ignored evidence under `artifacts/xaria_teaser/`
+
+Verification:
+
+- Ghost focused tests: 25 passed.
+- Kotor-Patch-Manager focused tests: 18 passed.
+- Ruff: clean.
+- Two clean 47-resource builds matched at semantic digest
+  `0b491cf00f2f5e27e7cd5822ccfc9fcc56186336dd18e9e8c1d7e4b744c2c23e`.
+- Final `xartease.mod`: 1,230,088 bytes, SHA-256
+  `19867F9802FDE345B4E0C26CD381CF9D4B822994C25C8DE5EF4B90EE292CDB22`.
+- Final structural proof: 46,083 bytes, SHA-256
+  `A156E176DAE90FBCAD587DDE53A503A41085B656044FFAB7D6136996C40DEB92`.
+- Final teaser manifest: 47,210 bytes, SHA-256
+  `EA8FC85B33511D8541EF38E97DE3FA557C9A0B185110A0F7F97861F1824162D1`.
+- Closed-game session `20260726T081513607762` committed the exact module and
+  two runtime WAVs after live dependency validation passed. Its 14,845-byte
+  stage manifest has SHA-256
+  `CFD9B57B367D3C4E6AFD95B5E53D656141352F114F7FA25FC055C1A0186097D9`.
+- The superseded `AE9F3E64...` module was preserved as the verified
+  pre-install backup.
+- Structural and installation proof is complete. Retail-visible combat,
+  camera, effects, animation, hair, eyes, and audible voice playback remain
+  pending user confirmation.
+
+### [2026-07-26] T3105 harden the Xaria teaser trigger, combat proof, and voiced dialogue (superseded intermediate)
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser trigger coordinates, private combat isolation, custom
+power proof, Voice Design 1 lookup, and deterministic package validation.
+
+Superseded evidence note: this entry preserves the intermediate
+`AE9F3E64...` candidate and session `20260726T074511029815`. Its all-friendly
+packed UTCs and `Mod_VO_ID=xartease` were invalid assumptions corrected by the
+final entry above. None of its hashes are current.
+
+The second retail failure exposed four independent assumptions that the prior
+Jolee-style correction had not validated. Odyssey stores each GIT trigger's
+`Geometry` as offsets local to its `Position`; the encounter vertices had been
+authored in world coordinates and were therefore translated a second time.
+The private Xaria and wraid clones also inherited the same faction, so hostile
+target checks rejected the scripted powers. The two spoken DLG entries had no
+voice bindings, and production voice files under `StreamVoice/plc/xaria` did
+not satisfy the private module's `xartease`/`xt_dlg` lookup.
+
+The encounter and exit triggers now use audited local vertices and package
+readback proves both their local and derived world centers. `xt_start` changes
+private Xaria to Friendly 1 and all three wraids to Hostile 1 before queuing
+combat. Each target is prepared at one protected hit point; its beat removes
+that protection and requires both a real death and the matching successful
+power-impact marker in Xaria local number 64 (`287`, `290`, then `291`) before
+the DLG may advance. A failed or timed-out beat follows `xt_gate` and cannot
+reach the spoken lines. Private Xaria's Conversation field is blank, leaving
+the invisible director as the only valid DLG owner and removing the
+manual-click bypass.
+
+The two post-combat entries now bind Voice Design 1 ResRefs `xv_intro` and
+`xv_name` with exact text, speaker `XT_Xaria`, empty `Sound`,
+`SoundExists=1`, and no plot XP. The module exports `Mod_VO_ID=xartease`; the
+retail lookup is therefore `StreamVoice/xar/xt_dlg/<resref>.wav`. The
+transactional Patch Manager stage copies the two hash-bound production WAVs
+from `StreamVoice/plc/xaria` to those exact runtime destinations together with
+the module.
+
+That intermediate stage initially rejected otherwise identical dependency evidence
+because one manifest spelled SHA-256 values in lowercase while the local file
+recorder used uppercase. Hash parsing and comparison now normalize hexadecimal
+case while still requiring exactly 64 valid hex characters. The regression
+fixture deliberately retains lowercase hashes and proves that case-only
+spelling cannot fail validation or weaken byte-identity checks.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Coordinated Kotor-Patch-Manager teaser stager, power-pack, and recovery tests
+- Generated, ignored evidence under `artifacts/xaria_teaser/`
+
+Superseded intermediate verification:
+
+- Ghost focused teaser suite: 13 passed.
+- Two clean 47-resource builds matched at semantic digest
+  `59b3a1a84a0082bfdca20f2411cf210aed15c1e4cb6e83b9f4f1ca4734da2ff2`.
+- Candidate `xartease.mod`: 1,230,093 bytes, SHA-256
+  `AE9F3E64B7AD238DEF469D147DDFBDDB0CE61DCC74DABB84ACD3909CA4E5FAB2`.
+- Structural proof SHA-256:
+  `EA62DFCAB7F401A60B93B1DBD48F3236F73FA6FC1CAC32A48F94EE25722AFF00`.
+- Teaser manifest SHA-256:
+  `AC485B4439646F6D12A4FD8CA1495E2C8DFEA33FD5A88BE9CAC1596718185542`.
+- Binary readback proved local trigger geometry, six fixed cameras, the blank
+  private-Xaria Conversation field, exact IFO/DLG voice bindings, fourteen
+  private resources, valid NCS headers, and the fail-closed combat graph.
+- Closed-game stage session `20260726T074511029815` committed the exact module
+  and two exact runtime WAV copies after 195 live dependencies passed
+  validation.
+- That exact intermediate installation was proven, but its packed faction and
+  voice-identifier contracts were superseded by the final entry above. Retail
+  combat, audible dialogue, camera framing, animation, hair, effects, and eye
+  placement remain pending user-visible proof.
+
 ## 2026-07-25
+
+### [2026-07-25] T2309 add the authenticated Ghost Studio spatial MCP boundary
+
+Owner: LordVaderCW
+
+Intersects: `ghost-studio` branch Map Studio work and T2906 transform-contract
+work.
+
+Subsystem: Core Automation IPC/MCP, Core Scene spatial evidence, GUI Display
+viewport callbacks, and MCPStudio integration.
+
+Added a narrow, standard-library stdio MCP adapter with four approved tools for
+health, spatial snapshots, captures, and evidence gaps. Ghost Studio now
+publishes an expiring loopback-session descriptor only after binding, signs
+requests with HMAC, rejects replay and stale requests, removes only descriptors
+it owns, and stores session/capture artifacts with owner-and-SYSTEM-only Windows
+ACLs. Spatial snapshots carry stable IDs, coordinate/units metadata, pivots,
+transform semantics, scene revisions, and explicit observed-versus-inferred
+evidence.
+
+The Windows ACL path uses owner/access-only security-descriptor updates through
+`DirectoryInfo`/`FileInfo`, so an ordinary desktop process does not require the
+`SeSecurityPrivilege` audit privilege. Legacy IPC servers remain unchanged
+unless they explicitly opt into the spatial session.
+
+Affected:
+
+- `native/GhostRigger.Core.Automation/Python/src/ipc/spatial_auth.py`
+- `native/GhostRigger.Core.Automation/Python/src/ipc/server.py`
+- `native/GhostRigger.Core.Automation/Python/src/ghoststudio_spatial_mcp/`
+- `native/GhostRigger.Core.Scene/Python/src/core/scene/spatial_snapshot.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py`
+- `scripts/mcp/start_ghoststudio_spatial_stdio.py`
+- Focused spatial adapter, lifecycle, storage, and live-loopback tests
+- Automation, Scene, and GUI Display embedded-Python payload manifests
+
+Verification:
+
+- Real Windows private-descriptor, HMAC loopback, stdio health, and spatial
+  snapshot integration: 1 passed.
+- Spatial storage, protocol, lifecycle, adapter, and secret-hygiene regressions:
+  41 passed.
+- Focused native payload contracts: 3 passed.
+- Core Automation payload: 46 files with exact SHA-256 and RC resource entries.
+- Changed Python modules and launchers compiled successfully.
+- Visible Debug-application startup remains a release gate because no active
+  Visual Studio/GhostRigger Debug instance was available during this run.
+
+### [2026-07-25] remove embedded Ghidra bridge credentials
+
+Owner: LordVaderCW
+
+Subsystem: local reverse-engineering helper scripts and handoff documentation.
+
+Removed a tracked AgentDecompile endpoint and password from helper scripts and
+redacted the historical handoff. The scripts now require explicit environment
+configuration, accept only local/private/loopback endpoints, reject URL
+credentials, queries, and fragments, disable proxies and redirects, and bound
+responses. No private course, book, transcript, or scene data is sent to an
+external service.
+
+Affected:
+
+- `scripts/agdec_query.py`
+- `scripts/kotor_live_warp_plcaa.py`
+- `handoff/dathomir_rancor_render_crash_handoff.md`
+- `tests/test_secret_hygiene.py`
+
+Verification:
+
+- Secret-hygiene and local-configuration regressions passed as part of the
+  41-test spatial/security run.
+- Both helper scripts compiled successfully.
+
+### [2026-07-25] T2909 complete the Rhen Var landing-zone kit and alpine vista proof
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Rhen Var terrain-kit import, landed-vehicle staging,
+authored WOK readiness, runtime texture packaging, spatial level design, and
+style-aware skybox authoring.
+
+Replaced the supplied Rhen Var assets' blanket zero-face WOK policy with an
+explicit collision contract. Manifest-declared floors and stair ramps now
+receive small authored walkable WOKs; genuinely nonblocking dressing remains
+visual-only; and solid pieces that require subtraction from the host room
+remain visibly previewable but block game export until collision is authored.
+This prevents decorative canyon walls and buildings from being silently
+treated as collision proof.
+
+Added backward-compatible exact OBJ-material texture mappings and runtime
+packaging for every referenced TGA while retaining the legacy single-texture
+fallback. Packaged the permission-tracked Citadel, Colony, and Temple source
+sets as 20 imported assets within a 40-piece kit, with author and source-mod
+provenance preserved per asset.
+
+Added the retail K2 `v_ehawk` as a movable **Vehicles & Landing Craft** browser
+entry. The model resolves from the user's game installation and packages no
+retail source bytes. Rebuilt the deterministic first-area proof around an
+arrival-compression-to-temple-release path: the landed Hawk establishes the
+narrative origin, fortified settlement silhouettes frame the perimeter, paired
+statues mark the temple threshold, and a tomb plinth terminates the route.
+
+Created the Rhen Var alpine sky from Andreas Mischok's CC0 **Lago d'Isola**
+4K HDRI. The source HDR is hash-verified but not distributed; five 1024-pixel
+KOTOR cube faces are packaged with ACES tone mapping, measured exposure, and a
+longitude offset that places the mountain vista behind the temple approach.
+Telos `261TEL` remains the polar lighting and atmosphere reference rather than
+the architecture or sky-texture source.
+
+Affected:
+
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_terrain_kit.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_terrain_kit.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py`
+- `src/core/modules/authored_skybox.py` and matching Scene/Tools payload copies
+- `assets/map_studio/terrain_kits/rhen_var/`
+- `scripts/build_rhen_var_asset_pack.py`
+- `scripts/build_rhen_var_skybox.py`
+- `scripts/build_rhen_var_landing_zone_proof.py`
+- `tests/test_rhen_var_build_kit.py`
+- `tests/test_authored_skybox.py`
+
+Verification:
+
+- Rhen Var focused suite: 6 passed.
+- Deterministic proof: 3 separate playable rooms, 2 zero-gap reciprocal
+  portals, 18 combined walkable faces, movable landed Hawk plus 7 authorized
+  environment placements, and no route-clearance issues.
+- Headless PIE traversed the full 62-metre route and observed door-open,
+  door-close, and destination-reached events.
+- Strict K2 export produced a `.mod`, packaged successfully, and passed package
+  readback verification with no blockers.
+- Asset pack validation: 40 meshes, 56 packaged textures including 5 CC0
+  skybox faces, exact texture hashes, and complete permission provenance.
+
+### [2026-07-25] T3105 correct the Xaria teaser's Jolee-style combat cameras
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser encounter sequencing, fixed-camera encoding, stock-room
+lighting, and deterministic retail-candidate validation.
+
+Replaced the failed time-driven teaser director with the structure used by
+KOTOR I's Jolee encounter. A stock invisible placeable now owns one
+unskippable DLG whose first three entries are silent combat nodes. Cameras
+111–113 activate with Miststep, Ichor Lightning, and Ichor Drain; each node
+pauses the conversation and cannot resume until its specific wraid is dead.
+The first spoken Xaria close-up is separately gated on all three deaths. The
+heartbeat watchdog can retry only the current in-flight beat and cannot advance
+state, begin a later power, or start dialogue on elapsed time. Corrected the
+reply list indices that caused the first failed build to loop its dialogue.
+
+Corrected fixed-camera encoding from conventional `x,y,z,w` to Odyssey GFF
+`w,x,y,z`, including the static-camera minus-90-degree yaw basis and
+degree-valued pitch derived from camera height and target elevation.
+
+The failed green/black retail view was a separate lighting defect. Environment
+Kit placement had stripped all source lightmap names and secondary UVs, and
+the authored viewport lights were not runtime MDL nodes. The candidate now
+reattaches only the eight validated stock `402dxna_lm0` channels after proving
+surface identity and vertex-count parity. Exported MDL/MDX readback rejects a
+missing lightmap, incomplete UV2 channel, wrong fixed camera, missing invisible
+director, or altered dialogue graph.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Generated, ignored evidence under `artifacts/xaria_teaser/`
+
+Verification:
+
+- All 11 focused teaser tests passed.
+- All six rewritten director NSS sources compile to valid K2 `NCS V1.0`.
+- Two clean builds match at 46-resource semantic digest
+  `f42dcd50cc67cf6169d815e6525f5ce8c49d0b963bf76145a12a83d9d1315529`.
+- Candidate `xartease.mod` SHA-256:
+  `a8a5849349ff0778f37f64d240a765e29fc4c63d2596de82109ada2f22ce32a2`.
+- Binary readback proved cameras 110–115 at their exact orientations/pitches,
+  one `plc_invisible` director, the non-looping five-entry/five-reply DLG,
+  three silent combat nodes, two post-combat nodes, and all eight stock
+  lightmapped surfaces with complete UV2.
+- KPM's nine transactional teaser-stager tests passed, and its read-only
+  candidate validation accepted the exact module/proof/manifest contract.
+  Retail behavior remains pending the next visible game run.
+
+### [2026-07-25] T3105 build the independent Xaria cinematic teaser grove
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio KOTOR II environment-kit authoring, spatial design,
+cinematic camera markers, gameplay placement, transitions, and module
+export/readback.
+
+Added a deterministic `xartease` candidate builder for a compact, moody Dxun
+grove that remains separate from the `plcaa` recruitment regression fixture.
+The layout imports the verified `402dxna` room and stock WOK, adds eight
+KOTOR-II-only visual forest pieces with no collision, applies custom green
+forest fog/lighting, and stores a purpose-led four-zone spatial plan. The entry
+route, showcase clearing, and stock-Dxun exit are explicit and reproducible.
+
+The encounter clearing reserves three unobstructed, camera-separated beats:
+Miststep: Ambush behind Wraid 1, Ichor Lightning against Wraid 2, and Ichor
+Drain against Wraid 3. Six GIT camera markers cover the arrival reveal, all
+three powers, Xaria's facial-animation close-up, and the dialogue reverse.
+The exit trigger links to stock `402dxn`/`From_401DXN`; its threshold triangles
+are deliberately painted WOK surface 18 so transition intent survives export.
+The encounter now uses 13 module-private `xt_*` UTC/UTT/UTI/DLG/NCS resources
+and an exact 287 → 290 → 291 director chain. It does not use production
+`KPM_XARIA_STATE`, recruitment calls, or `xar_*`/`kxar_*` runtime resources.
+The candidate is explicitly non-standalone: Xaria's body/head/portrait files,
+appearance/heads/portraits/classes/spells rows, and both runtime patches remain
+external dependencies with build-time evidence and final-staging gates.
+
+Restored canonical source ownership for
+`src/core/modules/map_studio_spatial_design.py` from the identical Scene/Tools
+native payload copies. Package path bridges now allow a plain source import
+without pytest/conftest injection, while native Scene and Tools payload copies
+remain byte-identical and manifested.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- `.gitignore`
+- Generated, ignored evidence under `artifacts/xaria_teaser/`
+
+Verification:
+
+- Eight focused recipe tests passed: K2-only provenance, independent module
+  identity, purposeful route-safe spatial design, effect/shot coverage, the
+  three ordered combat lanes, production-state isolation, exact
+  non-standalone dependencies, plain canonical-source import, and exact
+  source/payload/manifest identity.
+- Two clean builds produced the identical 46-resource semantic digest
+  `f68ff8a0ce410afa52335e1e4c8ae0727734e08319e893569481a7ad19efa616`;
+  `xartease.mod` SHA-256 is
+  `8dc4410e01b78eed7e7d69277a9bfa0cf05b7afc492f89636c369d35c424ceb7`.
+- MOD package readback parsed ARE/GIT/IFO/PTH, nine WOKs, four required
+  creature resrefs, both triggers, camera IDs 110–115, all 13 private
+  resources, and all six valid NCS headers; no forbidden production encounter
+  resource was present.
+- PIE reached the hero clearing from the lower entry, then reached the exit;
+  the 360-vertex/538-face combined WOK had no blocking issue.
+- Structural blueprint and three-beat storyboard were visually inspected.
+  Retail KOTOR capture remains an explicit manual gate; the builder does not
+  install or stage the candidate.
+- The canonical spatial-design file and both native payload copies are
+  byte-identical at SHA-256
+  `fd3b08409c625a8849e2de73476f62901ef70709c23d3e01368085327d9c4423`.
+  Targeted Scene/Tools manifest rows were refreshed. The full payload generator
+  remains blocked by unrelated dirty Rhen Var `authored_skybox.py` drift, which
+  was deliberately preserved instead of normalized.
+
+### [2026-07-25] T2909 enlarge, embed, and recolor the Shadowlands tree transition
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Shadowlands transition fit, organic wall recesses,
+texture/UV preservation, runtime resources, and PIE traversal.
+
+Raised the automatic Shadowlands tree-transition fit from 5.60 m to 6.30 m so
+its trunks read at the same substantial scale as the surrounding retail forest.
+The transition now embeds 0.46 m into the ground rather than resting above the
+terrain, and the authored berm uses the measured enlarged recess height and
+width. The berm strip splitter now treats the supplied facade's full measured
+height as a topology breakpoint, preventing a sloped wall strip from bridging
+across the taller opening.
+
+Added a warm brown/olive texture variant for the transition. The recolor keeps
+the original 2048-by-2048 atlas, alpha channel, UV islands, and texel placement
+unchanged, while removing the conspicuous teal cast so the roots blend with the
+Shadowlands mud and bark palette. The original texture remains available
+unchanged.
+
+Affected:
+
+- `assets/map_studio/terrain_kits/cave_portals/gr_shadwarm.tga`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_terrain_kit.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py`
+- Matching `GhostRigger.Core.Tools` payload-owned module copies
+- `tests/test_authored_room_operations.py`
+
+Verification:
+
+- The focused transition contract test passed, including the 6.30 m scale,
+  0.46 m embed, warm runtime texture, UV/normal preservation, and unobstructed
+  visible wall recess.
+- The three-room Shadowlands structural proof passed both reciprocal
+  traversals, export/readback, all three WOK outputs, 3.40 m by 2.90 m minimum
+  transition clearance, and 9,590 preserved transition faces.
+- The warm atlas retained identical dimensions and alpha with a 0.9992
+  luminance-structure correlation to the source.
+- After regenerating, rebuilding, and staging the Debug x64 payloads, the real
+  Map Studio PIE proof passed with no blockers. The player moved 4.53 m through
+  the transition; the runtime sustained about 47 viewport FPS with 21 draw
+  calls, and the installed capture showed the larger roots embedded into the
+  warm earthen berm.
 
 ### [2026-07-25] T2909 trim, align, and tile Shadowlands transition tunnels
 
@@ -26561,3 +27754,12 @@ Roadmap:
   Verification: `pytest tests/test_joint_dot_overlay.py::test_t403_thumbnail_visibility_is_opt_in -q`; `python -m compileall -q src\gui\qt_unreal_animator.py src\gui\qt_main_window.py src\gui\qt_viewport.py`; imported `QtUnrealAnimatorWindow` and `QtGhostRiggerMainWindow` with `QT_QPA_PLATFORM=offscreen`.
 - Added `CHANGES.md` as the project-level record for completed fixes and changes.
 - Updated `AGENTS.md` to require changelog updates after successful work.
+- Rebuilt the Xaria `xartease` teaser proof against the exact live,
+  test-unlocked PLCaa dependency package after the transactional installer
+  correctly rejected the older influence-gated snapshot. Two clean builds
+  matched, the 26-test teaser suite plus compilation and Ruff passed, and
+  Patch Manager committed the hash-bound module after validating 249 live
+  dependencies.
+  Owner: LordVaderCW.
+  Affected areas: `artifacts/xaria_teaser/`,
+  `docs/knowledgebase/xaria_teaser_map_workflow.md`.

@@ -129,6 +129,7 @@ PYTHON_PAYLOAD_CORE_SCENE_SCENE_MANIFEST RCDATA "Python/src/core/scene/scene_man
 PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT RCDATA "Python/src/core/scene/scene_object.py"
 PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT_INSTANCE RCDATA "Python/src/core/scene/scene_object_instance.py"
 PYTHON_PAYLOAD_CORE_SCENE_SCENE_RESOURCE_REF RCDATA "Python/src/core/scene/scene_resource_ref.py"
+PYTHON_PAYLOAD_CORE_SCENE_SPATIAL_SNAPSHOT RCDATA "Python/src/core/scene/spatial_snapshot.py"
 PYTHON_PAYLOAD_CORE_SCENE_VIS_EDITOR RCDATA "Python/src/core/scene/vis_editor.py"
 PYTHON_PAYLOAD_CORE_SKELETON_INIT RCDATA "Python/src/core/skeleton/__init__.py"
 PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER RCDATA "Python/src/core/skeleton/skeleton_builder.py"

@@ -18,6 +18,7 @@ from typing import Any, Mapping
 MAX_HEAD_TEXTURE_BYTES = 64 * 1024 * 1024
 MAX_TXI_BYTES = 64 * 1024
 HEAD_TEXTURE_FORMATS = frozenset({"TGA", "TPC"})
+HEAD_TEXTURE_SOURCE_FORMATS = frozenset({"PNG", "TGA", "TPC"})
 HEAD_TEXTURE_ALPHA_MODES = frozenset(
     {"opaque", "blend", "punchthrough"}
 )
@@ -54,7 +55,7 @@ class HeadTextureAsset:
     @property
     def accepted(self) -> bool:
         return (
-            self.source_format in HEAD_TEXTURE_FORMATS
+            self.source_format in HEAD_TEXTURE_SOURCE_FORMATS
             and self.width > 0
             and self.height > 0
             and self.power_of_two
@@ -185,14 +186,14 @@ def inspect_head_texture(
     txi_path: str | Path | None = None,
     maximum_bytes: int = MAX_HEAD_TEXTURE_BYTES,
 ) -> HeadTextureAsset:
-    """Fingerprint and decode TGA/TPC source bytes without renderer state."""
+    """Fingerprint and decode PNG/TGA/TPC source bytes without renderer state."""
 
     source = Path(path).expanduser().resolve()
     if not source.is_file():
         raise HeadTextureError(f"Head texture does not exist: {source}")
     source_format = source.suffix.lstrip(".").upper()
-    if source_format not in HEAD_TEXTURE_FORMATS:
-        raise HeadTextureError("Head textures must be TGA or TPC")
+    if source_format not in HEAD_TEXTURE_SOURCE_FORMATS:
+        raise HeadTextureError("Head texture sources must be PNG, TGA, or TPC")
     size = source.stat().st_size
     if size <= 0 or size > int(maximum_bytes):
         raise HeadTextureError(
@@ -200,7 +201,16 @@ def inspect_head_texture(
         )
     data = source.read_bytes()
     source_sha = hashlib.sha256(data).hexdigest()
-    if source_format == "TGA":
+    if source_format == "PNG":
+        (
+            width,
+            height,
+            mipmaps,
+            pixel_format,
+            rgba,
+            embedded_txi,
+        ) = _decode_png(data)
+    elif source_format == "TGA":
         (
             width,
             height,
@@ -359,6 +369,31 @@ def _decode_tga(
         raise HeadTextureError(f"Unable to decode TGA texture: {exc}") from exc
 
 
+def _decode_png(
+    data: bytes,
+) -> tuple[int, int, int, str, bytes, str]:
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(data)) as image:
+            if str(image.format or "").upper() != "PNG":
+                raise HeadTextureError("The .png file is not a PNG image")
+            rgba_image = image.convert("RGBA")
+            rgba = rgba_image.tobytes()
+            return (
+                int(rgba_image.width),
+                int(rgba_image.height),
+                1,
+                "RGBA8",
+                rgba,
+                "",
+            )
+    except HeadTextureError:
+        raise
+    except Exception as exc:
+        raise HeadTextureError(f"Unable to decode PNG texture: {exc}") from exc
+
+
 def _decode_tpc(
     data: bytes,
 ) -> tuple[int, int, int, str, bytes, str]:
@@ -433,6 +468,7 @@ def _power_of_two(value: int) -> bool:
 __all__ = [
     "HEAD_TEXTURE_ALPHA_MODES",
     "HEAD_TEXTURE_FORMATS",
+    "HEAD_TEXTURE_SOURCE_FORMATS",
     "HEAD_TXI_DELIVERY",
     "HeadTextureAsset",
     "HeadTextureError",

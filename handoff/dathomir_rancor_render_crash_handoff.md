@@ -142,13 +142,13 @@ the deployed model passes gates for node+8==0, skin controllers present, uv_dir_
 
 ```
 $env:GHOSTRIGGER_ROOT="C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Ghost-Studio"
-$env:AGENTDECOMPILE_MCP_SERVER_URL="http://170.9.241.140:8080/mcp/"
-$env:AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST="170.9.241.140"
+$env:AGENTDECOMPILE_MCP_SERVER_URL="<reviewed local MCP endpoint>"
+$env:AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST="<reviewed local Ghidra host>"
 $env:AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT="13100"
 $env:AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY="Odyssey"
 $env:AGENTDECOMPILE_GHIDRA_USERNAME="OpenKotOR"
-$env:AGENTDECOMPILE_GHIDRA_PASSWORD="revanlives"
-$env:AGENTDECOMPILE_MCP_HEADERS_JSON='{"User-Agent":"PyKotorAgent/1.0","X-Agent-Version":"1.0","X-Agent-Server-Username":"OpenKotOR","X-Agent-Server-Password":"revanlives","X-Ghidra-Repository":"Odyssey","X-Agent-Server-Repository":"Odyssey"}'
+$env:AGENTDECOMPILE_GHIDRA_PASSWORD="<load from a private local secret store>"
+$env:AGENTDECOMPILE_MCP_HEADERS_JSON="<load the complete authenticated header JSON from a private local secret store; never commit it>"
 $env:AGENTDECOMPILE_K2_STEAM_PROGRAM_PATH="/TSL/k2_win_steam_aspyr_swkotor2.exe"
 ```
 

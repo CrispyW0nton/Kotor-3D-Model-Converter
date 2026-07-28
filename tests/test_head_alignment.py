@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from src.math.head_alignment import (
@@ -169,6 +170,34 @@ def test_axis_conversion_is_explicit_and_proper():
         source_axis_to_imported_matrix("please_guess")
     with pytest.raises(HeadAlignmentError, match="positive"):
         source_axis_to_imported_matrix("kotor_z_up", unit_scale_to_kotor=math.nan)
+
+
+def test_tripo_y_up_z_forward_axis_is_a_proper_kotor_rotation():
+    matrix = source_axis_to_imported_matrix(
+        "tripo_y_up_z_forward",
+        unit_scale_to_kotor=2.0,
+    )
+
+    assert transform_point(matrix, (1.0, 2.0, 3.0)) == pytest.approx(
+        (-2.0, 6.0, 4.0)
+    )
+    assert np.linalg.det(np.asarray(matrix, dtype=float)[:3, :3]) == (
+        pytest.approx(8.0)
+    )
+
+
+def test_maya_y_up_x_forward_axis_is_a_proper_kotor_rotation():
+    matrix = source_axis_to_imported_matrix(
+        "maya_y_up_x_forward",
+        unit_scale_to_kotor=0.01,
+    )
+
+    assert transform_point(matrix, (1.0, 2.0, 3.0)) == pytest.approx(
+        (0.03, 0.01, 0.02)
+    )
+    assert np.linalg.det(np.asarray(matrix, dtype=float)[:3, :3]) == (
+        pytest.approx(0.000001)
+    )
 
 
 def test_saved_alignment_fingerprint_rejects_matrix_drift():

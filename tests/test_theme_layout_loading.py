@@ -8,7 +8,7 @@ import pytest
 
 from src.gui.libtheme.layout_loader import LayoutLoader
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
-from src.gui.libtheme.layout_applier import LayoutApplier, button_mode_to_toolbutton_style
+from src.gui.libtheme.layout_applier import LayoutApplier, apply_menu_layout, button_mode_to_toolbutton_style
 from src.gui.libtheme.layout_model import ToolbarLayout
 from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
 from src.gui.libtheme.style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, FALLBACK_STYLES, VALID_BUTTON_MODES
@@ -526,7 +526,22 @@ def test_native_theme_normalizes_stale_matrix_palette_fallbacks(tmp_path: Path) 
 
 def test_required_layout_metrics_resolve_for_all_packaged_layouts() -> None:
     layouts = LayoutLoader().load_dir(ROOT / "config" / "themes" / "layouts")
-    required_spacing = {"margin", "panelSpacing", "toolbarSpacing", "splitterHandleWidth", "inputHeight", "tabHeight", "tableRowHeight", "treeRowHeight"}
+    required_spacing = {
+        "margin",
+        "panelSpacing",
+        "toolbarSpacing",
+        "splitterHandleWidth",
+        "inputHeight",
+        "tabHeight",
+        "tableRowHeight",
+        "treeRowHeight",
+        "menuBarHeight",
+        "menuMinimumWidth",
+        "menuHorizontalPadding",
+        "menuShortcutGap",
+        "menuIndicatorWidth",
+        "menuSubmenuArrowWidth",
+    }
 
     for layout in layouts.values():
         assert required_spacing.issubset(layout.spacing), layout.id
@@ -653,10 +668,54 @@ def test_toolbar_button_mode_override_controls_command_buttons() -> None:
         assert button.text() == "Log"
         assert button.iconSize() == QtCore.QSize(13, 13)
         assert button.font().pointSize() <= 8
-        assert 34 <= button.minimumWidth() <= 118
+        assert button.minimumWidth() >= button.fontMetrics().horizontalAdvance("Log") + button.iconSize().width() + 24
     finally:
         action.deleteLater()
         container.deleteLater()
+        app.processEvents()
+
+
+def test_menu_layout_keeps_long_labels_shortcuts_and_submenus_visible() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    layout = LayoutLoader().load_file(ROOT / "config" / "themes" / "layouts" / "compact.xml")
+    assert layout is not None
+    window = QtWidgets.QMainWindow()
+    menu = window.menuBar().addMenu("Tools")
+    action = menu.addAction("Make All Stock Rooms Editable")
+    action.setCheckable(True)
+    action.setShortcut(QtGui.QKeySequence("Ctrl+Shift+E"))
+    submenu = menu.addMenu("Advanced Authoring Commands")
+    submenu.addAction("Run")
+    try:
+        apply_menu_layout(layout, window)
+        expected = (
+            menu.fontMetrics().horizontalAdvance("Make All Stock Rooms Editable")
+            + menu.fontMetrics().horizontalAdvance("Ctrl+Shift+E")
+            + layout.spacing_value("menuShortcutGap")
+            + layout.spacing_value("menuIndicatorWidth")
+            + layout.spacing_value("menuSubmenuArrowWidth")
+            + (layout.spacing_value("menuHorizontalPadding") * 2)
+        )
+        assert menu.minimumWidth() >= expected
+        assert menu.maximumWidth() == 16777215
+        assert window.menuBar().minimumHeight() == layout.spacing_value("menuBarHeight")
+
+        runtime_menu = QtWidgets.QMenu(window)
+        runtime_menu.addAction("Runtime Context Command With A Complete Label")
+        runtime_menu.show()
+        app.processEvents()
+        assert runtime_menu.minimumWidth() >= layout.spacing_value("menuMinimumWidth")
+        assert runtime_menu.minimumWidth() >= runtime_menu.fontMetrics().horizontalAdvance(
+            "Runtime Context Command With A Complete Label"
+        )
+        runtime_menu.close()
+    finally:
+        window.close()
+        window.deleteLater()
         app.processEvents()
 
 

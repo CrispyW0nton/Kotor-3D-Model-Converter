@@ -3439,6 +3439,57 @@ def test_t2600_map_studio_workflow_selector_keeps_narrow_rail_reachable_runtime(
         window.close()
 
 
+def test_t2904_map_studio_viewport_can_fill_window_and_restore_panels() -> None:
+    """The center editor is no longer capped by rigid side-rail minimums."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.resize(1500, 900)
+        window.show()
+        window.main_splitter.setSizes([300, 900, 300])
+        app.processEvents()
+        normal_sizes = window.main_splitter.sizes()
+        normal_viewport_width = window.viewport_host.width()
+
+        assert window.left_authoring_rail.minimumWidth() <= 240
+        assert window.right_inspector_rail.minimumWidth() <= 260
+        assert window.main_splitter.isCollapsible(0)
+        assert window.main_splitter.isCollapsible(2)
+        assert window.focus_viewport_action.shortcut().toString() == "Ctrl+Space"
+
+        window.focus_viewport_action.setChecked(True)
+        app.processEvents()
+
+        assert window.left_authoring_rail.isHidden()
+        assert window.right_inspector_rail.isHidden()
+        assert window.toolbar_scroll.isHidden()
+        assert window.map_studio_tool_belt_tabs.isHidden()
+        assert window.main_splitter.sizes()[0] == 0
+        assert window.main_splitter.sizes()[2] == 0
+        assert window.viewport_host.width() > normal_viewport_width
+
+        window.focus_viewport_action.setChecked(False)
+        app.processEvents()
+
+        assert not window.left_authoring_rail.isHidden()
+        assert not window.right_inspector_rail.isHidden()
+        restored_sizes = window.main_splitter.sizes()
+        assert restored_sizes[0] > 0
+        assert restored_sizes[2] > 0
+        assert abs(restored_sizes[0] - normal_sizes[0]) <= 2
+        assert abs(restored_sizes[2] - normal_sizes[2]) <= 2
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+
+
 def test_t2600_modeling_tabs_exist_only_after_the_main_window_opens_map_studio() -> None:
     """The main scene stays clean while the opened Map Studio owns its authoring belt."""
 

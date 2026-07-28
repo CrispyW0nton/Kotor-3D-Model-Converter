@@ -9,7 +9,7 @@
             "resource_name": "PYTHON_PAYLOAD_INIT",
             "source_path": "src/__init__.py",
             "packaged_path": "Python/src/__init__.py",
-            "sha256": "34b6c7f57d991406ed7569b610514856a09c1058d16241514f5bd8fc6670d716"
+            "sha256": "e1b5c22cf6cc68bee9a921ac36b4640991fb5634bbe6a27ad517508db84a49f6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_INIT",

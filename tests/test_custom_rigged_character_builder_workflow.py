@@ -34,6 +34,7 @@ def test_character_builder_entry_offers_native_head_and_custom_cards() -> None:
     assert tuple(CHARACTER_BUILDER_MODES) == (
         "native_kotor_character",
         "native_kotor_head",
+        "facial_performance_head",
         "custom_rigged_character",
     )
 
@@ -43,6 +44,8 @@ def test_character_builder_entry_offers_native_head_and_custom_cards() -> None:
     assert "Native KOTOR Character" in source
     assert "Custom KOTOR Head" in source
     assert "Modular Head Builder" in source
+    assert "Facial Performance Head" in source
+    assert "Custom Animation Patch Required" in source
     assert "Custom Rigged Character" in source
     assert "Custom Animation Patch" in source
     assert "self-contained KOTOR model" in source

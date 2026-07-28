@@ -99,7 +99,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "cc99ef032d70d117137dff744c201064e4348f27fd0413cae89db65e70ad8447"
+            "sha256": "c065bff3d192c1a54b82c5a450769f555d73ddc6578d29093efa823a9f8b5bb4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -603,7 +603,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_TEXTURE_CACHE",
             "source_path": "src/core/rendering/frame_core/texture_cache.py",
             "packaged_path": "Python/src/core/rendering/frame_core/texture_cache.py",
-            "sha256": "11aba1336bfaf49ae7133387a2470ac23871885d8d2c6e2db1cdeb8b55fbe5ff"
+            "sha256": "3b6ed5776900386af9842c0ddbb1af5f7585568610a8c2ffc4edaf952d3fc6df"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DEBUG_TABLES",

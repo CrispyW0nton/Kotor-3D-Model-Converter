@@ -29,6 +29,15 @@ import threading
 from typing import Callable, Optional, Dict, Any
 
 from src.adapters.qt_ipc.threading import marshal_to_gui_thread
+from .spatial_auth import (
+    HEADER_SIGNATURE,
+    SpatialAuthenticationError,
+    SpatialRequestAuthenticator,
+    SpatialRequestSigner,
+    SpatialSessionCredentials,
+    publish_spatial_session_descriptor,
+    remove_spatial_session_descriptor,
+)
 
 log = logging.getLogger(__name__)
 
@@ -284,7 +293,13 @@ class GhostRiggerIPCServer:
         port: int | None = None,
         *,
         program_name: str = _PROGRAM_NAME,
+        spatial_authenticator: SpatialRequestAuthenticator | None = None,
+        spatial_session_path: str | os.PathLike[str] | None = None,
     ):
+        if spatial_authenticator is not None and spatial_session_path is not None:
+            raise ValueError(
+                "spatial_authenticator and spatial_session_path are mutually exclusive"
+            )
         self.callbacks: Dict[str, Callable] = callbacks or {}
         self._thread: Optional[threading.Thread] = None
         self._app = None
@@ -292,13 +307,34 @@ class GhostRiggerIPCServer:
         self._running = False
         self._port = resolve_ghostrigger_ipc_port() if port is None else int(port)
         self._program_name = str(program_name or _PROGRAM_NAME)
+        self._spatial_authenticator = spatial_authenticator
+        self._spatial_session_path = (
+            Path(spatial_session_path).expanduser()
+            if spatial_session_path is not None
+            else None
+        )
+        if (
+            self._spatial_session_path is not None
+            and not self._spatial_session_path.is_absolute()
+        ):
+            raise ValueError("spatial_session_path must be absolute")
+        self._spatial_session_id: str | None = None
+        self._spatial_session_lock = threading.Lock()
+        self._startup_complete = threading.Event()
+        self._startup_error: BaseException | None = None
+        self._stop_requested = threading.Event()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
     def start(self):
         """Start the IPC server in a daemon background thread."""
-        if self._running:
+        if self._running or (
+            self._thread is not None and self._thread.is_alive()
+        ):
             return
+        self._startup_complete.clear()
+        self._startup_error = None
+        self._stop_requested.clear()
         self._thread = threading.Thread(
             target=self._run_server,
             name="GhostRigger-IPC-Server",
@@ -306,6 +342,23 @@ class GhostRiggerIPCServer:
         )
         self._thread.start()
         log.info("GhostRigger IPC server starting on port %d", self._port)
+        if self._spatial_session_path is None:
+            return
+        if not self._startup_complete.wait(15.0):
+            self.stop()
+            raise RuntimeError(
+                "Ghost Studio spatial IPC session startup timed out"
+            )
+        if self._startup_error is not None:
+            if self._thread is not None:
+                self._thread.join(timeout=2.0)
+            raise RuntimeError(
+                "Ghost Studio spatial IPC session failed to start"
+            ) from self._startup_error
+        if not self._running:
+            raise RuntimeError(
+                "Ghost Studio spatial IPC session stopped during startup"
+            )
 
     @property
     def port(self) -> int:
@@ -315,7 +368,11 @@ class GhostRiggerIPCServer:
 
     def stop(self):
         """Stop the background Werkzeug server without leaving a bound port."""
+        self._stop_requested.set()
         self._running = False
+        if self._spatial_session_path is not None:
+            self._spatial_authenticator = None
+        self._remove_owned_spatial_session_descriptor()
         server = self._http_server
         if server is not None:
             try:
@@ -323,6 +380,26 @@ class GhostRiggerIPCServer:
             except Exception:
                 log.exception("GhostStudio IPC server shutdown failed")
         log.info("GhostRigger IPC server stopping")
+
+    def _remove_owned_spatial_session_descriptor(self) -> None:
+        path = self._spatial_session_path
+        if path is None:
+            return
+        with self._spatial_session_lock:
+            session_id = self._spatial_session_id
+            if not session_id:
+                return
+            try:
+                remove_spatial_session_descriptor(
+                    path,
+                    session_id=session_id,
+                )
+            except Exception:
+                log.exception(
+                    "Ghost Studio spatial session descriptor cleanup failed"
+                )
+            finally:
+                self._spatial_session_id = None
 
     @property
     def is_running(self) -> bool:
@@ -356,6 +433,8 @@ class GhostRiggerIPCServer:
         try:
             from flask import Flask, request, jsonify
         except ImportError:
+            self._startup_error = RuntimeError("Flask is not installed")
+            self._startup_complete.set()
             log.warning(
                 "Flask not installed — GhostRigger IPC server unavailable. "
                 "Install with: pip install flask"
@@ -364,7 +443,6 @@ class GhostRiggerIPCServer:
 
         app = Flask(__name__)
         self._app = app
-        self._running = True
 
         # Suppress Flask startup banner
         import os as _os
@@ -387,6 +465,51 @@ class GhostRiggerIPCServer:
         def _payload(body: dict) -> dict:
             payload = body.get("payload", body)
             return payload if isinstance(payload, dict) else {}
+
+        def _authenticate_spatial_request():
+            authenticator = self._spatial_authenticator
+            if authenticator is None:
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-auth-unconfigured",
+                }), 503
+            body_bytes = request.get_data(cache=True, as_text=False)
+            try:
+                authenticator.verify(
+                    headers=request.headers,
+                    method=request.method,
+                    path=request.path,
+                    body=body_bytes,
+                )
+            except SpatialAuthenticationError as exc:
+                return jsonify({
+                    "status": "error",
+                    "code": exc.code,
+                }), 401
+            return None
+
+        def _strict_spatial_payload(allowed_keys: set[str]):
+            body = request.get_json(force=True, silent=True)
+            if not isinstance(body, dict):
+                return None, (
+                    jsonify({
+                        "status": "error",
+                        "code": "invalid-spatial-payload",
+                    }),
+                    400,
+                )
+            if any(
+                not isinstance(key, str) or key not in allowed_keys
+                for key in body
+            ):
+                return None, (
+                    jsonify({
+                        "status": "error",
+                        "code": "invalid-spatial-payload",
+                    }),
+                    400,
+                )
+            return body, None
 
         def _handle(action: str):
             """Generic IPC endpoint handler."""
@@ -1021,6 +1144,116 @@ class GhostRiggerIPCServer:
             payload = state if isinstance(state, dict) else {"value": state}
             return jsonify({"status": "ok", "program": self._program_name, "state": payload})
 
+        # ── MCP Studio spatial endpoints ───────────────────────────────────
+        # These are a separate, authenticated, read-focused surface. Legacy
+        # Ghostworks/KotorMCP routes above and below are not implicitly trusted
+        # merely because this narrow channel is configured.
+
+        @app.route("/api/mcpstudio/health", methods=["GET"])
+        def route_mcpstudio_health():
+            auth_error = _authenticate_spatial_request()
+            if auth_error is not None:
+                return auth_error
+            return jsonify({
+                "status": "ok",
+                "schema": "ghoststudio-spatial-health/v1",
+                "program": self._program_name,
+                "capabilities": [
+                    "health",
+                    "spatial-snapshot",
+                    "capture",
+                    "evidence-gaps",
+                ],
+            })
+
+        @app.route("/api/mcpstudio/spatial-snapshot", methods=["POST"])
+        def route_mcpstudio_spatial_snapshot():
+            auth_error = _authenticate_spatial_request()
+            if auth_error is not None:
+                return auth_error
+            payload, payload_error = _strict_spatial_payload({
+                "includeBounds",
+                "includeHierarchy",
+                "includeSelection",
+            })
+            if payload_error is not None:
+                return payload_error
+            cb = self.callbacks.get("get_spatial_snapshot")
+            if cb is None:
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-snapshot-unavailable",
+                }), 503
+            ok, snapshot = self._invoke_callback_sync(cb, payload, timeout=3.0)
+            if not ok or not isinstance(snapshot, dict):
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-snapshot-failed",
+                }), 504
+            return jsonify({
+                "status": "ok",
+                "schema": "ghoststudio-spatial-response/v1",
+                "snapshot": snapshot,
+            })
+
+        @app.route("/api/mcpstudio/capture", methods=["POST"])
+        def route_mcpstudio_capture():
+            auth_error = _authenticate_spatial_request()
+            if auth_error is not None:
+                return auth_error
+            payload, payload_error = _strict_spatial_payload({"captureId"})
+            if payload_error is not None:
+                return payload_error
+            capture_id = str(payload.get("captureId") or "")
+            if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", capture_id):
+                return jsonify({
+                    "status": "error",
+                    "code": "invalid-capture-id",
+                }), 400
+            cb = self.callbacks.get("capture_spatial_evidence")
+            if cb is None:
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-capture-unavailable",
+                }), 503
+            ok, capture = self._invoke_callback_sync(cb, payload, timeout=5.0)
+            if not ok or not isinstance(capture, dict):
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-capture-failed",
+                }), 504
+            return jsonify({
+                "status": "ok",
+                "schema": "ghoststudio-spatial-response/v1",
+                "capture": capture,
+            })
+
+        @app.route("/api/mcpstudio/evidence-gaps", methods=["POST"])
+        def route_mcpstudio_evidence_gaps():
+            auth_error = _authenticate_spatial_request()
+            if auth_error is not None:
+                return auth_error
+            payload, payload_error = _strict_spatial_payload(set())
+            if payload_error is not None:
+                return payload_error
+            cb = self.callbacks.get("get_spatial_evidence_gaps")
+            if cb is None:
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-evidence-unavailable",
+                }), 503
+            ok, evidence = self._invoke_callback_sync(cb, payload, timeout=3.0)
+            if not ok or not isinstance(evidence, dict):
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-evidence-failed",
+                }), 504
+            return jsonify({
+                "status": "ok",
+                "schema": "ghoststudio-spatial-response/v1",
+                "evidence": evidence,
+            })
+
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": self._program_name,
@@ -1136,27 +1369,58 @@ class GhostRiggerIPCServer:
         # Use werkzeug make_server directly to avoid the WERKZEUG_SERVER_FD
         # environment variable issue present in newer werkzeug versions when
         # running inside a daemon thread (no reloader needed).
+        srv = None
         try:
             from werkzeug.serving import make_server
             srv = make_server("127.0.0.1", self._port, app, threaded=True)
             self._http_server = srv
             if self._port == 0:
                 self._port = int(srv.server_port)
+            if self._spatial_session_path is not None:
+                credentials = SpatialSessionCredentials.create()
+                self._spatial_authenticator = SpatialRequestAuthenticator(
+                    credentials
+                )
+                with self._spatial_session_lock:
+                    self._spatial_session_id = credentials.session_id
+                    publish_spatial_session_descriptor(
+                        self._spatial_session_path,
+                        port=self._port,
+                        credentials=credentials,
+                    )
+            if self._stop_requested.is_set():
+                return
             self._running = True
             log.info("GhostRigger IPC server bound on port %d", self._port)
+            self._startup_complete.set()
             srv.serve_forever()
-        except OSError as exc:
-            if "Address already in use" in str(exc) or "10048" in str(exc):
+        except Exception as exc:
+            self._startup_error = exc
+            if isinstance(exc, OSError) and (
+                "Address already in use" in str(exc)
+                or "10048" in str(exc)
+            ):
                 log.warning(
                     "GhostRigger IPC port %d already in use — "
                     "another instance may be running.",
                     self._port,
                 )
             else:
-                log.error("GhostRigger IPC server error: %s", exc)
+                log.exception("GhostRigger IPC server failed")
         finally:
             self._running = False
+            self._startup_complete.set()
+            self._remove_owned_spatial_session_descriptor()
+            if srv is not None:
+                try:
+                    close_server = getattr(srv, "server_close", None)
+                    if callable(close_server):
+                        close_server()
+                except Exception:
+                    log.exception("GhostRigger IPC server close failed")
             self._http_server = None
+            if self._spatial_session_path is not None:
+                self._spatial_authenticator = None
 
     def _schedule_callback(self, cb: Callable, *args):
         """Execute a callback through Qt when active, otherwise directly."""

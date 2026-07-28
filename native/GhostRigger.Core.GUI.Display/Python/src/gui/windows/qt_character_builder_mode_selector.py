@@ -10,6 +10,7 @@ from PySide6 import QtCore, QtWidgets
 CHARACTER_BUILDER_MODES = (
     "native_kotor_character",
     "native_kotor_head",
+    "facial_performance_head",
     "custom_rigged_character",
 )
 
@@ -24,6 +25,7 @@ class _ModeCard(QtWidgets.QGroupBox):
         description: str,
         *,
         badge: str = "",
+        badge_tooltip: str = "",
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -43,7 +45,8 @@ class _ModeCard(QtWidgets.QGroupBox):
             badge_label.setObjectName("characterBuilderModeBadge")
             badge_label.setProperty("role", "badge")
             badge_label.setToolTip(
-                "Basic idle, walk, and run can use KOTOR's existing behavior names. "
+                badge_tooltip
+                or "Basic idle, walk, and run can use KOTOR's existing behavior names. "
                 "The patch registers genuinely new actions without replacing vanilla animations."
             )
             layout.addWidget(badge_label, 0, QtCore.Qt.AlignLeft)
@@ -84,7 +87,7 @@ class QtCharacterBuilderModeSelector(QtWidgets.QDialog):
         intro.setWordWrap(True)
         outer.addWidget(intro)
 
-        cards = QtWidgets.QHBoxLayout()
+        cards = QtWidgets.QGridLayout()
         native = _ModeCard(
             "native_kotor_character",
             "Native KOTOR Character",
@@ -105,12 +108,27 @@ class QtCharacterBuilderModeSelector(QtWidgets.QDialog):
             badge="Custom Animation Patch",
             parent=self,
         )
+        facial = _ModeCard(
+            "facial_performance_head",
+            "Facial Performance Head",
+            "Build and preview a custom head with Audio2Face dialogue, "
+            "MediaPipe facial capture, openFACS art direction, and full facial "
+            "curves. A vanilla 16-shape LIP fallback remains available.",
+            badge="Custom Animation Patch Required",
+            badge_tooltip=(
+                "Full facial-performance curves require the Custom Animation "
+                "Patch. Use the vanilla LIP fallback for an unpatched game."
+            ),
+            parent=self,
+        )
         native.activated.connect(self._choose)
         head.activated.connect(self._choose)
+        facial.activated.connect(self._choose)
         custom.activated.connect(self._choose)
-        cards.addWidget(native, 1)
-        cards.addWidget(head, 1)
-        cards.addWidget(custom, 1)
+        cards.addWidget(native, 0, 0)
+        cards.addWidget(head, 0, 1)
+        cards.addWidget(facial, 1, 0)
+        cards.addWidget(custom, 1, 1)
         outer.addLayout(cards, 1)
 
         close_button = QtWidgets.QPushButton("Cancel")

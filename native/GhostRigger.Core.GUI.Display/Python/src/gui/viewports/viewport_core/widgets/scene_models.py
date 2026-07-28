@@ -22,9 +22,22 @@ class ViewportSceneModelMixin:
         extra_texture_dirs: Optional[list[str]] = None,
         texture_cache: Optional[dict[str, bytes]] = None,
     ) -> None:
+        authored_texture_cache = dict(texture_cache or {})
+        clear_published = getattr(
+            self._renderer.tex_cache,
+            "clear_published_images",
+            None,
+        )
+        if callable(clear_published):
+            clear_published()
         old_model = self.model
         if old_model is not None and old_model is not model:
             clear_prebuilt_static_gpu_model_data(old_model)
+        if model is not None and model is not old_model:
+            # Authored candidates are commonly deep copies of an already
+            # rendered donor. Never accept copied GPU geometry snapshots as
+            # truth for a newly loaded model.
+            clear_prebuilt_static_gpu_model_data(model)
         self.model = model
         self._hovered_mesh_node = None
         self._hovered_mesh_face_bounds = None
@@ -89,6 +102,15 @@ class ViewportSceneModelMixin:
                 search_dirs.append(directory)
         if search_dirs:
             self._renderer.tex_cache.set_search_dirs(search_dirs)
+        for texture_name, texture_bytes in authored_texture_cache.items():
+            if not self._renderer.tex_cache.publish_bytes(
+                str(texture_name),
+                bytes(texture_bytes),
+            ):
+                log.warning(
+                    "Viewport could not decode authored texture preview %s",
+                    texture_name,
+                )
 
         if not getattr(model, "_gr_bounds_prepared", False):
             self._compute_bb(model)

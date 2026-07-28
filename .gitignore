@@ -445,6 +445,12 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_head_attachment_preview.py
 !/tests/test_head_binary_export.py
 !/tests/test_head_game_records_and_package.py
+!/tests/test_facial_performance.py
+!/tests/test_facial_rig_qa.py
+!/tests/test_arkit_facial_adapter.py
+!/tests/test_character_builder_lip_playback.py
+!/tests/test_packaged_head_workflow_facial_preview.py
+!/tests/test_xaria_teaser_map.py
 /knowledge_base/books
 /docs/architecture
 /docs

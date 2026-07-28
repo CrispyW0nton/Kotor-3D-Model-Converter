@@ -208,6 +208,7 @@ def _node_payload_facts(node: Any, ordinal: int) -> dict[str, Any]:
         "ordinal": int(ordinal),
         "node_name": str(getattr(node, "name", "") or ""),
         "flags": int(getattr(node, "flags", 0) or 0),
+        "render": bool(getattr(node, "render", False)),
         "vertices": [
             [_f32(value) for value in vertex]
             for vertex in list(getattr(node, "vertices", ()) or ())

@@ -31,23 +31,8 @@ for item in reversed(_python_roots(ROOT)):
         sys.path.insert(0, text)
 
 os.environ.setdefault("GHOSTRIGGER_ROOT", str(ROOT))
-os.environ.setdefault("AGENTDECOMPILE_MCP_SERVER_URL", "http://170.9.241.140:8080/mcp/")
-os.environ.setdefault("AGENTDECOMPILE_HTTP_GHIDRA_SERVER_HOST", "170.9.241.140")
 os.environ.setdefault("AGENTDECOMPILE_HTTP_GHIDRA_SERVER_PORT", "13100")
 os.environ.setdefault("AGENTDECOMPILE_HTTP_GHIDRA_SERVER_REPOSITORY", "Odyssey")
-os.environ.setdefault("AGENTDECOMPILE_GHIDRA_USERNAME", "OpenKotOR")
-_ghidra_password = os.environ.get("AGENTDECOMPILE_GHIDRA_PASSWORD", "").strip()
-if _ghidra_password and not os.environ.get("AGENTDECOMPILE_MCP_HEADERS_JSON"):
-    os.environ["AGENTDECOMPILE_MCP_HEADERS_JSON"] = json.dumps(
-        {
-            "User-Agent": "PyKotorAgent/1.0",
-            "X-Agent-Version": "1.0",
-            "X-Agent-Server-Username": os.environ["AGENTDECOMPILE_GHIDRA_USERNAME"],
-            "X-Agent-Server-Password": _ghidra_password,
-            "X-Ghidra-Repository": "Odyssey",
-            "X-Agent-Server-Repository": "Odyssey",
-        }
-    )
 os.environ.setdefault("AGENTDECOMPILE_K2_STEAM_PROGRAM_PATH", "/TSL/k2_win_steam_aspyr_swkotor2.exe")
 
 from kotormcp.tools import game_test as tool_game_test

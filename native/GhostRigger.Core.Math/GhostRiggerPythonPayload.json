@@ -261,7 +261,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_ALIGNMENT",
             "source_path": "src/math/head_alignment.py",
             "packaged_path": "Python/src/math/head_alignment.py",
-            "sha256": "be52d9e58a60cd2e60b08dc0135765099abbc00bb502227e3ea986245c7edd7d"
+            "sha256": "e7e1ccaf37622a094875d11bde65ff7f8363f189b38b4b7d57e7eb18bbbc4881"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_HEAD_COMPONENT_TRANSFORM",

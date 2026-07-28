@@ -36,6 +36,123 @@ def _effective_toolbar_icon_size(mode: str, requested: int) -> int:
     return max(10, min(requested, 13))
 
 
+def _plain_action_text(action: QtGui.QAction) -> str:
+    """Return the visible label without mnemonic or inline-shortcut markup."""
+
+    return str(action.text() or "").split("\t", 1)[0].replace("&&", "\0").replace("&", "").replace("\0", "&")
+
+
+def _action_shortcut_text(action: QtGui.QAction) -> str:
+    inline = str(action.text() or "").split("\t", 1)
+    if len(inline) > 1 and inline[1].strip():
+        return inline[1].strip()
+    shortcuts = tuple(action.shortcuts() or ())
+    if not shortcuts:
+        return ""
+    labels = [shortcut.toString(QtGui.QKeySequence.NativeText) for shortcut in shortcuts[:2]]
+    return ", ".join(label for label in labels if label)
+
+
+def _menu_owner_window(menu: QtWidgets.QMenu) -> QtWidgets.QWidget | None:
+    parent = menu.parentWidget()
+    while isinstance(parent, QtWidgets.QMenu):
+        parent = parent.parentWidget()
+    if parent is not None:
+        return parent.window()
+    app = QtWidgets.QApplication.instance()
+    return app.activeWindow() if app is not None else None
+
+
+def _fit_menu_to_actions(menu: QtWidgets.QMenu, metrics: dict[str, int]) -> None:
+    """Keep labels, shortcuts, checks, icons, and submenu arrows in view."""
+
+    actions = tuple(action for action in menu.actions() if not action.isSeparator())
+    if not actions:
+        return
+    font_metrics = menu.fontMetrics()
+    label_width = max(font_metrics.horizontalAdvance(_plain_action_text(action)) for action in actions)
+    shortcut_width = max((font_metrics.horizontalAdvance(_action_shortcut_text(action)) for action in actions), default=0)
+    padding = max(4, int(metrics.get("menuHorizontalPadding", 12)))
+    indicator_width = max(0, int(metrics.get("menuIndicatorWidth", 24)))
+    submenu_width = max(0, int(metrics.get("menuSubmenuArrowWidth", 18)))
+    shortcut_gap = max(0, int(metrics.get("menuShortcutGap", 24))) if shortcut_width else 0
+    icon_width = indicator_width if any(not action.icon().isNull() for action in actions) else 0
+    check_width = indicator_width if any(action.isCheckable() for action in actions) else 0
+    arrow_width = submenu_width if any(action.menu() is not None for action in actions) else 0
+    required_width = (
+        label_width
+        + shortcut_width
+        + shortcut_gap
+        + max(icon_width, check_width)
+        + arrow_width
+        + (padding * 2)
+    )
+    minimum_width = max(int(metrics.get("menuMinimumWidth", 180)), required_width)
+    menu.setMinimumWidth(minimum_width)
+    menu.setMaximumWidth(16777215)
+    menu.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+    menu.setToolTipsVisible(True)
+
+
+class _MenuLayoutEventFilter(QtCore.QObject):
+    """Apply the owning window's layout metrics to menus created at runtime."""
+
+    _EVENTS = {
+        QtCore.QEvent.Type.ActionAdded,
+        QtCore.QEvent.Type.Polish,
+        QtCore.QEvent.Type.Show,
+    }
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if isinstance(watched, QtWidgets.QMenu) and event.type() in self._EVENTS:
+            try:
+                owner = _menu_owner_window(watched)
+                metrics = getattr(owner, "_ghost_menu_layout_metrics", None)
+                if not isinstance(metrics, dict):
+                    app = QtWidgets.QApplication.instance()
+                    active = app.activeWindow() if app is not None else None
+                    metrics = getattr(active, "_ghost_menu_layout_metrics", None)
+                    if not isinstance(metrics, dict) and app is not None:
+                        metrics = getattr(app, "_ghost_default_menu_layout_metrics", None)
+                if isinstance(metrics, dict):
+                    _fit_menu_to_actions(watched, metrics)
+            except RuntimeError:
+                # Qt may deliver DeferredDelete immediately after a menu event.
+                pass
+        return False
+
+
+def apply_menu_layout(layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
+    """Make main and context menus content-sized using XML layout metrics."""
+
+    metrics = {
+        "menuMinimumWidth": layout.spacing_value("menuMinimumWidth", 180),
+        "menuHorizontalPadding": layout.spacing_value("menuHorizontalPadding", 12),
+        "menuShortcutGap": layout.spacing_value("menuShortcutGap", 24),
+        "menuIndicatorWidth": layout.spacing_value("menuIndicatorWidth", 24),
+        "menuSubmenuArrowWidth": layout.spacing_value("menuSubmenuArrowWidth", 18),
+    }
+    setattr(window, "_ghost_menu_layout_metrics", metrics)
+    menu_bar = window.menuBar()
+    menu_bar.setMinimumHeight(layout.spacing_value("menuBarHeight", 24))
+    menu_bar.setMaximumHeight(16777215)
+    menu_bar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+    for menu in window.findChildren(QtWidgets.QMenu):
+        try:
+            _fit_menu_to_actions(menu, metrics)
+        except RuntimeError:
+            # A submenu can already have lost its C++ peer during window teardown.
+            continue
+
+    app = QtWidgets.QApplication.instance()
+    if app is not None:
+        setattr(app, "_ghost_default_menu_layout_metrics", metrics)
+        if getattr(app, "_ghost_menu_layout_filter", None) is None:
+            event_filter = _MenuLayoutEventFilter(app)
+            app.installEventFilter(event_filter)
+            setattr(app, "_ghost_menu_layout_filter", event_filter)
+
+
 class LayoutApplier(QtCore.QObject):
     layoutChanged = QtCore.Signal(object)
 
@@ -51,6 +168,7 @@ class LayoutApplier(QtCore.QObject):
             self._apply_splitters(layout, window)
             self._apply_panels(layout, window)
             self._apply_density_metrics(layout, window)
+            apply_menu_layout(layout, window)
             self._apply_toolbars(layout, window)
             self._notify_layout_aware_widgets(layout, window)
             sync_top_rows = getattr(window, "_sync_reserved_top_rows", None)
@@ -98,12 +216,12 @@ class LayoutApplier(QtCore.QObject):
                 button.setText(str(full_text))
                 button.setIconSize(QtCore.QSize(0, 0))
                 text_width = button.fontMetrics().horizontalAdvance(str(full_text))
-                button.setMinimumWidth(max(34, min(text_width + 18, 96)))
+                button.setMinimumWidth(max(34, text_width + 18))
             else:
                 button.setText(str(full_text))
                 button.setIconSize(QtCore.QSize(icon_size, icon_size))
                 text_width = button.fontMetrics().horizontalAdvance(str(full_text))
-                button.setMinimumWidth(max(icon_size + 20, min(text_width + icon_size + 24, 118)))
+                button.setMinimumWidth(max(icon_size + 20, text_width + icon_size + 24))
             if toolbar.height > 0:
                 button.setMinimumHeight(max(16, min(toolbar.height - 8, 24)))
                 button.setMaximumHeight(max(16, min(toolbar.height - 4, 28)))

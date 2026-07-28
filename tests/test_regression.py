@@ -801,6 +801,77 @@ def test_character_builder_payload_preview_uses_animation_base_bind(monkeypatch)
     assert flat[14] == pytest.approx(0.0)
 
 
+def test_character_builder_payload_clears_animation_bind_after_preview(
+    monkeypatch,
+) -> None:
+    """Stopping dialogue must not leave its talk-pose bind in the cached
+    uploader used to render an attached custom head's static pose.
+    """
+    from types import SimpleNamespace
+
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    root = SimpleNamespace(
+        name="N_Mandalorian",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    arm = SimpleNamespace(
+        name="torso_g",
+        parent=root,
+        position=(1.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    skin_node = SimpleNamespace(
+        name="Bendak",
+        parent=root,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        bone_map=["torso_g"],
+        qbone_list=[(0.0, 0.0, 0.0, 1.0)],
+        tbone_list=[(1.0, 0.0, 0.0)],
+        _gr_use_animation_base_bind_for_preview=True,
+    )
+    model = SimpleNamespace(
+        name="bendak",
+        supermodel="S_Female02",
+        all_nodes=lambda: [root, arm, skin_node],
+    )
+    talk_pose = SimpleNamespace(
+        nodes={
+            "N_Mandalorian": SimpleNamespace(
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            ),
+            "torso_g": SimpleNamespace(
+                position=(2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            ),
+        }
+    )
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(
+        skin_node,
+        talk_pose,
+        anim_base_pose=talk_pose,
+    )
+    assert uploader._inv_bind_anim is not None
+
+    uploader.compute_skin_node_palette(
+        skin_node,
+        anim_pose=None,
+        anim_base_pose=None,
+    )
+
+    assert uploader._inv_bind_anim is None
+    assert uploader._current_anim_bind_key is None
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_inverse_TR"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3j Step 4 — env-gated G5_FULL_REF (DFS-indexed, W-first, no invert) tests
 # ─────────────────────────────────────────────────────────────────────────────

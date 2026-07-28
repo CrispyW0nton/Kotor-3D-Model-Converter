@@ -190,22 +190,40 @@ def _texture_outputs(
         )
         from pykotor.resource.type import ResourceType
 
-        texture = read_tpc(
-            source.read_bytes(),
-            txi_source=(
-                source_txi.encode("ascii")
-                if source_txi
-                else None
-            ),
-        )
-        if policy.txi_delivery == "embedded":
-            texture.txi = txi_text
-        output_type = (
-            ResourceType.TPC
-            if policy.output_format == "TPC"
-            else ResourceType.TGA
-        )
-        texture_bytes = bytes_tpc(texture, output_type)
+        source_bytes = source.read_bytes()
+        retail_tga_bytes: bytes | None = None
+        if asset.source_format in {"PNG", "TGA"}:
+            from PIL import Image
+
+            converted = io.BytesIO()
+            with Image.open(io.BytesIO(source_bytes)) as image:
+                image.convert("RGBA").save(converted, format="TGA")
+            retail_tga_bytes = converted.getvalue()
+        if policy.output_format == "TGA" and retail_tga_bytes is not None:
+            # Pillow writes the lower-left TGA origin used by Odyssey. Passing
+            # these bytes through PyKotor's generic TGA writer changes the
+            # descriptor to top-origin, which KOTOR's creature renderer does
+            # not compensate for and therefore inverts the atlas against UVs.
+            texture_bytes = retail_tga_bytes
+        else:
+            if asset.source_format == "PNG" and retail_tga_bytes is not None:
+                source_bytes = retail_tga_bytes
+            texture = read_tpc(
+                source_bytes,
+                txi_source=(
+                    source_txi.encode("ascii")
+                    if source_txi
+                    else None
+                ),
+            )
+            if policy.txi_delivery == "embedded":
+                texture.txi = txi_text
+            output_type = (
+                ResourceType.TPC
+                if policy.output_format == "TPC"
+                else ResourceType.TGA
+            )
+            texture_bytes = bytes_tpc(texture, output_type)
     except Exception as exc:
         raise HeadPackageError(
             f"Could not create the selected KOTOR texture output: {exc}"

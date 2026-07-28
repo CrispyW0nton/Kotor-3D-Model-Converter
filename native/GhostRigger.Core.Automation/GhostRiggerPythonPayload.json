@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Automation",
-    "file_count": 43,
+    "file_count": 46,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -16,6 +16,18 @@
             "source_path": "src/adapters/scripts/unavailable_compiler.py",
             "packaged_path": "Python/src/adapters/scripts/unavailable_compiler.py",
             "sha256": "5f8aa9f82f815831aad04e76ee13c02f7e3a2ac533f71e1757c2225589370640"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GHOSTSTUDIO_SPATIAL_MCP_INIT",
+            "source_path": "src/ghoststudio_spatial_mcp/__init__.py",
+            "packaged_path": "Python/src/ghoststudio_spatial_mcp/__init__.py",
+            "sha256": "c1f01775d4a953ecf00fb8563c8d32e75977a81b4fcec5b9d05542a49782a50f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GHOSTSTUDIO_SPATIAL_MCP_SERVER",
+            "source_path": "src/ghoststudio_spatial_mcp/server.py",
+            "packaged_path": "Python/src/ghoststudio_spatial_mcp/server.py",
+            "sha256": "10469f8ac26b9d9083b71598af75121d5c1e78d51b20088c8ad53f0b5e93e1bd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IPC_INIT",
@@ -33,7 +45,13 @@
             "resource_name": "PYTHON_PAYLOAD_IPC_SERVER",
             "source_path": "src/ipc/server.py",
             "packaged_path": "Python/src/ipc/server.py",
-            "sha256": "f935ca711cc0feac5f744c053667f953e021614bdece78a5ba19f229122feafc"
+            "sha256": "f3cfcd95457facd9fea59c4b8614580f0caf7faadc1966596844380923051542"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IPC_SPATIAL_AUTH",
+            "source_path": "src/ipc/spatial_auth.py",
+            "packaged_path": "Python/src/ipc/spatial_auth.py",
+            "sha256": "34b9fe81c98db2eaf9900e9e33a83156eded4e4f21efeb289b114f146f775cf7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_INIT",

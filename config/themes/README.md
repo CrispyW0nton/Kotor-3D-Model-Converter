@@ -99,6 +99,12 @@ Safe editing tips:
   Editor previews are local until explicitly applied.
 - Run `python tools/validate_themes.py` after editing packaged defaults.
 
+Layout `<spacing>` may tune menus with `menuBarHeight`,
+`menuMinimumWidth`, `menuHorizontalPadding`, `menuShortcutGap`,
+`menuIndicatorWidth`, and `menuSubmenuArrowWidth`. GhostStudio combines these
+with the active font metrics so long action labels, check/icon columns,
+shortcuts, and submenu arrows remain fully visible instead of being clipped.
+
 Viewport command bars use `viewportToolbar.background` and
 `viewportToolbar.border` so the Theme Editor can style their framed surface
 separately from general application toolbars.
@@ -114,6 +120,11 @@ overlays can stay readable in both dark and light themes.
 ## Module Editor
 
 The standalone Module Editor uses existing theme tokens and layout metrics rather than adding a separate palette. It exposes a `moduleEditor` toolbar layout id for density/button sizing and keeps panels compatible with Default, Matrix, Droid, Dark, Light, Classic plus Default, Compact, Wide, and Cinematic layouts.
+
+Map Studio's horizontal editor splitter allows either authoring rail to
+collapse completely. **View > Maximize Viewport** (`Ctrl+Space`) temporarily
+hides both rails, the top authoring strips, and lower docks, then restores the
+previous arrangement when toggled again.
 
 ## GUI Editor
 
@@ -142,6 +153,12 @@ stable card layout id `characterBuilderMode.native_kotor_head`. The entry reuses
 the existing themed Character Builder window, viewport, rail, inspector, and
 layout metrics in Head mode; it introduces no private colors, splitter sizes,
 or button modes.
+
+The patch-required Facial Performance Head entry uses the stable card layout id
+`characterBuilderMode.facial_performance_head`. Its warning, synchronized
+dialogue audio/LIP controls, and playback status use the normal palette,
+group-box, form, input, and button roles. No facial-workflow colour token or
+fixed panel dimension is introduced.
 
 The vanilla component recipe is part of the existing
 `headBuilderProperties` surface. Its carrier, face, eyes, eyelids/lashes, hair,

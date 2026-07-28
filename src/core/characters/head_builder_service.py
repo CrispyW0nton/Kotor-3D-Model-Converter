@@ -43,6 +43,13 @@ from src.core.characters.head_geometry_transplant import (
     apply_head_skin_weight_edits,
     transplant_head_geometry_and_skin,
 )
+from src.core.characters.head_art_anatomy import (
+    discover_head_art_anatomy,
+)
+from src.core.characters.head_facial_transplant import (
+    HeadFacialTransplantResult,
+    build_head_facial_transplant,
+)
 from src.core.characters.head_component_catalog import (
     HeadComponentAssemblyError,
     HeadComponentAssemblyResult,
@@ -67,6 +74,8 @@ from src.core.resources.head_donor_catalog import (
 from src.io.head_art_importer import (
     HeadArtDocument,
     HeadArtValidationReport,
+    repair_head_art_nonmanifold_overlays,
+    validate_head_art_document,
 )
 from src.io.head_texture_asset import (
     HeadTextureAsset,
@@ -254,7 +263,11 @@ class HeadBuilderService:
         self._selected_model: Any = None
         self._imported_art: HeadArtDocument | None = None
         self._alignment_result: HeadAlignmentResult | None = None
-        self._transplant_result: HeadGeometryTransplantResult | None = None
+        self._transplant_result: (
+            HeadGeometryTransplantResult
+            | HeadFacialTransplantResult
+            | None
+        ) = None
         self._component_result: HeadComponentAssemblyResult | None = None
         self._texture_result: HeadTextureMaterialResult | None = None
         self._preview_result: HeadAttachmentPreviewResult | None = None
@@ -288,7 +301,9 @@ class HeadBuilderService:
         return self._alignment_result
 
     @property
-    def transplant_result(self) -> HeadGeometryTransplantResult | None:
+    def transplant_result(
+        self,
+    ) -> HeadGeometryTransplantResult | HeadFacialTransplantResult | None:
         return self._transplant_result
 
     @property
@@ -605,6 +620,20 @@ class HeadBuilderService:
             raise HeadBuilderServiceError(
                 "The custom-art importer returned an invalid contract"
             )
+        topology_repair: dict[str, Any] = {}
+        repair_nonmanifold = bool(
+            cleanup.get("repair_nonmanifold_overlays", False)
+        )
+        only_repairable_errors = bool(report.errors) and all(
+            issue.check_id == "head.art.non_manifold"
+            for issue in report.errors
+        )
+        if repair_nonmanifold and only_repairable_errors:
+            document, repair = repair_head_art_nonmanifold_overlays(
+                document
+            )
+            report = validate_head_art_document(document)
+            topology_repair = repair.to_dict()
         selection = HeadArtSelection(document=document, report=report)
         evidence = _art_evidence(document, report)
         had_accepted_art = isinstance(
@@ -671,6 +700,8 @@ class HeadBuilderService:
                 "normal_policy": normal_policy,
                 "weld_exact_duplicates": False,
                 "triangulate": True,
+                "repair_nonmanifold_overlays": repair_nonmanifold,
+                "topology_repair": topology_repair,
                 "source_texture_paths": [
                     str(texture_path) for texture_path in texture_paths
                 ],
@@ -758,6 +789,24 @@ class HeadBuilderService:
                 "The custom-art source bytes no longer match the saved project; "
                 "reimport the art explicitly before continuing."
             )
+        if bool(settings.get("repair_nonmanifold_overlays", False)):
+            only_repairable_errors = bool(report.errors) and all(
+                issue.check_id == "head.art.non_manifold"
+                for issue in report.errors
+            )
+            if only_repairable_errors:
+                document, repair = repair_head_art_nonmanifold_overlays(
+                    document
+                )
+                report = validate_head_art_document(document)
+                saved_repair = dict(
+                    settings.get("topology_repair") or {}
+                )
+                if saved_repair and repair.to_dict() != saved_repair:
+                    raise HeadBuilderArtChangedError(
+                        "The deterministic topology repair no longer matches "
+                        "the saved project."
+                    )
         expected_structural = str(saved.get("structural_sha256") or "")
         if (
             not expected_structural
@@ -1338,7 +1387,112 @@ class HeadBuilderService:
         self._dirty = True
         return result
 
-    def rehydrate_transplant(self) -> HeadGeometryTransplantResult:
+    def transplant_facial_performance_head(
+        self,
+        *,
+        maximum_surface_distance: float = 0.05,
+        texture_resref: str = "",
+    ) -> HeadFacialTransplantResult:
+        """Build a semantic face/eyes/lids/mouth payload on the donor DAG."""
+
+        project = self.project
+        if self._selected_model is None:
+            raise HeadBuilderServiceError(
+                "Select or rehydrate the pristine facial-head donor first"
+            )
+        if self._imported_art is None:
+            raise HeadBuilderServiceError(
+                "Import or rehydrate complete custom head art first"
+            )
+        if len(self._imported_art.parts) != 1:
+            raise HeadBuilderServiceError(
+                "Facial Performance Head currently requires one combined "
+                "custom-art part with disconnected facial components"
+            )
+        snapshot = _project_snapshot(project)
+        art_part = self._imported_art.parts[0]
+        anatomy = discover_head_art_anatomy(art_part)
+        if not anatomy.ok:
+            raise HeadBuilderServiceError(
+                "Custom art does not expose separate face, eyes, eyelids, "
+                "upper/lower teeth, and tongue geometry: "
+                + "; ".join(anatomy.failures)
+            )
+        initial_texture = (
+            str(texture_resref or "").strip()
+            or project.output_head_resref
+        )
+        result = build_head_facial_transplant(
+            donor_model=self._selected_model,
+            donor_snapshot=snapshot,
+            art_part=art_part,
+            anatomy=anatomy,
+            output_resref=project.output_head_resref,
+            texture_resref=initial_texture,
+            maximum_surface_distance=maximum_surface_distance,
+        )
+        if not result.report.accepted:
+            raise HeadBuilderServiceError(
+                "Semantic facial transplant did not preserve its donor contract"
+            )
+        _reset_workflow_from(
+            project,
+            HeadBuilderStep.UV_TEXTURES_AND_MATERIALS,
+        )
+        donor_payload = dict(project.donor_contract or {})
+        donor_payload["snapshot"] = result.donor_snapshot.to_dict()
+        project.donor_contract = donor_payload
+        project.alignment = {
+            "schema": "ghostrigger.head_builder_facial_semantic_alignment",
+            "version": 1,
+            "within_tolerance": True,
+            "result": result.report.alignment.to_dict(),
+            "anatomy": result.report.anatomy.to_dict(),
+        }
+        project.skin_transfer = {
+            "schema": "ghostrigger.head_builder_facial_transplant",
+            "version": 1,
+            "settings": {
+                "maximum_surface_distance": float(
+                    maximum_surface_distance
+                ),
+                "texture_resref": initial_texture,
+            },
+            "manual_edits": {},
+            "report": result.report.to_dict(),
+        }
+        appearance = dict(project.appearance_customization or {})
+        appearance["mode"] = "facial_performance_custom_mesh"
+        appearance["facial_animation_patch_required"] = True
+        appearance["vanilla_lip_fallback"] = True
+        project.appearance_customization = appearance
+        evidence = _facial_transplant_evidence(snapshot, result)
+        project.record_evidence(evidence)
+        for step in (
+            HeadBuilderStep.ALIGN_NECK_AND_HOOK,
+            HeadBuilderStep.REPLACE_GEOMETRY_AND_SKIN,
+        ):
+            project.mark_step(
+                step,
+                StepStatus.COMPLETE,
+                evidence_ids=[evidence.evidence_id],
+            )
+        project.set_current_step(
+            HeadBuilderStep.UV_TEXTURES_AND_MATERIALS
+        )
+        self._alignment_result = result.report.alignment
+        self._transplant_result = result
+        self._component_result = None
+        self._texture_result = None
+        self._preview_result = None
+        self._preflight_report = None
+        self._binary_export_result = None
+        self._dirty = True
+        return result
+
+    def rehydrate_transplant(
+        self,
+    ) -> HeadGeometryTransplantResult | HeadFacialTransplantResult:
         """Deterministically rebuild saved geometry/weights and verify hashes."""
 
         project = self.project
@@ -1350,9 +1504,66 @@ class HeadBuilderService:
             raise HeadBuilderServiceError(
                 "Rehydrate custom art before rebuilding its payload"
             )
+        payload = dict(project.skin_transfer or {})
+        if payload.get("schema") == (
+            "ghostrigger.head_builder_facial_transplant"
+        ):
+            settings = dict(payload.get("settings") or {})
+            if len(self._imported_art.parts) != 1:
+                raise HeadBuilderServiceError(
+                    "Saved facial head no longer has one combined art part"
+                )
+            anatomy = discover_head_art_anatomy(
+                self._imported_art.parts[0]
+            )
+            result = build_head_facial_transplant(
+                donor_model=self._selected_model,
+                donor_snapshot=_project_snapshot(project),
+                art_part=self._imported_art.parts[0],
+                anatomy=anatomy,
+                output_resref=project.output_head_resref,
+                texture_resref=str(
+                    settings.get("texture_resref")
+                    or project.output_head_resref
+                ),
+                maximum_surface_distance=float(
+                    settings.get("maximum_surface_distance", 0.05)
+                ),
+            )
+            saved_report = dict(payload.get("report") or {})
+            for key, actual in (
+                (
+                    "payload_node_ordinals",
+                    list(result.report.payload_node_ordinals),
+                ),
+                (
+                    "texture_node_ordinals",
+                    list(result.report.texture_node_ordinals),
+                ),
+                (
+                    "alignment",
+                    result.report.alignment.to_dict(),
+                ),
+                (
+                    "skin_transfer",
+                    result.report.skin_transfer.to_dict(),
+                ),
+            ):
+                if saved_report.get(key) != actual:
+                    raise HeadBuilderArtChangedError(
+                        f"Rebuilt facial transplant {key} does not match "
+                        "the saved project"
+                    )
+            self._alignment_result = result.report.alignment
+            self._transplant_result = result
+            self._component_result = None
+            self._texture_result = None
+            self._preview_result = None
+            self._preflight_report = None
+            self._binary_export_result = None
+            return result
         if self._alignment_result is None:
             self.rehydrate_alignment()
-        payload = dict(project.skin_transfer or {})
         if payload.get("schema") != "ghostrigger.head_builder_skin_transfer":
             raise HeadBuilderServiceError(
                 "The active project has no saved skin-transfer contract"
@@ -3092,6 +3303,46 @@ def _transplant_evidence(
             "geometry_sha256": report.geometry_sha256,
             "weight_rows_sha256": report.final_weight_rows_sha256,
             "payload_sha256": report.payload_sha256,
+        },
+        metadata={"report": report.to_dict()},
+    )
+
+
+def _facial_transplant_evidence(
+    snapshot: HeadDonorSnapshot,
+    result: HeadFacialTransplantResult,
+) -> EvidenceRecord:
+    report = result.report
+    return EvidenceRecord(
+        evidence_id=(
+            "head-facial-transplant-"
+            f"{report.skin_transfer.weight_rows_sha256[:16]}"
+        ),
+        check_id="head.geometry_skin.semantic_facial_transplant",
+        label=(
+            "Semantic facial-performance payload: "
+            f"{snapshot.game}:{snapshot.resref}"
+        ),
+        level=EvidenceLevel.STRUCTURAL,
+        outcome=(
+            EvidenceOutcome.PASS
+            if report.accepted
+            else EvidenceOutcome.FAIL
+        ),
+        message=(
+            "The corrected face shell, eyes, eyelids, upper/lower teeth, and "
+            "tongue were assigned to their native donor controls while the "
+            "donor DAG, palette, bind arrays, and animation inheritance were "
+            "preserved."
+        ),
+        hashes={
+            "donor_structural_sha256": snapshot.structural_sha256,
+            "alignment_transform_sha256": (
+                report.alignment.transform_sha256
+            ),
+            "weight_rows_sha256": (
+                report.skin_transfer.weight_rows_sha256
+            ),
         },
         metadata={"report": report.to_dict()},
     )

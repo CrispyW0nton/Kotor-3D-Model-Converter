@@ -142,11 +142,17 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # The production Head Builder UI adds one GUI Display workspace, one Core
     # Tools controller, and the Tools-side namespace initializer used to join
     # that controller to the canonical Qt controller package.
-        # Stock face/eyes/eyelids/hair recipes add one Core Workflow inventory
-        # and assembly owner plus one Core Math named-space rebase helper.
-        # Purpose-led Map Studio spatial plans ship through Scene and the
-        # embedded Tools consumer, adding two byte-identical payload rows.
-    assert len(payload_files) == 1410
+    # Stock face/eyes/eyelids/hair recipes add one Core Workflow inventory
+    # and assembly owner plus one Core Math named-space rebase helper.
+    # Purpose-led Map Studio spatial plans ship through Scene and the embedded
+    # Tools consumer, adding two byte-identical payload rows.
+    # The authenticated Ghost Studio bridge adds three Automation payloads
+    # (shared HMAC/session security plus its two-file narrow MCP package) and
+    # one Scene-owned revisioned spatial snapshot serializer.
+    # Facial Performance Head adds the source-agnostic facial clip, the
+    # geometry-backed range audit, head-art anatomy/transplant services, and
+    # the two-file ARKit input adapter to the Core.Workflow payload.
+    assert len(payload_files) == 1420
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

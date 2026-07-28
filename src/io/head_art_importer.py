@@ -8,7 +8,8 @@ and compact facts; ``.ghosthead.json`` never becomes a mesh-blob container.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections import defaultdict
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 import math
@@ -144,6 +145,48 @@ class HeadArtValidationReport:
             "error_count": len(self.errors),
             "warning_count": len(self.warnings),
             "issues": [row.to_dict() for row in self.issues],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HeadArtTopologyRepairReport:
+    """Source-preserving record of deterministic in-memory face cleanup."""
+
+    source_structural_sha256: str
+    repaired_structural_sha256: str
+    removed_face_indices_by_part: tuple[tuple[str, tuple[int, ...]], ...]
+    remaining_non_manifold_edge_count: int
+    remaining_degenerate_uv_face_count: int
+
+    @property
+    def changed(self) -> bool:
+        return any(rows for _part_id, rows in self.removed_face_indices_by_part)
+
+    @property
+    def accepted(self) -> bool:
+        return (
+            self.remaining_non_manifold_edge_count == 0
+            and self.remaining_degenerate_uv_face_count == 0
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "ghostrigger.head_art_topology_repair",
+            "version": 1,
+            "accepted": self.accepted,
+            "changed": self.changed,
+            "source_structural_sha256": self.source_structural_sha256,
+            "repaired_structural_sha256": self.repaired_structural_sha256,
+            "remaining_non_manifold_edge_count": (
+                self.remaining_non_manifold_edge_count
+            ),
+            "remaining_degenerate_uv_face_count": (
+                self.remaining_degenerate_uv_face_count
+            ),
+            "removed_face_indices_by_part": {
+                part_id: list(indices)
+                for part_id, indices in self.removed_face_indices_by_part
+            },
         }
 
 
@@ -423,6 +466,115 @@ def validate_head_art_document(
     )
 
 
+def repair_head_art_nonmanifold_overlays(
+    document: HeadArtDocument,
+    *,
+    weld_tolerance: float = 1.0e-6,
+) -> tuple[HeadArtDocument, HeadArtTopologyRepairReport]:
+    """Remove over-owned welded edges and zero-area authored UV triangles.
+
+    The source file is never rewritten. Vertex identities and aligned vertex
+    channels remain intact; only the selected runtime face rows are omitted
+    and recorded for project rehydration.
+    """
+
+    if not isinstance(document, HeadArtDocument):
+        raise TypeError("document must be HeadArtDocument")
+    tolerance = float(weld_tolerance)
+    if not math.isfinite(tolerance) or tolerance <= 0.0:
+        raise ValueError("weld_tolerance must be finite and positive")
+    try:
+        from src.core.geometry.mesh_topology import MeshTopology
+    except ImportError as exc:
+        raise HeadArtImportError(
+            "The Core Math topology repair dependency is unavailable"
+        ) from exc
+
+    repaired_parts: list[HeadArtPart] = []
+    removed_rows: list[tuple[str, tuple[int, ...]]] = []
+    for part in document.parts:
+        remaining = list(range(len(part.faces)))
+        removed: list[int] = []
+        while remaining:
+            topology = MeshTopology.build(
+                part.vertices,
+                (part.faces[index] for index in remaining),
+                weld_tolerance=tolerance,
+            )
+            over_owned = {
+                edge: faces
+                for edge, faces in topology.geometric_edge_to_faces.items()
+                if len(faces) > 2
+            }
+            if not over_owned:
+                break
+            scores: dict[int, int] = defaultdict(int)
+            for local_faces in over_owned.values():
+                for local_face in local_faces:
+                    scores[int(local_face)] += 1
+            local_to_remove = max(
+                scores,
+                key=lambda index: (
+                    scores[index],
+                    remaining[index],
+                ),
+            )
+            removed.append(remaining.pop(local_to_remove))
+        if part.uvs and len(part.uvs) == len(part.vertices):
+            keep: list[int] = []
+            for face_index in remaining:
+                first, second, third = (
+                    part.uvs[vertex]
+                    for vertex in part.faces[face_index]
+                )
+                signed_area_twice = (
+                    (second[0] - first[0]) * (third[1] - first[1])
+                    - (second[1] - first[1]) * (third[0] - first[0])
+                )
+                if abs(signed_area_twice) <= 1.0e-12:
+                    removed.append(face_index)
+                else:
+                    keep.append(face_index)
+            remaining = keep
+        repaired_part = _with_topology(
+            replace(
+                part,
+                faces=tuple(part.faces[index] for index in remaining),
+            )
+        )
+        repaired_parts.append(repaired_part)
+        removed_rows.append((part.part_id, tuple(sorted(removed))))
+
+    repaired_document = replace(
+        document,
+        parts=tuple(repaired_parts),
+        structural_sha256="",
+    )
+    remaining_non_manifold = sum(
+        part.topology.non_manifold_edge_count
+        for part in repaired_document.parts
+    )
+    remaining_degenerate_uv = 0
+    for part in repaired_document.parts:
+        if not part.uvs or len(part.uvs) != len(part.vertices):
+            continue
+        for face in part.faces:
+            first, second, third = (part.uvs[index] for index in face)
+            area = (
+                (second[0] - first[0]) * (third[1] - first[1])
+                - (second[1] - first[1]) * (third[0] - first[0])
+            )
+            remaining_degenerate_uv += int(abs(area) <= 1.0e-12)
+    report = HeadArtTopologyRepairReport(
+        source_structural_sha256=document.structural_sha256,
+        repaired_structural_sha256=repaired_document.structural_sha256,
+        removed_face_indices_by_part=tuple(removed_rows),
+        remaining_non_manifold_edge_count=remaining_non_manifold,
+        remaining_degenerate_uv_face_count=remaining_degenerate_uv,
+    )
+    return repaired_document, report
+
+
 def _import_obj(
     source: Path,
     *,
@@ -441,13 +593,25 @@ def _import_obj(
         raise HeadArtImportError(f"Unable to import OBJ head art: {exc}") from exc
     parts: list[HeadArtPart] = []
     for ordinal, surface in enumerate(parsed.surfaces):
+        (
+            source_vertices,
+            source_faces,
+            source_uvs,
+            source_normals,
+            source_indices,
+        ) = _compact_exact_obj_render_vertices(
+            vertices=surface.vertices,
+            faces=surface.faces,
+            uvs=surface.uvs,
+            normals=surface.normals,
+        )
         vertices = tuple(
             transform_point(source_to_imported, vertex)
-            for vertex in surface.vertices
+            for vertex in source_vertices
         )
         normals = tuple(
             transform_vector(source_to_imported, normal, normalize=True)
-            for normal in surface.normals
+            for normal in source_normals
         )
         parts.append(
             HeadArtPart(
@@ -457,22 +621,95 @@ def _import_obj(
                 vertices=vertices,
                 faces=tuple(
                     tuple(int(value) for value in face)
-                    for face in surface.faces
+                    for face in source_faces
                 ),
                 uvs=tuple(
                     tuple(float(value) for value in uv)
-                    for uv in surface.uvs
+                    for uv in source_uvs
                 ),
                 normals=normals,
-                source_vertex_indices=tuple(range(len(vertices))),
+                source_vertex_indices=source_indices,
                 vertex_id_basis="obj_compacted_position_uv_normal_index",
-                authored_uvs=bool(surface.uvs),
+                authored_uvs=bool(source_uvs),
                 authored_normals=bool(
-                    parsed.normals_read and surface.normals
+                    parsed.normals_read and source_normals
                 ),
             )
         )
     return tuple(parts), tuple(parsed.warnings)
+
+
+def _compact_exact_obj_render_vertices(
+    *,
+    vertices: Sequence[Sequence[float]],
+    faces: Sequence[Sequence[int]],
+    uvs: Sequence[Sequence[float]],
+    normals: Sequence[Sequence[float]],
+) -> tuple[
+    tuple[Vec3, ...],
+    tuple[Face, ...],
+    tuple[Vec2, ...],
+    tuple[Vec3, ...],
+    tuple[int, ...],
+]:
+    """Collapse redundant OBJ corner indices without welding positions.
+
+    Maya may emit one distinct normal index per triangle corner even when the
+    authored position, UV, and normal values are exactly identical. Carrying
+    those redundant indices into a skinned KOTOR head can triple vertex and
+    weight-row counts for no visual benefit. This pass merges only exact
+    render-value triples; UV seams, hard normals, and differing positions stay
+    distinct.
+    """
+
+    vertex_rows = tuple(
+        tuple(float(value) for value in row[:3])
+        for row in vertices
+    )
+    uv_rows = tuple(
+        tuple(float(value) for value in row[:2])
+        for row in uvs
+    )
+    normal_rows = tuple(
+        tuple(float(value) for value in row[:3])
+        for row in normals
+    )
+    has_uvs = len(uv_rows) == len(vertex_rows)
+    has_normals = len(normal_rows) == len(vertex_rows)
+    compact_vertices: list[Vec3] = []
+    compact_uvs: list[Vec2] = []
+    compact_normals: list[Vec3] = []
+    source_indices: list[int] = []
+    index_by_value: dict[tuple[Any, ...], int] = {}
+    old_to_new: dict[int, int] = {}
+
+    for old_index, vertex in enumerate(vertex_rows):
+        uv = uv_rows[old_index] if has_uvs else ()
+        normal = normal_rows[old_index] if has_normals else ()
+        key = (vertex, uv, normal)
+        new_index = index_by_value.get(key)
+        if new_index is None:
+            new_index = len(compact_vertices)
+            index_by_value[key] = new_index
+            compact_vertices.append(vertex)
+            source_indices.append(old_index)
+            if has_uvs:
+                compact_uvs.append(uv)
+            if has_normals:
+                compact_normals.append(normal)
+        old_to_new[old_index] = new_index
+
+    compact_faces = tuple(
+        tuple(old_to_new[int(value)] for value in face[:3])
+        for face in faces
+    )
+    return (
+        tuple(compact_vertices),
+        compact_faces,
+        tuple(compact_uvs),
+        tuple(compact_normals),
+        tuple(source_indices),
+    )
 
 
 def _import_fbx(
@@ -705,10 +942,12 @@ __all__ = [
     "HeadArtImportError",
     "HeadArtPart",
     "HeadArtTopologyFacts",
+    "HeadArtTopologyRepairReport",
     "HeadArtValidationIssue",
     "HeadArtValidationReport",
     "MAX_HEAD_ART_BYTES",
     "SUPPORTED_HEAD_ART_EXTENSIONS",
     "import_head_art",
+    "repair_head_art_nonmanifold_overlays",
     "validate_head_art_document",
 ]

@@ -80,6 +80,7 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_set
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.ipc.server import GhostRiggerIPCServer
+from src.ipc.spatial_auth import default_spatial_session_path
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.systems.bas.attachment_alignment import (
@@ -822,10 +823,14 @@ class QtGhostRiggerMainWindow(
                     "capture_window": capture_window,
                     "map_studio_visual_proof": map_studio_visual_proof,
                     "map_studio_pie_visual_proof": map_studio_pie_visual_proof,
-                }
+                    "get_spatial_snapshot": self._ipc_spatial_snapshot,
+                    "capture_spatial_evidence": self._ipc_capture_spatial_evidence,
+                    "get_spatial_evidence_gaps": self._ipc_spatial_evidence_gaps,
+                },
+                spatial_session_path=default_spatial_session_path(),
             )
             self._ipc_server.start()
-            self._log(f"IPC server starting on port {self._ipc_server.port}.", "info")
+            self._log(f"IPC server listening on port {self._ipc_server.port}.", "info")
 
             try:
                 compatibility_port = int(os.environ.get("GHOSTSTUDIO_SCRIPTER_IPC_PORT", "7002"))
@@ -851,6 +856,15 @@ class QtGhostRiggerMainWindow(
                 "info",
             )
         except Exception as exc:
+            for server in (
+                self._ipc_server,
+                self._scripter_compat_ipc_server,
+            ):
+                if server is not None:
+                    try:
+                        server.stop()
+                    except Exception:
+                        log.exception("IPC startup cleanup failed")
             self._ipc_server = None
             self._scripter_compat_ipc_server = None
             self._log(f"IPC server failed to start: {exc}", "warning")

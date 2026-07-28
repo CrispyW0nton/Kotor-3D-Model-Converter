@@ -1225,6 +1225,8 @@ def available_visemes() -> Tuple[Tuple[int, str], ...]:
 def apply_viseme(
     scene: Any,
     viseme_index: int,
+    *,
+    viewport: Any = None,
 ) -> Tuple[bool, str]:
     """Snap the head's facial bones to the pose for *viseme_index*.
 
@@ -1250,7 +1252,8 @@ def apply_viseme(
     except Exception as exc:                                # pragma: no cover
         return False, f"Viseme lookup failed: {exc}"
 
-    valid_indices = {idx for idx, _ in avail}
+    labels_by_index = {idx: label for idx, label in avail}
+    valid_indices = set(labels_by_index)
     if viseme_index not in valid_indices:
         return False, (f"Viseme {viseme_index} out of range; valid: "
                        f"0..{max(valid_indices) if valid_indices else 15}")
@@ -1262,10 +1265,40 @@ def apply_viseme(
             return False, ("Head has no 'talk' animation — cannot apply "
                            "viseme poses.  Re-rig with a supermodel that "
                            "carries the standard talk animation.")
+        pose = playback.animation_pose_for_viseme(viseme_index)
+        if pose is None:
+            return False, (
+                f"Talk animation could not evaluate viseme {viseme_index}."
+            )
     except Exception as exc:                                # pragma: no cover
         return False, f"LIPPlayback unavailable: {exc}"
 
-    return True, f"Viseme {viseme_index} applied via talk animation."
+    try:
+        scene.head_facial_preview_pose = pose                # type: ignore[attr-defined]
+    except Exception:
+        return False, "Scene is read-only; cannot store facial preview pose."
+
+    label = labels_by_index.get(viseme_index, f"shape_{viseme_index}")
+    pose_time = float(getattr(pose, "time", viseme_index / 30.0) or 0.0)
+    talk_animation = getattr(playback, "_talk_anim", None)
+    talk_length = float(getattr(talk_animation, "length", 0.5) or 0.5)
+    if viewport is not None:
+        setter = getattr(viewport, "set_animation_pose", None)
+        if not callable(setter):
+            return False, "Viewport cannot display an animation pose."
+        try:
+            setter(
+                pose,
+                name=f"talk:{label}",
+                time=pose_time,
+                length=talk_length,
+            )
+        except Exception as exc:
+            return False, f"Viewport rejected facial preview pose: {exc}"
+
+    return True, (
+        f"Viseme {viseme_index} ({label}) applied from the talk animation."
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -1284,15 +1317,15 @@ def apply_viseme(
 #: requested by the Inspector page (left-to-right, two rows of four).
 PHONEME_POSES: Tuple[Tuple[str, int], ...] = (
     # Row 1 — vowels.
-    ("AH (open vowel)",          1),    # PP / AA equivalent
+    ("AH (open vowel)",          3),    # AA / AE / AH
     ("EH (mid vowel)",           2),    # EH / E
-    ("IH (closed vowel)",        3),    # IH / I
+    ("IH (closed vowel)",        1),    # IH / IY
     ("OH (rounded vowel)",       4),    # OH / O
     # Row 2 — consonants.
-    ("MM (closed labial)",       5),    # MM / Bilabial closed
-    ("FV (labiodental)",         6),    # FV / labiodental
-    ("TH (interdental)",         7),    # TH / dental
-    ("SS (sibilant)",            8),    # SS / sibilant
+    ("MM (closed labial)",      11),    # M / P / B
+    ("FV (labiodental)",         8),    # F / V
+    ("TH (interdental)",        10),    # TH / DH
+    ("SS (sibilant)",            7),    # S / Z / TS
 )
 
 

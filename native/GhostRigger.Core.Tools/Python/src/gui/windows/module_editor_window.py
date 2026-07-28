@@ -1224,6 +1224,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_custom_belt_keys: tuple[str, ...] = ()
         self._map_studio_tool_action_index: dict[str, Any] = {}
         self._syncing_map_studio_tool_belt_preferences = False
+        self._map_studio_viewport_focus_state: dict[str, Any] | None = None
         # Loaded modules should open as a complete world. Backdrop surfaces
         # remain non-pickable, and the toolbar checkbox can hide them when a
         # modder needs an uncluttered blockout view.
@@ -1423,6 +1424,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_action = view_menu.addAction("Show Viewport")
         self.viewport_action.setCheckable(True)
         self.viewport_action.setChecked(True)
+        self.focus_viewport_action = view_menu.addAction("Maximize Viewport")
+        self.focus_viewport_action.setObjectName("mapStudioMaximizeViewportAction")
+        self.focus_viewport_action.setCheckable(True)
+        self.focus_viewport_action.setShortcut(QtGui.QKeySequence("Ctrl+Space"))
+        self.focus_viewport_action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        self.focus_viewport_action.setToolTip(
+            "Temporarily collapse both side rails and lower docks so the editor viewport fills Map Studio."
+        )
         self.validation_action = view_menu.addAction("Show Validation / Output")
         self.validation_action.setCheckable(True)
         self.validation_action.setChecked(False)
@@ -1574,11 +1583,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_command_search_readiness_label.setWordWrap(True)
         root.addWidget(self.map_studio_command_search_readiness_label)
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        self.main_splitter.setChildrenCollapsible(True)
         root.addWidget(self.main_splitter, 1)
 
         left = QtWidgets.QWidget()
-        left.setMinimumWidth(300)
-        left.setMaximumWidth(380)
+        left.setObjectName("mapStudioLeftAuthoringRail")
+        left.setMinimumWidth(220)
+        left.setMaximumWidth(16777215)
+        left.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.left_authoring_rail = left
         left_layout = QtWidgets.QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self.outliner = ModuleEditorOutliner(left)
@@ -1713,6 +1726,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.addWidget(left)
 
         center = QtWidgets.QWidget()
+        center.setObjectName("mapStudioViewportHost")
+        center.setMinimumWidth(0)
+        center.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.viewport_host = center
         center_layout = QtWidgets.QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         self.viewport_panel = ModuleEditorViewportPanel(center)
@@ -1726,8 +1743,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.addWidget(center)
 
         right = QtWidgets.QWidget()
-        right.setMinimumWidth(260)
-        right.setMaximumWidth(440)
+        right.setObjectName("mapStudioRightInspectorRail")
+        right.setMinimumWidth(230)
+        right.setMaximumWidth(16777215)
+        right.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        self.right_inspector_rail = right
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
@@ -1812,6 +1832,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setStretchFactor(2, 0)
+        self.main_splitter.setCollapsible(0, True)
+        self.main_splitter.setCollapsible(1, False)
+        self.main_splitter.setCollapsible(2, True)
         self.main_splitter.setSizes([260, 1380, 300])
         self.resizeDocks((self.workflow_dock,), (280,), QtCore.Qt.Orientation.Vertical)
         self._update_map_studio_workspace_guide()
@@ -2193,6 +2216,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
+        self.focus_viewport_action.toggled.connect(self._set_map_studio_viewport_maximized)
         self.validation_action.toggled.connect(self._set_map_studio_validation_output_visible)
         self.validation_output_dock.visibilityChanged.connect(
             self._sync_map_studio_validation_output_action
@@ -16150,7 +16174,69 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 return False
         return True
 
+    def _set_map_studio_viewport_maximized(self, maximized: bool) -> None:
+        """Toggle a reversible viewport-first Map Studio layout."""
+
+        splitter = getattr(self, "main_splitter", None)
+        left = getattr(self, "left_authoring_rail", None)
+        right = getattr(self, "right_inspector_rail", None)
+        if splitter is None or left is None or right is None:
+            return
+        chrome = tuple(
+            widget
+            for widget in (
+                getattr(self, "toolbar_scroll", None),
+                getattr(self, "map_studio_tool_belt_tabs", None),
+            )
+            if widget is not None
+        )
+        docks = tuple(
+            dock
+            for dock in (
+                getattr(self, "workflow_dock", None),
+                getattr(self, "validation_output_dock", None),
+            )
+            if dock is not None
+        )
+        if maximized:
+            if self._map_studio_viewport_focus_state is None:
+                self._map_studio_viewport_focus_state = {
+                    "splitter_sizes": list(splitter.sizes()),
+                    "left_visible": not left.isHidden(),
+                    "right_visible": not right.isHidden(),
+                    "chrome_visible": tuple(not widget.isHidden() for widget in chrome),
+                    "dock_visible": tuple(not dock.isHidden() for dock in docks),
+                }
+            left.hide()
+            right.hide()
+            for widget in chrome:
+                widget.hide()
+            for dock in docks:
+                dock.hide()
+            splitter.setSizes([0, max(1, self.width()), 0])
+            self.statusBar().showMessage(
+                "Viewport maximized. Press Ctrl+Space or clear View > Maximize Viewport to restore panels.",
+                6000,
+            )
+            return
+
+        state = self._map_studio_viewport_focus_state or {}
+        left.setVisible(bool(state.get("left_visible", True)))
+        right.setVisible(bool(state.get("right_visible", True)))
+        for widget, visible in zip(chrome, state.get("chrome_visible", (True,) * len(chrome))):
+            widget.setVisible(bool(visible))
+        for dock, visible in zip(docks, state.get("dock_visible", (True,) * len(docks))):
+            dock.setVisible(bool(visible))
+        sizes = [int(size) for size in state.get("splitter_sizes", ()) if int(size) >= 0]
+        if len(sizes) != 3 or sum(sizes) <= 0:
+            sizes = [280, 1080, 300]
+        splitter.setSizes(sizes)
+        self._map_studio_viewport_focus_state = None
+        self.statusBar().showMessage("Map Studio panels restored.", 3000)
+
     def _reset_layout(self) -> None:
+        if getattr(self, "focus_viewport_action", None) is not None and self.focus_viewport_action.isChecked():
+            self.focus_viewport_action.setChecked(False)
         workflow_dock = getattr(self, "workflow_dock", None)
         if workflow_dock is not None:
             workflow_dock.setFloating(False)
@@ -16212,13 +16298,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def apply_ghost_layout(self, layout) -> None:
         if layout is None:
             return
-        self.resize(layout.main_width, layout.main_height)
+        if not self.isMaximized():
+            self.resize(layout.main_width, layout.main_height)
         self.main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
-        self.main_splitter.setSizes([
-            max(230, min(320, layout.panel("library").preferred_width)),
-            max(1040, layout.viewport.preferred_width + 120),
-            max(250, min(390, layout.panel("properties").preferred_width)),
-        ])
+        self.left_authoring_rail.setMinimumWidth(
+            max(200, min(240, layout.panel("library").min_width))
+        )
+        self.right_inspector_rail.setMinimumWidth(
+            max(220, min(260, layout.panel("properties").min_width))
+        )
+        normal_splitter_sizes = [
+            max(220, min(340, layout.panel("library").preferred_width)),
+            max(layout.viewport.min_width, layout.viewport.preferred_width + 200),
+            max(230, min(400, layout.panel("properties").preferred_width)),
+        ]
+        if self.focus_viewport_action.isChecked():
+            if self._map_studio_viewport_focus_state is not None:
+                self._map_studio_viewport_focus_state["splitter_sizes"] = normal_splitter_sizes
+        else:
+            self.main_splitter.setSizes(normal_splitter_sizes)
         if hasattr(self, "left_splitter"):
             self.left_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
             self.left_splitter.setSizes([max(360, layout.main_height - 220)])
@@ -16238,6 +16336,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 QtCore.Qt.Orientation.Vertical,
             )
         self.toolbar.apply_ghost_layout(layout)
+        try:
+            from src.gui.libtheme.layout_applier import apply_menu_layout
+
+            apply_menu_layout(layout, self)
+        except Exception:
+            pass
         for widget in self.findChildren(QtWidgets.QWidget):
             hook = getattr(widget, "apply_ghost_layout", None)
             if callable(hook) and widget is not self.toolbar:

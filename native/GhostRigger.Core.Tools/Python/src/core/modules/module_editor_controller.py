@@ -3888,11 +3888,12 @@ class ModuleEditorController:
         target_room_resref: str = "",
         resource_manager: Any = None,
     ) -> str:
-        """Surface-place a terrain mesh as one visual-only Odyssey room.
+        """Surface-place a terrain mesh as one small Odyssey room.
 
         KOTOR's GIT placeable list cannot own arbitrary static cliff geometry.
-        A small visual-only room is the engine-accurate export boundary, while
-        its zero-face WOK leaves collision with the sculpted terrain below.
+        Explicit nonblocking dressing keeps a zero-face WOK. Traversal pieces
+        may carry generated floor WOKs, while unresolved solid blockers remain
+        export-blocking until their footprint is cut from the host walkmesh.
         """
 
         entry = terrain_kit_asset(asset_id)
@@ -3941,6 +3942,17 @@ class ModuleEditorController:
             float(scale),
             resource_manager=resource_manager,
         )
+        primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+        terrain_visual_only = bool(primitive_metadata.get("terrain_kit_visual_only", False))
+        collision_status = str(
+            primitive_metadata.get("terrain_kit_collision_status") or ""
+        )
+        collision_ready = bool(
+            primitive_metadata.get("terrain_kit_collision_ready", terrain_visual_only)
+        )
+        collision_blocking_reason = str(
+            primitive_metadata.get("terrain_kit_collision_blocking_reason") or ""
+        )
         all_rooms = tuple(room.normalised_resref() for room in authored.rooms) + (room_key,)
         updated_existing = tuple(
             replace(
@@ -3977,7 +3989,10 @@ class ModuleEditorController:
                 "terrain_kit_target_magnet_id": str(placement.get("target_magnet_id") or ""),
                 "terrain_kit_target_piece_id": str(placement.get("target_piece_id") or ""),
                 "terrain_kit_snap_cursor_distance": float(placement.get("cursor_distance", 0.0) or 0.0),
-                "visual_only": True,
+                "terrain_kit_collision_status": collision_status,
+                "terrain_kit_collision_ready": collision_ready,
+                "terrain_kit_collision_blocking_reason": collision_blocking_reason,
+                "visual_only": terrain_visual_only,
                 "surface_snapped": True,
             },
         )
@@ -3989,7 +4004,7 @@ class ModuleEditorController:
             else ""
         )
         self.model.log(
-            f"Placed Terrain Kit asset {entry.label} as visual room {room_key} at "
+            f"Placed Terrain Kit asset {entry.label} as room {room_key} at "
             f"{point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f}{snap_note}."
         )
         self._record_map_studio_command(

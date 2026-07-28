@@ -88,16 +88,28 @@ class QtHeadBuilderController(QtCore.QObject):
         self._headhook_matrix: Any = None
         self._headhook_path = ""
         self._viewport_context = ""
+        self._candidate_texture_cache: dict[str, bytes] = {}
         self._mesh_selection_state: Any = None
         self._animation_engine: Any = None
         self._animation_last_tick: float | None = None
         self._animation_timer = QtCore.QTimer(self)
         self._animation_timer.setInterval(16)
         self._animation_timer.timeout.connect(self._tick_animation)
+        self._dialogue_playback: Any = None
+        self._dialogue_audio_preview: Any = None
+        self._dialogue_stopping = False
+        self._dialogue_sync_checked = False
+        self._dialogue_timer = QtCore.QTimer(self)
+        self._dialogue_timer.setInterval(16)
+        self._dialogue_timer.timeout.connect(self._tick_dialogue)
 
         self.properties.actionRequested.connect(self.execute_action)
         self.properties.captureRequested.connect(self.capture_from_viewport)
         self.properties.previewAnimationRequested.connect(self.play_animation)
+        self.properties.dialoguePreviewRequested.connect(self.play_dialogue)
+        self.properties.dialoguePreviewStopRequested.connect(
+            self._stop_dialogue
+        )
         self.evidence.stepRequested.connect(self.set_step)
         if hasattr(self.viewport, "meshSubobjectSelectionChanged"):
             self.viewport.meshSubobjectSelectionChanged.connect(
@@ -668,6 +680,21 @@ class QtHeadBuilderController(QtCore.QObject):
         )
 
     def _transplant(self, payload: dict[str, Any]) -> None:
+        facial_performance = bool(
+            payload.pop("facial_performance_mode", False)
+        )
+        if facial_performance:
+            maximum_distance = float(
+                payload.get("maximum_surface_distance", 0.05)
+            )
+            self._run(
+                "Building semantic facial-performance head",
+                lambda: self.service.transplant_facial_performance_head(
+                    maximum_surface_distance=maximum_distance,
+                ),
+                self._after_transplant,
+            )
+            return
         self._run(
             "Replacing donor geometry and transferring skin weights",
             lambda: self.service.transplant_geometry_and_skin(**payload),
@@ -731,7 +758,15 @@ class QtHeadBuilderController(QtCore.QObject):
 
     def _after_texture(self, result: Any) -> None:
         self.properties.set_texture_result(result)
-        self._load_viewport_model(result.model, "candidate")
+        source_path = Path(result.asset.source_path)
+        self._candidate_texture_cache = {
+            str(result.output_policy.output_resref): source_path.read_bytes(),
+        }
+        self._load_viewport_model(
+            result.model,
+            "candidate",
+            texture_cache=self._candidate_texture_cache,
+        )
 
     def _build_preview(self, payload: dict[str, Any]) -> None:
         self._run(
@@ -742,7 +777,11 @@ class QtHeadBuilderController(QtCore.QObject):
 
     def _after_preview(self, result: Any) -> None:
         self.properties.set_preview_result(result)
-        self._load_viewport_model(result.preview_model, "attachment_preview")
+        self._load_viewport_model(
+            result.preview_model,
+            "attachment_preview",
+            texture_cache=self._candidate_texture_cache,
+        )
 
     def _return_rigid_baseline(self, _payload: dict[str, Any]) -> None:
         candidate = self.service.candidate_model
@@ -870,7 +909,14 @@ class QtHeadBuilderController(QtCore.QObject):
         if "skin payload" in restored:
             self.properties.set_transplant_result(restored["skin payload"])
         if "materials" in restored:
-            self.properties.set_texture_result(restored["materials"])
+            materials = restored["materials"]
+            self.properties.set_texture_result(materials)
+            source_path = Path(materials.asset.source_path)
+            self._candidate_texture_cache = {
+                str(materials.output_policy.output_resref): (
+                    source_path.read_bytes()
+                ),
+            }
         if "attachment preview" in restored:
             self.properties.set_preview_result(restored["attachment preview"])
         if "binary preflight" in restored:
@@ -894,15 +940,26 @@ class QtHeadBuilderController(QtCore.QObject):
             self._load_viewport_model(
                 self.service.preview_result.preview_model,
                 "attachment_preview",
+                texture_cache=self._candidate_texture_cache,
             )
         elif self.service.candidate_model is not None:
-            self._load_viewport_model(self.service.candidate_model, "candidate")
+            self._load_viewport_model(
+                self.service.candidate_model,
+                "candidate",
+                texture_cache=self._candidate_texture_cache,
+            )
         elif self.service.selected_model is not None:
             self._load_viewport_model(self.service.selected_model, "donor")
         elif self.service.imported_art is not None:
             self._show_custom_art()
 
-    def _load_viewport_model(self, model: Any, context: str) -> None:
+    def _load_viewport_model(
+        self,
+        model: Any,
+        context: str,
+        *,
+        texture_cache: Mapping[str, bytes] | None = None,
+    ) -> None:
         self._viewport_context = str(context)
         if model is None:
             raise HeadBuilderServiceError(
@@ -912,7 +969,10 @@ class QtHeadBuilderController(QtCore.QObject):
         if scene is not None:
             scene.preview_model = model
         if hasattr(self.viewport, "load_model"):
-            self.viewport.load_model(model)
+            self.viewport.load_model(
+                model,
+                texture_cache=dict(texture_cache or {}),
+            )
         elif hasattr(self.viewport, "set_model"):
             self.viewport.set_model(model)
         else:
@@ -1089,6 +1149,185 @@ class QtHeadBuilderController(QtCore.QObject):
                 time=float(engine.current_time),
                 length=float(getattr(animation, "length", 0.0) or 0.0),
             )
+
+    @QtCore.Slot(str, str)
+    def play_dialogue(self, audio_path: str, lip_path: str) -> None:
+        """Play matching dialogue audio and LIP poses against the real head."""
+
+        audio_target = Path(str(audio_path or "")).expanduser()
+        lip_target = Path(str(lip_path or "")).expanduser()
+        if not audio_target.is_file():
+            self._show_error("Choose an existing dialogue audio file.")
+            return
+        if not lip_target.is_file():
+            self._show_error("Choose the matching KOTOR LIP file.")
+            return
+        result = self.service.preview_result
+        if result is None:
+            self._show_error(
+                "Build the exact-headhook attachment preview before dialogue playback."
+            )
+            return
+        self._stop_animation()
+        self._stop_dialogue(present_status=False)
+        try:
+            from src.adapters.qt_audio.narrative_audio_preview import (
+                NarrativeAudioPreview,
+            )
+            from src.core.characters.character_builder import LIPPlayback
+            from src.core.characters.facial_rig_qa import audit_lip_timeline
+            from src.core.special.lip_reader import LIPFile
+
+            lip_data = LIPFile.from_file(str(lip_target))
+            timeline = audit_lip_timeline(lip_data, name=lip_target.stem)
+            if not timeline.ok:
+                raise HeadBuilderServiceError(
+                    "The selected LIP timeline is not usable: "
+                    + ", ".join(timeline.failures)
+                )
+            playback = LIPPlayback()
+            if not playback.load_lip(lip_data):
+                raise HeadBuilderServiceError("The selected LIP data is empty.")
+            if not playback.load_talk_animation(result.head_model):
+                raise HeadBuilderServiceError(
+                    "The preview head has no local or inherited talk animation."
+                )
+            preview = NarrativeAudioPreview(parent=self)
+            preview.previewStopped.connect(self._dialogue_audio_stopped)
+            preview.previewFailed.connect(self._dialogue_audio_failed)
+            if not preview.play_file(audio_target):
+                preview.deleteLater()
+                return
+            self._dialogue_playback = playback
+            self._dialogue_audio_preview = preview
+            self._dialogue_sync_checked = False
+            self._prime_dialogue_base_pose(playback)
+            self._dialogue_timer.start()
+            self.properties.set_dialogue_preview_status(
+                f"Playing {audio_target.name} with {lip_target.name}",
+                playing=True,
+            )
+        except Exception as exc:
+            self._stop_dialogue(present_status=False)
+            self._show_error(str(exc))
+
+    def _prime_dialogue_base_pose(self, playback: Any) -> None:
+        """Give GPU skinning the neutral talk pose before facial animation."""
+
+        neutral_pose = playback.animation_pose_for_viseme(0)
+        if (
+            neutral_pose is not None
+            and hasattr(self.viewport, "set_anim_base_pose")
+        ):
+            self.viewport.set_anim_base_pose(
+                QtHeadBuilderController._scope_dialogue_pose(neutral_pose)
+            )
+
+    @staticmethod
+    def _scope_dialogue_pose(pose: Any) -> Any:
+        """Restrict a head-only talk pose to its BAS attachment source.
+
+        The attachment preview is a body/head composite.  A legacy unscoped
+        pose is allowed to drive identity-free nodes, so duplicate Odyssey
+        names such as ``rootdummy`` can otherwise apply the head-local talk
+        transform to the body and move the whole character out of frame.
+        """
+
+        if pose is None:
+            return None
+        from src.core.rendering.mesh_render_data import ScopedAnimationPoseSet
+
+        return ScopedAnimationPoseSet({"head_builder_attachment": pose})
+
+    @QtCore.Slot()
+    def _tick_dialogue(self) -> None:
+        playback = self._dialogue_playback
+        preview = self._dialogue_audio_preview
+        if playback is None or preview is None:
+            self._stop_dialogue()
+            return
+        player = getattr(preview, "player", None)
+        position = getattr(player, "position", lambda: 0)()
+        time_seconds = max(0.0, float(position or 0) / 1000.0)
+        duration = float(getattr(playback, "duration", 0.0) or 0.0)
+        audio_duration_ms = getattr(
+            player,
+            "duration",
+            lambda: 0,
+        )()
+        if (
+            not bool(getattr(self, "_dialogue_sync_checked", False))
+            and int(audio_duration_ms or 0) > 0
+        ):
+            from src.core.characters.facial_rig_qa import (
+                audit_audio_lip_sync,
+            )
+
+            sync = audit_audio_lip_sync(
+                lip_duration=duration,
+                audio_duration=float(audio_duration_ms) / 1000.0,
+            )
+            self._dialogue_sync_checked = True
+            if not sync.ok:
+                self._stop_dialogue(present_status=False)
+                self._show_error(
+                    "Dialogue audio/LIP duration mismatch: "
+                    f"audio {sync.audio_duration:.3f}s, "
+                    f"LIP {sync.lip_duration:.3f}s. "
+                    "Regenerate or select the matching full-length voice file."
+                )
+                return
+        # The audio clock owns playback lifetime. A small authoring mismatch
+        # must never cut off spoken dialogue; hold the LIP's final pose until
+        # QtMultimedia reports that the audio itself has stopped.
+        facial_time = min(time_seconds, duration) if duration > 0.0 else time_seconds
+        pose = playback.animation_pose_at_time(facial_time)
+        if pose is None:
+            return
+        if hasattr(self.viewport, "set_animation_pose"):
+            self.viewport.set_animation_pose(
+                QtHeadBuilderController._scope_dialogue_pose(pose),
+                name="dialogue_lip",
+                time=facial_time,
+                length=duration,
+            )
+
+    @QtCore.Slot()
+    def _dialogue_audio_stopped(self) -> None:
+        if not self._dialogue_stopping:
+            self._stop_dialogue()
+
+    @QtCore.Slot(str)
+    def _dialogue_audio_failed(self, message: str) -> None:
+        self._stop_dialogue(present_status=False)
+        self._show_error(str(message or "Dialogue audio preview failed."))
+
+    @QtCore.Slot()
+    def _stop_dialogue(self, *, present_status: bool = True) -> None:
+        if self._dialogue_stopping:
+            return
+        self._dialogue_stopping = True
+        try:
+            self._dialogue_timer.stop()
+            preview = self._dialogue_audio_preview
+            self._dialogue_audio_preview = None
+            self._dialogue_playback = None
+            self._dialogue_sync_checked = False
+            if preview is not None:
+                try:
+                    preview.stop(emit_signal=False)
+                except TypeError:
+                    preview.stop()
+                preview.deleteLater()
+            if hasattr(self.viewport, "set_animation_pose"):
+                self.viewport.set_animation_pose(None)
+            if present_status:
+                self.properties.set_dialogue_preview_status(
+                    "Dialogue facial preview stopped",
+                    playing=False,
+                )
+        finally:
+            self._dialogue_stopping = False
 
     @staticmethod
     def _donor_resref(project: Any) -> str:

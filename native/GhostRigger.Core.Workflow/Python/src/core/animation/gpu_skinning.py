@@ -1068,6 +1068,13 @@ class MatrixPaletteUploader:
         # preview skinning, matching compute_palette(..., anim_base_pose=...).
         if anim_base_pose is not None:
             self.set_bind_pose_from_anim(anim_base_pose)
+        elif self._inv_bind_anim is not None:
+            # Animation-derived inverse binds are valid only while the caller
+            # supplies that animation's base pose.  BAS head attachments keep
+            # evaluating a skin palette after set_animation_pose(None), so a
+            # cached talk-pose bind would otherwise be combined with the
+            # static hierarchy and collapse the model when dialogue stops.
+            self.set_bind_pose_from_anim(None)
         self._palette = []
         self._palette_numpy_cache = None
         self._flat_bytes_cache = None

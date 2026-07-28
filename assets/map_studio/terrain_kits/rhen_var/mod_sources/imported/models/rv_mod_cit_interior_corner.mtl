@@ -1,0 +1,20 @@
+# Authorized Rhen Var source material repackaged for Ghost Studio
+# Diffuse textures are power-of-two TGA; UVs and material slots are preserved.
+
+newmtl material1
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.120000 0.120000 0.120000
+Ns 18.000000
+d 1.000000
+map_Kd ../textures/rv91dea87b9d97.tga
+
+newmtl material2
+illum 2
+Ka 0.300000 0.300000 0.300000
+Kd 1.000000 1.000000 1.000000
+Ks 0.120000 0.120000 0.120000
+Ns 18.000000
+d 1.000000
+map_Kd ../textures/rv56a8a64aab23.tga

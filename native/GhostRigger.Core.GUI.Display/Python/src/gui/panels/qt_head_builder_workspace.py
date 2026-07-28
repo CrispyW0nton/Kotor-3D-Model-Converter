@@ -215,6 +215,8 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str, object)
     captureRequested = QtCore.Signal(str, str)
     previewAnimationRequested = QtCore.Signal(str)
+    dialoguePreviewRequested = QtCore.Signal(str, str)
+    dialoguePreviewStopRequested = QtCore.Signal()
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
@@ -227,6 +229,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         self._source_texture_paths: list[str] = []
         self._evidence_paths: list[str] = []
         self._install_preview_id = ""
+        self._facial_performance_mode = False
         self._build()
 
     def _build(self) -> None:
@@ -254,6 +257,14 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         )
         self.guidance.setWordWrap(True)
         root.addWidget(self.guidance)
+        self.facial_mode_notice = QtWidgets.QLabel(self)
+        self.facial_mode_notice.setObjectName(
+            "HeadBuilderFacialPerformanceNotice"
+        )
+        self.facial_mode_notice.setProperty("role", "warning")
+        self.facial_mode_notice.setWordWrap(True)
+        self.facial_mode_notice.setVisible(False)
+        root.addWidget(self.facial_mode_notice)
         self.stack = QtWidgets.QStackedWidget(self)
         self.stack.setObjectName("HeadBuilderStepStack")
         for builder in (
@@ -271,6 +282,50 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         ):
             self.stack.addWidget(self._scroll_page(builder()))
         root.addWidget(self.stack, 1)
+
+    def set_facial_performance_mode(self, enabled: bool) -> None:
+        """Show the export contract for the advanced facial-head workflow."""
+
+        self._facial_performance_mode = bool(enabled)
+        self.facial_mode_notice.setText(
+            "Custom Animation Patch required for full facial-performance curves. "
+            "A vanilla LIP fallback is available for an unpatched game."
+        )
+        self.facial_mode_notice.setVisible(self._facial_performance_mode)
+        if hasattr(self, "skin_settings_group"):
+            self.skin_settings_group.setTitle(
+                "Semantic facial surface transfer"
+                if self._facial_performance_mode
+                else "Donor surface transfer"
+            )
+        if hasattr(self, "maximum_surface_distance"):
+            current_distance = self.maximum_surface_distance.value()
+            if self._facial_performance_mode and abs(
+                current_distance - 100.0
+            ) <= 1.0e-9:
+                self.maximum_surface_distance.setValue(0.05)
+            elif not self._facial_performance_mode and abs(
+                current_distance - 0.05
+            ) <= 1.0e-9:
+                self.maximum_surface_distance.setValue(100.0)
+        if hasattr(self, "transplant_button"):
+            self.transplant_button.setText(
+                "Build animated face, eyes, lids, teeth, and tongue"
+                if self._facial_performance_mode
+                else "Replace donor geometry and transfer skin"
+            )
+        if hasattr(self, "weight_edit_group"):
+            self.weight_edit_group.setEnabled(
+                not self._facial_performance_mode
+            )
+            self.weight_edit_group.setToolTip(
+                (
+                    "Semantic mode assigns each facial component to its exact "
+                    "native control; manual single-skin edits are disabled."
+                )
+                if self._facial_performance_mode
+                else ""
+            )
 
     def _page(
         self,
@@ -414,6 +469,14 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         self.source_axis.addItem(
             "Blender XYZ → KOTOR X,Z,-Y",
             "blender_xyz_to_kotor_xz_minus_y",
+        )
+        self.source_axis.addItem(
+            "Tripo Y-up, Z-forward → KOTOR",
+            "tripo_y_up_z_forward",
+        )
+        self.source_axis.addItem(
+            "Maya Y-up, X-forward → KOTOR",
+            "maya_y_up_x_forward",
         )
         self.unit_scale = QtWidgets.QDoubleSpinBox(page)
         self.unit_scale.setRange(0.000001, 1000000.0)
@@ -736,6 +799,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         self.skin_part_table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.skin_part_table)
         settings, form = self._form_group("Donor surface transfer", page)
+        self.skin_settings_group = settings
         self.maximum_surface_distance = QtWidgets.QDoubleSpinBox(page)
         self.maximum_surface_distance.setRange(0.000001, 1000000.0)
         self.maximum_surface_distance.setDecimals(6)
@@ -772,6 +836,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
             "Replace donor geometry and transfer skin",
             page,
         )
+        self.transplant_button = transplant
         transplant.setObjectName("HeadBuilderTransplantButton")
         transplant.clicked.connect(
             lambda: self._emit("transplant", self.transplant_payload())
@@ -784,6 +849,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
             "Selected vertex weight fix",
             page,
         )
+        self.weight_edit_group = edit_group
         self.weight_vertex_id = QtWidgets.QLineEdit(page)
         self.weight_vertex_id.setPlaceholderText(
             "Pick a transplanted vertex or enter its stable ID"
@@ -848,7 +914,9 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         self.texture_path = _PathField(
             folder=False,
             title="Choose a KOTOR head texture",
-            file_filter="KOTOR textures (*.tga *.tpc);;All files (*)",
+            file_filter=(
+                "Head texture sources (*.png *.tga *.tpc);;All files (*)"
+            ),
             parent=page,
         )
         self.txi_path = _PathField(
@@ -996,6 +1064,64 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         )
         preset_layout.addWidget(stop, 3, 0, 1, 3)
         layout.addWidget(preset_group)
+
+        dialogue_group = QtWidgets.QGroupBox(
+            "Synchronized dialogue facial preview",
+            page,
+        )
+        dialogue_layout = QtWidgets.QFormLayout(dialogue_group)
+        self.dialogue_audio_path = _PathField(
+            folder=False,
+            title="Choose dialogue audio",
+            file_filter=(
+                "Dialogue audio (*.wav *.mp3 *.ogg *.flac);;All files (*)"
+            ),
+            parent=dialogue_group,
+        )
+        self.dialogue_lip_path = _PathField(
+            folder=False,
+            title="Choose matching KOTOR LIP",
+            file_filter="KOTOR lip animation (*.lip);;All files (*)",
+            parent=dialogue_group,
+        )
+        dialogue_layout.addRow("Dialogue audio", self.dialogue_audio_path)
+        dialogue_layout.addRow("Matching LIP", self.dialogue_lip_path)
+        dialogue_buttons = QtWidgets.QHBoxLayout()
+        self.dialogue_preview_button = QtWidgets.QPushButton(
+            "Play audio + face",
+            dialogue_group,
+        )
+        self.dialogue_preview_button.setObjectName(
+            "HeadBuilderDialoguePreviewButton"
+        )
+        self.dialogue_preview_button.clicked.connect(
+            lambda: self.dialoguePreviewRequested.emit(
+                self.dialogue_audio_path.text(),
+                self.dialogue_lip_path.text(),
+            )
+        )
+        self.dialogue_stop_button = QtWidgets.QPushButton(
+            "Stop",
+            dialogue_group,
+        )
+        self.dialogue_stop_button.setObjectName(
+            "HeadBuilderDialogueStopButton"
+        )
+        self.dialogue_stop_button.setEnabled(False)
+        self.dialogue_stop_button.clicked.connect(
+            self.dialoguePreviewStopRequested.emit
+        )
+        dialogue_buttons.addWidget(self.dialogue_preview_button)
+        dialogue_buttons.addWidget(self.dialogue_stop_button)
+        dialogue_layout.addRow("", dialogue_buttons)
+        self.dialogue_preview_status = QtWidgets.QLabel(
+            "Choose matching dialogue audio and LIP data.",
+            dialogue_group,
+        )
+        self.dialogue_preview_status.setWordWrap(True)
+        dialogue_layout.addRow(self.dialogue_preview_status)
+        layout.addWidget(dialogue_group)
+
         self.preview_summary = QtWidgets.QPlainTextEdit(page)
         self.preview_summary.setReadOnly(True)
         self.preview_summary.setPlaceholderText(
@@ -1005,6 +1131,18 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
         )
         layout.addWidget(self.preview_summary)
         return page
+
+    def set_dialogue_preview_status(
+        self,
+        message: str,
+        *,
+        playing: bool,
+    ) -> None:
+        """Present synchronized audio/facial playback state."""
+
+        self.dialogue_preview_status.setText(str(message or ""))
+        self.dialogue_preview_button.setEnabled(not playing)
+        self.dialogue_stop_button.setEnabled(bool(playing))
 
     def _build_physics_page(self) -> QtWidgets.QWidget:
         page, layout = self._page(
@@ -1251,7 +1389,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
             self,
             "Add source textures",
             "",
-            "KOTOR textures (*.tga *.tpc *.txi);;All files (*)",
+            "Head texture sources (*.png *.tga *.tpc *.txi);;All files (*)",
         )
         for path in paths:
             if path not in self._source_texture_paths:
@@ -1345,6 +1483,9 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
                 ),
                 "weld_exact_duplicates": self.weld_import.isChecked(),
                 "triangulate": self.triangulate_import.isChecked(),
+                "repair_nonmanifold_overlays": (
+                    self._facial_performance_mode
+                ),
             },
         }
 
@@ -1389,6 +1530,7 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
                     combo.currentData() or "surface_transfer"
                 )
         return {
+            "facial_performance_mode": self._facial_performance_mode,
             "part_modes": part_modes,
             "neck_vertex_ids": [
                 line.strip()
@@ -1824,6 +1966,23 @@ class QtHeadBuilderProperties(QtWidgets.QWidget):
 
     def set_transplant_result(self, result: Any) -> None:
         report = result.report
+        if hasattr(report, "facial_skin_vertex_count"):
+            component_rows = tuple(report.component_nodes or ())
+            component_vertices = sum(
+                int(row[2]) for row in component_rows
+            )
+            component_faces = sum(int(row[3]) for row in component_rows)
+            self.skin_summary.setText(
+                "Accepted semantic facial payload — "
+                f"{report.facial_skin_vertex_count + component_vertices:,} "
+                "visible vertices, "
+                f"{report.facial_skin_face_count + component_faces:,} faces, "
+                f"{len(component_rows)} articulated facial components, "
+                f"{report.rigid_accessory_vertex_count} rigid accessory "
+                "vertices. DAG-blocking differences: "
+                f"{len(report.blocking_difference_paths)}."
+            )
+            return
         self.skin_summary.setText(
             f"Accepted donor-preserving payload — "
             f"{report.output_vertex_count:,} vertices, "

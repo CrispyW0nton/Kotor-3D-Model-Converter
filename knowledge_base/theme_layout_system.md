@@ -26,6 +26,13 @@ theme, `main` toolbar metrics, viewport metrics, rail/inspector sizing, and
 splitter policy remain authoritative. The entry adds no head-only color tokens
 or fixed layout contract.
 
+The advanced facial entry is
+`characterBuilderMode.facial_performance_head`. It deliberately reuses the
+same Head Builder surface and exposes the Custom Animation Patch requirement
+as ordinary warning-role copy. Matching dialogue audio/LIP inputs and playback
+state remain inside `headBuilderProperties`, inherit the existing layout
+metrics, and introduce no custom palette or fixed sizing.
+
 Vanilla face, eye, eyelid/lash, hair, and modular-alien selectors remain inside
 the existing `headBuilderProperties` layout surface and inherit standard form,
 input, label, group-box, and button styling. No component-specific theme token
@@ -147,6 +154,20 @@ Supported button modes:
 
 Tooltips must always keep the full action name, especially for icon-only
 layouts.
+
+Menu geometry is layout-owned. The `<spacing>` entries `menuBarHeight`,
+`menuMinimumWidth`, `menuHorizontalPadding`, `menuShortcutGap`,
+`menuIndicatorWidth`, and `menuSubmenuArrowWidth` are combined with live font
+metrics whenever a main or context menu opens. This keeps label, icon/check,
+shortcut, and submenu columns aligned without fixed per-window menu widths.
+Text-bearing toolbar buttons likewise size to their full label; compact
+workspaces should provide horizontal overflow rather than clipping text.
+
+Map Studio's left and right authoring rails are collapsible splitter children.
+Its reversible **Maximize Viewport** action hides the rails and nonessential
+authoring chrome, then restores the recorded splitter and dock state. Layout
+changes made while focused replace the stored normal splitter proportions so
+the selected layout remains authoritative after restoration.
 
 ## Runtime
 

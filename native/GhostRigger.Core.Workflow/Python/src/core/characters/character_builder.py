@@ -724,6 +724,22 @@ def validate_facial_bones(head_model) -> List[str]:
     return warnings
 
 
+def _import_animation_engine():  # pragma: no cover - import shim
+    try:
+        from src.core.animation import animation_engine as _animation
+    except ImportError:
+        from core.animation import animation_engine as _animation  # type: ignore
+    return _animation
+
+
+def _import_facial_performance():  # pragma: no cover - import shim
+    try:
+        from src.core.animation import facial_performance as _facial
+    except ImportError:
+        from core.animation import facial_performance as _facial  # type: ignore
+    return _facial
+
+
 class LIPPlayback:
     """LIP sync playback engine for character builder facial preview.
 
@@ -746,6 +762,9 @@ class LIPPlayback:
     def __init__(self):
         self._lip_data = None      # LIPFile instance
         self._talk_anim = None     # Animation named 'talk' from head model
+        self._animation_engine = None
+        self._head_model = None
+        self._shape_times = tuple(index / 30.0 for index in range(16))
         self._elapsed = 0.0        # current playback time
         self._playing = False
 
@@ -785,15 +804,142 @@ class LIPPlayback:
         """
         if head_model is None:
             return False
-        anims = getattr(head_model, 'animations', [])
-        for anim in anims:
-            name = getattr(anim, 'name', '').lower()
-            if name == 'talk' or name.endswith('_talk'):
-                self._talk_anim = anim
-                log.debug(f"LIPPlayback: found talk animation '{anim.name}'")
-                return True
-        log.debug("LIPPlayback: no 'talk' animation found in head model")
-        return False
+        try:
+            animation = _import_animation_engine()
+            engine = animation.AnimationEngine(head_model)
+            if not engine.play("talk", loop=False, blend=False):
+                log.debug(
+                    "LIPPlayback: no local or inherited 'talk' animation "
+                    "found for %s",
+                    getattr(head_model, "name", "head"),
+                )
+                return False
+        except Exception:
+            log.debug(
+                "LIPPlayback: failed to resolve 'talk' animation",
+                exc_info=True,
+            )
+            return False
+        self._animation_engine = engine
+        self._talk_anim = engine.current_animation
+        self._head_model = head_model
+        self._shape_times = self._controller_shape_times(self._talk_anim)
+        log.debug(
+            "LIPPlayback: found talk animation '%s' through AnimationEngine",
+            getattr(self._talk_anim, "name", "talk"),
+        )
+        return True
+
+    @staticmethod
+    def _controller_shape_times(talk_animation) -> Tuple[float, ...]:
+        """Return the 16 controller slots used as KOTOR viseme poses."""
+
+        nodes = getattr(talk_animation, "nodes", ()) or ()
+        if isinstance(nodes, dict):
+            nodes = nodes.values()
+        for node in nodes:
+            for controller in getattr(node, "controllers", ()) or ():
+                try:
+                    times = tuple(float(value) for value in controller.get("times", ()))
+                    values = tuple(controller.get("values", ()))
+                except (AttributeError, TypeError, ValueError):
+                    continue
+                if len(times) >= 16 and len(values) >= 16:
+                    return times[:16]
+        length = max(
+            0.0,
+            float(getattr(talk_animation, "length", 0.0) or 0.0),
+        )
+        if length > 0.0:
+            return tuple(length * index / 15.0 for index in range(16))
+        return tuple(index / 30.0 for index in range(16))
+
+    def _evaluate_shape(self, shape_index: int):
+        if self._animation_engine is None:
+            return None
+        index = max(0, min(15, int(shape_index)))
+        pose = self._animation_engine.evaluate(self._shape_times[index])
+        try:
+            setattr(pose, "_gr_animation_source_model_id", id(self._head_model))
+            setattr(
+                pose,
+                "_gr_animation_source_model_name",
+                str(getattr(self._head_model, "name", "") or ""),
+            )
+            setattr(pose, "_gr_animation_name", "talk")
+        except Exception:
+            pass
+        return pose
+
+    def animation_pose_for_shapes(
+        self,
+        left_shape: int,
+        right_shape: int,
+        factor: float,
+        *,
+        time_seconds: Optional[float] = None,
+    ):
+        """Evaluate and directly blend two arbitrary talk-animation slots."""
+
+        if self._animation_engine is None or self._talk_anim is None:
+            return None
+        left_index = max(0, min(15, int(left_shape)))
+        right_index = max(0, min(15, int(right_shape)))
+        left_pose = self._evaluate_shape(left_index)
+        if left_pose is None:
+            return None
+        alpha = max(0.0, min(1.0, float(factor)))
+        if left_index == right_index or alpha <= 0.0:
+            return left_pose
+        right_pose = self._evaluate_shape(right_index)
+        if right_pose is None:
+            return left_pose
+        facial = _import_facial_performance()
+        animation = _import_animation_engine()
+        output_time = (
+            float(time_seconds)
+            if time_seconds is not None
+            else (
+                self._shape_times[left_index]
+                + (
+                    self._shape_times[right_index]
+                    - self._shape_times[left_index]
+                )
+                * alpha
+            )
+        )
+        return facial.blend_animation_poses(
+            left_pose,
+            right_pose,
+            alpha,
+            animation_module=animation,
+            time_seconds=output_time,
+        )
+
+    def animation_pose_for_viseme(self, viseme_index: int):
+        """Return one exact KOTOR talk pose for Head Builder preview."""
+
+        index = max(0, min(15, int(viseme_index)))
+        return self.animation_pose_for_shapes(
+            index,
+            index,
+            0.0,
+            time_seconds=self._shape_times[index],
+        )
+
+    def animation_pose_at_time(self, time_seconds: float):
+        """Evaluate the loaded LIP timeline as one native AnimPose."""
+
+        if self._lip_data is None:
+            return None
+        facial = _import_facial_performance()
+        blend = facial.sample_lip_blend(self._lip_data, time_seconds)
+        return self.animation_pose_for_shapes(
+            blend.left_shape,
+            blend.right_shape,
+            blend.factor,
+            time_seconds=float(time_seconds),
+        )
 
     def update(self, dt: float) -> Optional[dict]:
         """Advance playback by dt seconds and return current bone poses.
@@ -810,47 +956,26 @@ class LIPPlayback:
 
         self._elapsed += dt
 
-        # Check if we've passed the end of the LIP data
-        sound_length = getattr(self._lip_data, 'sound_length', 0.0)
-        if sound_length > 0 and self._elapsed > sound_length:
+        # Check if we've passed the end of the LIP data.
+        duration = self.duration
+        if duration > 0 and self._elapsed > duration:
             self._playing = False
             self._elapsed = 0.0
             return None
 
-        # Get interpolated shape values at current time
-        # KotOR.js LIPObject.ts line 195: get the current and next keyframes
-        shape_data = self._lip_data.get_shape_at_time(self._elapsed)
-        if shape_data is None:
+        pose = self.animation_pose_at_time(self._elapsed)
+        if pose is None:
             return {}
-
-        # shape_data contains (shape_index, interpolation_factor)
-        # or just the shape index depending on lip_reader implementation
-        current_shape = shape_data if isinstance(shape_data, int) else int(shape_data)
-
-        # Build bone pose from talk animation controller data
-        # KotOR.js algorithm: for each animation node, use shape index
-        # to select Position/Orientation keyframe values
-        if self._talk_anim is None:
-            return {}
-
-        poses = {}
-        nodes = getattr(self._talk_anim, 'nodes', {})
-        for bone_name, node_data in nodes.items():
-            pose = {}
-            # Position controller: indexed by shape index
-            pos_vals = getattr(node_data, 'position_values', None)
-            if pos_vals and current_shape < len(pos_vals):
-                pose['position'] = tuple(pos_vals[current_shape][:3])
-
-            # Rotation controller: indexed by shape index
-            rot_vals = getattr(node_data, 'rotation_values', None)
-            if rot_vals and current_shape < len(rot_vals):
-                pose['rotation'] = tuple(rot_vals[current_shape][:4])
-
-            if pose:
-                poses[bone_name.lower()] = pose
-
-        return poses
+        facial = _import_facial_performance()
+        records = facial.pose_to_mapping(pose)
+        return {
+            bone_name: {
+                key: value
+                for key, value in record.items()
+                if key in {"position", "rotation", "scale", "alpha", "selfillum"}
+            }
+            for bone_name, record in records.items()
+        }
 
     def play(self):
         """Start playback from the beginning."""
@@ -880,9 +1005,7 @@ class LIPPlayback:
 
     @property
     def duration(self) -> float:
-        if self._lip_data is None:
-            return 0.0
-        return getattr(self._lip_data, 'sound_length', 0.0)
+        return _import_facial_performance().lip_duration(self._lip_data)
 
 
 def rebuild_templates(out_dir: Optional[str] = None) -> List[str]:

@@ -54,6 +54,13 @@ class WindowLifecycleMixin:
             self._show_native_character_builder()
             return
         if mode in {
+            "facial_performance_head",
+            "advanced_facial_head",
+            "custom_facial_head",
+        }:
+            self._show_native_character_builder("facial_performance_head")
+            return
+        if mode in {
             "native_kotor_head",
             "head_builder",
             "custom_head",

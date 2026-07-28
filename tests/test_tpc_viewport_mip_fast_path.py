@@ -4,6 +4,7 @@ import struct
 import sys
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -173,6 +174,80 @@ def test_texture_cache_normalizes_loose_tga_for_kotor_uv_sampling() -> None:
     # KOTOR binary UV V=0 means top, so the shader must convert it to GL V=1.
     # Imported DCC nodes remain correct because they carry uv_v_flip=False.
     assert image._gr_gpu_uv_v_flip is True
+
+
+def test_texture_cache_tga_storage_origin_does_not_change_gpu_rows() -> None:
+    """TGA storage origin is independent from model UV provenance.
+
+    Xaria's body package uses a bottom-origin 24-bit TGA while the verified
+    head package uses a top-origin TGA. Pillow normalizes both to logical
+    top-down rows; TextureCache must then produce one identical bottom-up GPU
+    payload for both instead of treating the header bit as a DCC UV hint.
+    """
+
+    from PIL import Image
+    from src.adapters.rendering.moderngl_renderer_impl import _effective_diffuse_uv_v_flip
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    source = Image.new("RGB", (2, 2))
+    source.putdata(
+        (
+            (255, 0, 0),
+            (0, 255, 0),
+            (0, 0, 255),
+            (255, 255, 0),
+        )
+    )
+    encoded = BytesIO()
+    source.save(encoded, format="TGA")
+    bottom_origin = bytearray(encoded.getvalue())
+    assert bottom_origin[2] == 2
+    assert bottom_origin[16] == 24
+    assert bottom_origin[17] & 0x20 == 0
+
+    # Convert the same logical image to top-origin storage by reversing the
+    # encoded scanlines and setting the TGA descriptor bit.
+    width = int.from_bytes(bottom_origin[12:14], "little")
+    height = int.from_bytes(bottom_origin[14:16], "little")
+    row_bytes = width * (bottom_origin[16] // 8)
+    pixel_start = 18 + int(bottom_origin[0])
+    pixel_end = pixel_start + row_bytes * height
+    rows = [
+        bytes(bottom_origin[pixel_start + row * row_bytes:pixel_start + (row + 1) * row_bytes])
+        for row in range(height)
+    ]
+    top_origin = bytearray(bottom_origin)
+    top_origin[pixel_start:pixel_end] = b"".join(reversed(rows))
+    top_origin[17] |= 0x20
+
+    cache = TextureCache()
+    bottom_image = cache._load_bytes(bytes(bottom_origin))
+    top_image = cache._load_bytes(bytes(top_origin))
+
+    assert bottom_image is not None
+    assert top_image is not None
+    assert bottom_image.tobytes() == top_image.tobytes()
+    assert tuple(bottom_image.get_flattened_data()) == (
+        (0, 0, 255, 255),
+        (255, 255, 0, 255),
+        (255, 0, 0, 255),
+        (0, 255, 0, 255),
+    )
+    assert bottom_image._gr_gpu_uv_v_flip is True
+    assert top_image._gr_gpu_uv_v_flip is True
+
+    # Imported Maya/Blender/OBJ UVs are already authored for the OpenGL
+    # bottom-left convention. They opt out of the KOTOR/D3D shader inversion
+    # regardless of how the equivalent TGA happened to be stored on disk.
+    dcc_node = SimpleNamespace(uv_v_flip=False)
+    assert _effective_diffuse_uv_v_flip(dcc_node, bottom_image) == 0.0
+    assert _effective_diffuse_uv_v_flip(dcc_node, top_image) == 0.0
+
+    # Native KOTOR UVs retain their D3D top-left convention and therefore need
+    # exactly one shader inversion after TextureCache normalizes GPU rows.
+    kotor_node = SimpleNamespace(uv_v_flip=True)
+    assert _effective_diffuse_uv_v_flip(kotor_node, bottom_image) == 1.0
+    assert _effective_diffuse_uv_v_flip(kotor_node, top_image) == 1.0
 
 
 def test_texture_cache_detects_paintnet_bottom_left_dcc_tga_profile() -> None:

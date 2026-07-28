@@ -145,6 +145,7 @@ def main() -> int:
     shell_clearance_heights: list[float] = []
     panorama_count = 0
     threshold_count = 0
+    procedural_connector_count = 0
     for room in (first_room, second_room):
         transition_assets.extend(
             str(dict(opening.metadata or {}).get("module_transition_asset_id") or "")
@@ -178,6 +179,11 @@ def main() -> int:
         threshold_count += sum(
             mesh.metadata.get("architecture_role")
             == "shadowlands_transition_floor"
+            for mesh in geometry.helper_meshes
+        )
+        procedural_connector_count += sum(
+            mesh.metadata.get("architecture_role")
+            == "shadowlands_cave_connector"
             for mesh in geometry.helper_meshes
         )
 
@@ -289,6 +295,7 @@ def main() -> int:
         "tree_tunnel_min_clearance_height_m": min(shell_clearance_heights, default=0.0),
         "panorama_card_count": panorama_count,
         "visual_threshold_count": threshold_count,
+        "procedural_connector_count": procedural_connector_count,
         "crossed_first_transition": crossed_first,
         "inside_destination_accepted": inside_destination_accepted,
         "crossed_second_transition": crossed_second,
@@ -318,12 +325,13 @@ def main() -> int:
         report["transition_assets"].count("shadowlands_module_transition") == 2,
         report["tree_tunnel_shell_face_count"] > 0,
         report["tree_tunnel_trim_policies"] == [
-            "portal_envelope_minus_player_clearance"
+            "measured_host_recess_preserve_source_opening"
         ],
-        report["tree_tunnel_min_clearance_width_m"] >= 2.0,
-        report["tree_tunnel_min_clearance_height_m"] >= 2.1,
-        report["panorama_card_count"] == 8,
-        report["visual_threshold_count"] == 2,
+        report["tree_tunnel_min_clearance_width_m"] >= 3.4,
+        report["tree_tunnel_min_clearance_height_m"] >= 2.75,
+        report["panorama_card_count"] == 0,
+        report["visual_threshold_count"] == 0,
+        report["procedural_connector_count"] == 0,
         report["crossed_first_transition"],
         report["inside_destination_accepted"],
         report["crossed_second_transition"],

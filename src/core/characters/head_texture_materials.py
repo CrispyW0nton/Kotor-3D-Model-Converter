@@ -33,6 +33,8 @@ class HeadTextureMaterialError(RuntimeError):
 class HeadTextureMaterialReport:
     mutable_node_ordinal: int
     mutable_node_name: str
+    texture_node_ordinals: tuple[int, ...]
+    texture_node_names: tuple[str, ...]
     texture_resref: str
     source_texture_sha256: str
     source_decoded_rgba_sha256: str
@@ -67,6 +69,8 @@ class HeadTextureMaterialReport:
             "accepted": self.accepted,
             "mutable_node_ordinal": self.mutable_node_ordinal,
             "mutable_node_name": self.mutable_node_name,
+            "texture_node_ordinals": list(self.texture_node_ordinals),
+            "texture_node_names": list(self.texture_node_names),
             "texture_resref": self.texture_resref,
             "source_texture_sha256": self.source_texture_sha256,
             "source_decoded_rgba_sha256": (
@@ -163,24 +167,50 @@ def apply_head_texture_materials(
         raise HeadTextureMaterialError(
             "The candidate UV channel changed after its orientation audit"
         )
-    node.texture = output_policy.output_resref
-    node.uv_v_flip = uv_contract.preview_transform == "flip_v"
-    setattr(
-        node,
-        "_gr_mdx_uv_transform",
-        uv_contract.serialized_transform,
+    texture_ordinals = tuple(
+        int(value)
+        for value in (
+            getattr(transplant.report, "texture_node_ordinals", ())
+            or (ordinal,)
+        )
     )
-    setattr(
-        node,
-        "_gr_head_builder_preview_uv_transform",
-        uv_contract.preview_transform,
-    )
+    texture_names: list[str] = []
+    for texture_ordinal in texture_ordinals:
+        if texture_ordinal < 0 or texture_ordinal >= len(nodes):
+            raise HeadTextureMaterialError(
+                "A saved facial texture node is unavailable"
+            )
+        texture_node = nodes[texture_ordinal]
+        texture_node.texture = output_policy.output_resref
+        texture_node.texture_names = [output_policy.output_resref]
+        texture_node.uv_v_flip = (
+            uv_contract.preview_transform == "flip_v"
+        )
+        setattr(
+            texture_node,
+            "_gr_mdx_uv_transform",
+            uv_contract.serialized_transform,
+        )
+        setattr(
+            texture_node,
+            "_gr_head_builder_preview_uv_transform",
+            uv_contract.preview_transform,
+        )
+        texture_names.append(
+            str(getattr(texture_node, "name", "") or "")
+        )
     metadata = getattr(candidate, "metadata", None)
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(candidate, "metadata", metadata)
 
-    diff = compare_head_donor_contract(donor_snapshot, candidate)
+    diff = compare_head_donor_contract(
+        donor_snapshot,
+        candidate,
+        output_resref=str(
+            getattr(transplant.report, "output_resref", "") or ""
+        ),
+    )
     blocking = tuple(row.path for row in diff.blocking)
     if blocking:
         raise HeadTextureMaterialError(
@@ -195,6 +225,8 @@ def apply_head_texture_materials(
     report = HeadTextureMaterialReport(
         mutable_node_ordinal=ordinal,
         mutable_node_name=str(getattr(node, "name", "") or ""),
+        texture_node_ordinals=texture_ordinals,
+        texture_node_names=tuple(texture_names),
         texture_resref=output_policy.output_resref,
         source_texture_sha256=asset.source_sha256,
         source_decoded_rgba_sha256=asset.decoded_rgba_sha256,

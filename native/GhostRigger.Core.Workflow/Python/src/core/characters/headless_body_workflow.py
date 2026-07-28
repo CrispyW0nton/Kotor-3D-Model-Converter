@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import copy
 import itertools
+import json
 import logging
 import math
 import os
@@ -13074,15 +13075,47 @@ def _export_single_format(
                     CharacterBuilderExportTransactionRequest,
                     export_character_mdl_mdx_transaction,
                 )
+                from src.core.characters.character_export_preflight import (
+                    CharacterEffectPayloadContract,
+                    CharacterExportPreflightOptions,
+                )
             except ImportError:  # pragma: no cover
                 from core.characters.character_export_transaction import (  # type: ignore
                     CharacterBuilderExportTransactionRequest,
                     export_character_mdl_mdx_transaction,
                 )
+                from core.characters.character_export_preflight import (  # type: ignore
+                    CharacterEffectPayloadContract,
+                    CharacterExportPreflightOptions,
+                )
 
             def _reload_exported(mdl_path, _mdx_path):
                 return _load_exported_kotor_model(str(mdl_path))
 
+            body_metadata = getattr(body, "metadata", None)
+            body_metadata = (
+                body_metadata
+                if isinstance(body_metadata, dict)
+                else {}
+            )
+            raw_effect_contracts = list(
+                body_metadata.get(
+                    "character_builder_effect_payload_contracts",
+                    (),
+                )
+                or ()
+            )
+            effect_contracts = tuple(
+                CharacterEffectPayloadContract.from_dict(dict(row))
+                for row in raw_effect_contracts
+            )
+            preflight_options = (
+                CharacterExportPreflightOptions(
+                    allowed_effect_payloads=effect_contracts,
+                )
+                if effect_contracts
+                else None
+            )
             tx = export_character_mdl_mdx_transaction(
                 CharacterBuilderExportTransactionRequest(
                     model=body,
@@ -13090,17 +13123,37 @@ def _export_single_format(
                     game=str(getattr(scene, "game_version", "") or "K1"),
                     native_snapshot=getattr(body, "_gr_native_skeleton_snapshot", None),
                     overwrite=True,
+                    preflight_options=preflight_options,
                     metadata={"workflow": "headless_body_workflow.export_scene"},
                     writer_cls=_import_mdl_binary_writer(),
                     loader=_reload_exported,
                 )
             )
             if not tx.succeeded:
-                messages = [
-                    issue.message
-                    for issue in tx.export_job_result.validation_report.issues
-                    if getattr(issue, "message", "")
-                ]
+                messages = []
+                for issue in tx.export_job_result.validation_report.issues:
+                    message = str(getattr(issue, "message", "") or "")
+                    if not message:
+                        continue
+                    code = str(getattr(issue, "code", "") or "")
+                    rendered = f"{code}: {message}" if code else message
+                    details = getattr(issue, "details", None)
+                    if (
+                        code == "character.export.non_native_skeleton_node"
+                        and isinstance(details, dict)
+                        and details.get("registered_effect_contract_mismatch")
+                    ):
+                        rendered += (
+                            " mismatch="
+                            + json.dumps(
+                                details[
+                                    "registered_effect_contract_mismatch"
+                                ],
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            )
+                        )
+                    messages.append(rendered)
                 raise RuntimeError("; ".join(messages) or "Character export transaction failed")
         elif fmt_key == "fbx":
             fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()

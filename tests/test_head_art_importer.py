@@ -9,6 +9,8 @@ import pytest
 from src.io.head_art_importer import (
     HeadArtImportError,
     import_head_art,
+    repair_head_art_nonmanifold_overlays,
+    validate_head_art_document,
 )
 
 
@@ -107,6 +109,86 @@ def test_obj_non_manifold_topology_is_a_blocking_import_result(
         issue.check_id == "head.art.non_manifold"
         for issue in report.errors
     )
+
+
+def test_obj_import_compacts_redundant_maya_normal_indices_by_exact_values(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "maya_corner_normals.obj"
+    source.write_text(
+        "\n".join(
+            (
+                "# This file uses centimeters as units for non-parametric coordinates.",
+                "v 0 0 0",
+                "v 1 0 0",
+                "v 1 1 0",
+                "v 0 1 0",
+                "vt 0 0",
+                "vt 1 0",
+                "vt 1 1",
+                "vt 0 1",
+                "vn 0 0 1",
+                "vn 0 0 1",
+                "vn 0 0 1",
+                "vn 0 0 1",
+                "vn 0 0 1",
+                "vn 0 0 1",
+                "f 1/1/1 2/2/2 3/3/3",
+                "f 1/1/4 3/3/5 4/4/6",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    document, report = import_head_art(source, flip_v=False)
+
+    assert report.accepted
+    assert document.vertex_count == 4
+    assert document.face_count == 2
+    assert len(document.parts[0].uvs) == 4
+    assert len(document.parts[0].normals) == 4
+    assert document.parts[0].faces == ((0, 1, 2), (0, 2, 3))
+
+
+def test_nonmanifold_overlay_repair_is_deterministic_and_source_preserving(
+    tmp_path: Path,
+):
+    source = tmp_path / "overlays.obj"
+    source.write_text(
+        "\n".join(
+            (
+                "o overlays",
+                "v 0 0 0",
+                "v 1 0 0",
+                "v 0 1 0",
+                "v 0 0 0",
+                "v 1 0 0",
+                "v 0 -1 0",
+                "v 0 0 0",
+                "v 1 0 0",
+                "v 0 0 1",
+                "f 1 2 3",
+                "f 4 5 6",
+                "f 7 8 9",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    source_bytes = source.read_bytes()
+
+    document, initial = import_head_art(source, flip_v=False)
+    repaired, repair = repair_head_art_nonmanifold_overlays(document)
+    final = validate_head_art_document(repaired)
+
+    assert not initial.accepted
+    assert repair.accepted
+    assert repair.changed
+    assert repair.removed_face_indices_by_part[0][1] == (2,)
+    assert repaired.face_count == 2
+    assert final.accepted
+    assert source.read_bytes() == source_bytes
 
 
 @dataclass

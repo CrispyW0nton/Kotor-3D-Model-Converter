@@ -13,12 +13,19 @@ from src.io.head_texture_asset import (
     inspect_head_texture,
     valid_head_texture_resref,
 )
+from src.io.head_builder_package import _texture_outputs
 
 
 def _write_tga(path: Path, size: tuple[int, int] = (4, 4)) -> None:
     image = Image.new("RGBA", size, (32, 64, 96, 255))
     image.putpixel((0, 0), (255, 0, 0, 64))
     image.save(path, format="TGA")
+
+
+def _write_png(path: Path, size: tuple[int, int] = (4, 4)) -> None:
+    image = Image.new("RGBA", size, (32, 64, 96, 255))
+    image.putpixel((0, 0), (255, 0, 0, 64))
+    image.save(path, format="PNG")
 
 
 def _write_tpc(path: Path) -> None:
@@ -71,6 +78,33 @@ def test_tpc_inspection_reads_mipmap_and_embedded_txi(tmp_path: Path) -> None:
     assert asset.txi_origin == "embedded"
     assert asset.txi_properties["mipmap"] == 0
     assert asset.txi_properties["envmaptexture"] == "cm_baremetal"
+
+
+def test_png_source_is_converted_to_retail_tga_without_source_rewrite(
+    tmp_path: Path,
+) -> None:
+    texture_path = tmp_path / "hero_face.png"
+    _write_png(texture_path)
+    source_bytes = texture_path.read_bytes()
+    asset = inspect_head_texture(texture_path)
+    policy = build_head_texture_output_policy(
+        asset,
+        output_resref="P_CDH01",
+        output_format="TGA",
+        txi_delivery="sidecar",
+    )
+
+    outputs = _texture_outputs(asset, policy)
+
+    assert asset.accepted
+    assert asset.source_format == "PNG"
+    assert set(outputs) == {"P_CDH01.tga", "P_CDH01.txi"}
+    retail_tga = outputs["P_CDH01.tga"]
+    assert retail_tga[17] & 0x20 == 0
+    with Image.open(__import__("io").BytesIO(retail_tga)) as image:
+        assert image.size == (4, 4)
+        assert image.convert("RGBA").getpixel((0, 0)) == (255, 0, 0, 64)
+    assert texture_path.read_bytes() == source_bytes
 
 
 def test_non_power_of_two_texture_is_not_export_eligible(

@@ -784,6 +784,33 @@ def compare_head_donor_contract(
     allowed_payload_ordinals = set(
         snapshot.mutable_payload_node_ordinals
     ) | (set(extra_payload_ordinals) & mesh_ordinals)
+    disabled_render_ordinals: set[int] = set()
+    for raw in list(
+        dict(snapshot.compatibility or {}).get(
+            "disabled_render_node_ordinals",
+            (),
+        )
+        or ()
+    ):
+        try:
+            ordinal = int(raw)
+        except (TypeError, ValueError):
+            blocked(
+                "compatibility.disabled_render_node_ordinals",
+                "integer node ordinals",
+                raw,
+                "The facial recipe contains a non-integer retired-node identity.",
+            )
+            continue
+        if ordinal not in allowed_payload_ordinals:
+            blocked(
+                "compatibility.disabled_render_node_ordinals",
+                sorted(allowed_payload_ordinals),
+                ordinal,
+                "A retired render node must also be an allowed payload node.",
+            )
+            continue
+        disabled_render_ordinals.add(ordinal)
 
     for name in (
         "game_version",
@@ -850,7 +877,6 @@ def compare_head_donor_contract(
             "rotation",
             "is_mesh",
             "is_skin",
-            "render",
             "socket_category",
             "bb_min",
             "bb_max",
@@ -863,6 +889,21 @@ def compare_head_donor_contract(
                     f"nodes[{ordinal}].{name}",
                     expected,
                     actual,
+                    f"Native donor node contract changed at ordinal {ordinal}.",
+                )
+        if not _values_equal(expected_node.render, actual_node.render):
+            if ordinal in disabled_render_ordinals and not actual_node.render:
+                payload(
+                    f"nodes[{ordinal}].render",
+                    expected_node.render,
+                    actual_node.render,
+                    "A visible donor mesh replaced by complete custom facial art was retired.",
+                )
+            else:
+                blocked(
+                    f"nodes[{ordinal}].render",
+                    expected_node.render,
+                    actual_node.render,
                     f"Native donor node contract changed at ordinal {ordinal}.",
                 )
         if expected_node.name != actual_node.name:

@@ -4821,6 +4821,7 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
     from src.core.modules.authored_room_primitives import PrimitiveMaterial
     from src.core.modules.map_studio_terrain_kit import (
         build_module_transition_shell_meshes,
+        module_transition_fit_contract,
         module_transition_asset_for_profiles,
         terrain_kit_asset,
         terrain_kit_asset_path,
@@ -4831,7 +4832,7 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
     expected_faces = {
         "korriban_cave_entrance": (6624, "gr_korrentr"),
         "shyrack_cave_entrance": (6273, "gr_shyrentr"),
-        "shadowlands_module_transition": (4795, "gr_shadentr"),
+        "shadowlands_module_transition": (4795, "gr_shadwarm"),
     }
     expected_yaw = {
         "korriban_cave_entrance": 180.0,
@@ -4867,28 +4868,62 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
         assert all(len(mesh.uvs) == len(mesh.vertices) for mesh in shells)
         assert all(len(mesh.normals) == len(mesh.vertices) for mesh in shells)
         assert all(mesh.metadata["uv0_preserved"] is True for mesh in shells)
+        expected_policy = (
+            "measured_host_recess_preserve_source_opening"
+            if asset_id == "shadowlands_module_transition"
+            else "detail_preserving_host_recess_minus_actor_clearance"
+        )
         assert {
             mesh.metadata["geometry_trim_policy"] for mesh in shells
-        } == {"portal_envelope_minus_player_clearance"}
+        } == {expected_policy}
         assert all(mesh.metadata["host_surface_overlap_trimmed"] is True for mesh in shells)
-        for mesh in shells:
-            clearance_half = float(mesh.metadata["player_clearance_half_width_m"])
-            clearance_height = float(mesh.metadata["player_clearance_height_m"])
-            clearance_depth = float(mesh.metadata["transition_length_m"]) * 0.5
-            for face in mesh.faces:
-                centroid = tuple(
-                    sum(float(mesh.vertices[int(index)][axis]) for index in face) / 3.0
-                    for axis in range(3)
-                )
-                assert not (
-                    abs(centroid[0]) < clearance_half - 1.0e-4
-                    and abs(centroid[1]) < clearance_depth - 1.0e-4
-                    and -0.07 < centroid[2] < clearance_height - 1.0e-4
-                )
+        assert all(mesh.metadata["host_wall_recess_required"] is True for mesh in shells)
+        assert {
+            bool(mesh.metadata["source_opening_preserved"]) for mesh in shells
+        } == {asset_id == "shadowlands_module_transition"}
+        if asset_id != "shadowlands_module_transition":
+            for mesh in shells:
+                clearance_half = float(mesh.metadata["player_clearance_half_width_m"])
+                clearance_height = float(mesh.metadata["player_clearance_height_m"])
+                clearance_depth = float(mesh.metadata["transition_length_m"]) * 0.5
+                for face in mesh.faces:
+                    centroid = tuple(
+                        sum(float(mesh.vertices[int(index)][axis]) for index in face) / 3.0
+                        for axis in range(3)
+                    )
+                    assert not (
+                        abs(centroid[0]) < clearance_half - 1.0e-4
+                        and abs(centroid[1]) < clearance_depth - 1.0e-4
+                        and -0.07 < centroid[2] < clearance_height - 1.0e-4
+                    )
         assert len({mesh.metadata["uniform_scale"] for mesh in shells}) == 1
         assert {mesh.metadata["source_yaw_degrees"] for mesh in shells} == {
             expected_yaw[asset_id]
         }
+        fit = module_transition_fit_contract(asset_id, 5.25, 2.60, "K1")
+        assert {
+            round(float(mesh.metadata["host_opening_width_m"]), 6)
+            for mesh in shells
+        } == {round(fit.host_opening_width_m, 6)}
+        if asset_id == "shadowlands_module_transition":
+            output_x = [
+                float(vertex[0])
+                for mesh in shells
+                for vertex in mesh.vertices
+            ]
+            assert max(output_x) - min(output_x) >= fit.source_width_m - 0.02
+            assert fit.actor_clearance_width_m >= 3.40
+            assert fit.uniform_scale == 6.30
+            assert 0.40 <= fit.ground_embed_m <= 0.50
+            assert min(
+                float(vertex[2])
+                for mesh in shells
+                for vertex in mesh.vertices
+            ) <= -fit.ground_embed_m + 0.01
+            assert {
+                round(float(mesh.metadata["ground_embed_m"]), 6)
+                for mesh in shells
+            } == {round(fit.ground_embed_m, 6)}
 
     tiled = build_module_transition_shell_meshes(
         "shadowlands_module_transition",
@@ -4905,8 +4940,13 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
         game="K1",
     )
     assert tiled
-    assert {mesh.metadata["transition_tile_count"] for mesh in tiled} == {3}
-    assert {mesh.metadata["transition_tile_index"] for mesh in tiled} == {0, 1, 2}
+    tile_counts = {int(mesh.metadata["transition_tile_count"]) for mesh in tiled}
+    assert len(tile_counts) == 1
+    tile_count = tile_counts.pop()
+    assert tile_count >= 3
+    assert {mesh.metadata["transition_tile_index"] for mesh in tiled} == set(
+        range(tile_count)
+    )
 
     assert module_transition_asset_for_profiles(
         "korriban_tombs",
@@ -4956,15 +4996,39 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
         if mesh.metadata.get("module_transition_asset_id") == "shadowlands_module_transition"
     ]
     assert shell_meshes
-    assert {mesh.texture for mesh in shell_meshes} == {"gr_shadentr"}
-    assert roles.count("shadowlands_transition_floor") == 1
-    assert roles.count("shadowlands_jungle_panorama_card") == 4
-    assert {
-        mesh.texture
-        for mesh in geometry.helper_meshes
-        if mesh.metadata.get("architecture_role") == "shadowlands_jungle_panorama_card"
-    } == {"gr_shadentr"}
-    assert roles.count("shadowlands_cave_connector") >= 16
+    assert {mesh.texture for mesh in shell_meshes} == {"gr_shadwarm"}
+    # The supplied tree shell is the transition.  The former procedural tube,
+    # threshold overlay, and panorama cards occupied the same space and were
+    # the visible clipping/striping reported from PIE.
+    assert roles.count("shadowlands_transition_floor") == 0
+    assert roles.count("shadowlands_jungle_panorama_card") == 0
+    assert roles.count("shadowlands_cave_connector") == 0
+    fit = module_transition_fit_contract(
+        "shadowlands_module_transition",
+        opening.width,
+        opening.height,
+        "K1",
+    )
+    assert fit.host_opening_width_m > opening.width + 1.0
+    assert fit.actor_clearance_width_m >= 3.40
+    portal_center = float(opening.center_fraction) * 14.0
+    for mesh in geometry.helper_meshes:
+        if mesh in shell_meshes or int(mesh.metadata.get("edge_index", -1)) != 1:
+            continue
+        if mesh.metadata.get("surface_role") != "terrain_wall":
+            continue
+        for face in mesh.faces:
+            centroid = tuple(
+                sum(float(mesh.vertices[int(index)][axis]) for index in face) / 3.0
+                for axis in range(3)
+            )
+            # The enlarged root plinth is intentionally buried below the
+            # authored floor.  Underground berm faces may overlap that hidden
+            # foundation; the visible wall recess must remain completely clear.
+            if -1.0e-4 <= centroid[2] < fit.host_opening_height_m - 1.0e-4:
+                assert abs(centroid[1] - portal_center) >= (
+                    fit.host_opening_width_m * 0.5 - 1.0e-4
+                )
     assert geometry.wok.walkable_face_count() > 0
 
     project = SimpleNamespace(
@@ -4972,7 +5036,7 @@ def test_t2909_supplied_module_transitions_preserve_uvs_and_build_shadowlands_tr
     )
     resources = terrain_kit_runtime_resources(project)
     assert [(resref, extension) for resref, extension, _data in resources] == [
-        ("gr_shadentr", "tga")
+        ("gr_shadwarm", "tga")
     ]
     assert len(resources[0][2]) > 1024
 
