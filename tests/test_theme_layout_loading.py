@@ -124,6 +124,53 @@ def test_theme_manager_maps_legacy_theme_ids_to_default_variants() -> None:
     assert manager.resolve_theme_id() == "default_light"
 
 
+def test_theme_manager_retries_theme_application_after_interrupted_apply() -> None:
+    manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default_dark"}})
+    theme = manager.get_theme("default_dark")
+    manager.current_theme = theme
+    applications: list[tuple[object, object]] = []
+    manager.applier.apply_theme = lambda selected, target=None, **_kwargs: applications.append(  # type: ignore[method-assign]
+        (selected, target)
+    )
+    target = object()
+
+    manager.select_theme("default_dark", target=target)  # type: ignore[arg-type]
+
+    assert applications == [(theme, target)]
+
+
+def test_settings_theme_preview_targets_its_stable_parent() -> None:
+    import inspect
+
+    source = inspect.getsource(QtSettingsDialog._preview_theme)
+
+    assert "apply_target = parent if parent is not None else self" in source
+    assert "target=apply_target" in source
+
+
+def test_settings_dialog_refreshes_open_controls_from_application_palette() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    old_palette = QtGui.QPalette(app.palette())
+    manager = ThemeManager(ROOT, {})
+    dark_theme = manager.get_theme("default_dark")
+    dialog = QtSettingsDialog({}, theme_manager=manager)
+    try:
+        app.setPalette(manager.applier._palette(dark_theme))
+        dialog.apply_ghost_theme(dark_theme)
+
+        expected = dark_theme.color("window.background").upper()
+        assert dialog.palette().color(QtGui.QPalette.Window).name().upper() == expected
+        assert dialog.theme_combo.palette().color(QtGui.QPalette.Window).name().upper() == expected
+    finally:
+        dialog.deleteLater()
+        app.setPalette(old_palette)
+        app.processEvents()
+
+
 def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

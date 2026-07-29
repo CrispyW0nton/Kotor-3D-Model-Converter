@@ -195,7 +195,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_SETTINGS_DIALOG",
             "source_path": "src/gui/dialogs/qt_settings_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_settings_dialog.py",
-            "sha256": "72ae8105230b88db68281105ffdb299b2d7c04161cc7ffb6261250e5934f2c97"
+            "sha256": "402513dc17c447c53b3f1a0886e23e1899d7de6aeac55c4c26103f95a1987743"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_UV_GEOMETRY_PREVIEW_WINDOW",
@@ -381,7 +381,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MANAGER",
             "source_path": "src/gui/libtheme/theme_manager.py",
             "packaged_path": "Python/src/gui/libtheme/theme_manager.py",
-            "sha256": "da06bebe411217d61e61b003f8265598fa118f62d06b52b04badccf190d20e48"
+            "sha256": "5eeae59978719b59d6a39c7db223b733ab1c95880ab0ce4466b69f8a8352dd44"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MODEL",

@@ -11,6 +11,50 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make live theme previews consistent and retry-safe
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core GUI Display Settings, theme manager, live palette application,
+and native Python payload manifest.
+
+Completed the final cross-theme verification pass for the program-wide UX
+overhaul and fixed the live-switching defects it exposed. Theme previews now
+apply through the long-lived main window instead of depending on the Settings
+dialog surviving a queued apply. The manager delegates successful-apply
+deduplication to the theme applier, so an interrupted request can be retried
+even when the requested theme is already recorded as current.
+
+The already-open Settings surface now refreshes its inherited application
+palette with the rest of the program. This prevents the main shell from
+switching to Dark or Light while the controls that initiated the change retain
+the previous palette. The refresh only propagates palette state and repaints;
+it avoids expensive full control repolishing and preserves open selector state.
+
+Affected:
+
+- Core GUI Display `qt_settings_dialog.py` and `theme_manager.py`
+- focused theme-manager, Settings palette, and payload tests
+- regenerated Core GUI Display payload manifest
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Seven focused theme, Settings, and native payload contracts passed during
+  development; the final narrowed palette/repaint implementation passed its
+  five directly affected contracts.
+- The isolated solution rebuilt in the active Visual Studio Community
+  instance as `Debug|x64` with zero failed projects after the final change.
+- In the actual Debug application at 1280x700, Default, Matrix, Droid, Dark,
+  Light, and Classic all kept the main shell and open Settings dialog readable
+  and palette-consistent. Every theme selector remained collapsed after the
+  final narrow refresh, the OS-dark mapping was restored to Default Dark, and
+  the saved theme was restored to Default.
+- A final Apply Dark then immediately close Settings workflow left no orphaned
+  dialog and visibly completed the Dark transition in the main shell.
+
 ### [2026-07-28] make remaining first-use workbenches honest and self-explanatory
 
 Owner: LordVaderCW

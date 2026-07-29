@@ -113,8 +113,6 @@ class ThemeManager(QtCore.QObject):
         self.settings.selected_theme = requested if requested in self.themes else "default"
         theme = self.get_theme(self.settings.selected_theme)
         if apply:
-            if self.current_theme is not None and self.current_theme.id == theme.id and self.current_theme.version == theme.version:
-                return theme
             self.current_theme = theme
             self.applier.apply_theme(theme, target)
         return theme
@@ -123,8 +121,6 @@ class ThemeManager(QtCore.QObject):
         self.settings.theme_mode = "follow_os" if enabled else "manual"
         theme = self.get_theme()
         if apply:
-            if self.current_theme is not None and self.current_theme.id == theme.id and self.current_theme.version == theme.version:
-                return theme
             self.current_theme = theme
             self.applier.apply_theme(theme, target)
         return theme

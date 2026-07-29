@@ -680,17 +680,37 @@ class QtSettingsDialog(QtWidgets.QDialog):
         new_type = _wgpu_backend_type(new_settings.backend.value)
         return bool(old_type and new_type and old_type != new_type)
 
+    def apply_ghost_theme(self, _theme) -> None:
+        self._refresh_application_palette()
+
+    def apply_native_theme(self) -> None:
+        self._refresh_application_palette()
+
+    def _refresh_application_palette(self) -> None:
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            return
+        palette = app.palette()
+        for widget in (self, *self.findChildren(QtWidgets.QWidget)):
+            widget.setPalette(palette)
+            widget.update()
+
     def _preview_theme(self) -> None:
         if self.theme_manager is None:
             return
+        parent = self.parentWidget()
+        apply_target = parent if parent is not None else self
         self.setUpdatesEnabled(False)
         try:
             if self.theme_mode_combo.currentData() == "follow_os":
                 self.theme_manager.settings.os_light_theme = str(self.light_theme_combo.currentData() or "default_light")
                 self.theme_manager.settings.os_dark_theme = str(self.dark_theme_combo.currentData() or "default_dark")
-                self.theme_manager.set_follow_os(True, target=self)
+                self.theme_manager.set_follow_os(True, target=apply_target)
             else:
-                self.theme_manager.select_theme(str(self.theme_combo.currentData() or "default"), target=self)
+                self.theme_manager.select_theme(
+                    str(self.theme_combo.currentData() or "default"),
+                    target=apply_target,
+                )
             values = self.values()
             self.theme_layout_settings = ThemeLayoutSettings.from_settings(values)
             self.settingsSaved.emit(values)
