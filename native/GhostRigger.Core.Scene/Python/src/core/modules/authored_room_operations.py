@@ -263,6 +263,19 @@ class AuthoredTerrainRoomChoice:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class AuthoredTerrainSeamSnap:
+    """Result facts for one exterior terrain edge snap."""
+
+    source_room_resref: str
+    target_room_resref: str
+    direction: str
+    alignment: str
+    source_position: tuple[float, float, float]
+    matched_sample_count: int
+    summary: str
+
+
 _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
     AuthoredCompositionPrimitiveKind("plane", "Plane", "A flat walkable floor/platform patch that contributes WOK faces.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("wall", "Wall", "A rectangular wall/blockout slab."),
@@ -395,6 +408,132 @@ def authored_terrain_room_choices(project: AuthoredModuleProject) -> tuple[Autho
             )
         )
     return tuple(choices)
+
+
+def snap_authored_terrain_room_to_edge(
+    project: AuthoredModuleProject,
+    *,
+    source_room_resref: str,
+    target_room_resref: str,
+    direction: str = "east",
+    alignment: str = "center",
+) -> tuple[AuthoredModuleProject, AuthoredTerrainSeamSnap]:
+    """Place one terrain patch beside another and match the shared edge.
+
+    ``direction`` describes where the moving source patch lands relative to
+    the fixed target patch. Matching the source boundary samples to the
+    target's world-space heights prevents a visible crack and gives the
+    regenerated room WOKs coincident seam vertices. Export validation remains
+    responsible for proving Odyssey cross-room traversal.
+    """
+
+    source_key = normalise_resref(source_room_resref)
+    target_key = normalise_resref(target_room_resref)
+    if not source_key or not target_key:
+        raise ValueError("Terrain edge snap requires both a moving terrain and a fixed target terrain.")
+    if source_key == target_key:
+        raise ValueError("Terrain edge snap needs two different terrain patches.")
+    direction_key = str(direction or "east").strip().lower()
+    if direction_key not in {"east", "west", "north", "south"}:
+        raise ValueError("Terrain edge snap direction must be east, west, north, or south.")
+    alignment_key = str(alignment or "center").strip().lower()
+    if alignment_key not in {"start", "center", "end"}:
+        raise ValueError("Terrain edge alignment must be start, center, or end.")
+
+    source_index = _target_room_index(project, source_key)
+    target_index = _target_room_index(project, target_key)
+    source_room = project.rooms[source_index]
+    target_room = project.rooms[target_index]
+    source = _terrain_for_room(source_room)
+    target = _terrain_for_room(target_room)
+    source_position = list(_room_offset(source_room))
+    target_position = _room_offset(target_room)
+
+    def aligned_center(target_center: float, target_span: float, source_span: float) -> float:
+        if alignment_key == "start":
+            return target_center - (target_span * 0.5) + (source_span * 0.5)
+        if alignment_key == "end":
+            return target_center + (target_span * 0.5) - (source_span * 0.5)
+        return target_center
+
+    rows = [list(row) for row in source.heights]
+    if direction_key in {"east", "west"}:
+        sign = 1.0 if direction_key == "east" else -1.0
+        source_position[0] = target_position[0] + sign * ((float(target.width) + float(source.width)) * 0.5)
+        source_position[1] = aligned_center(target_position[1], float(target.depth), float(source.depth))
+        source_column = 0 if direction_key == "east" else len(source.heights[0]) - 1
+        target_x = float(target.width) * (0.5 if direction_key == "east" else -0.5)
+        for row_index in range(len(rows)):
+            local_y = -float(source.depth) * 0.5 + (
+                float(source.depth) * float(row_index) / max(1, len(rows) - 1)
+            )
+            target_local_y = source_position[1] + local_y - target_position[1]
+            world_height = target_position[2] + sample_terrain_height(target, x=target_x, y=target_local_y)
+            rows[row_index][source_column] = world_height - source_position[2]
+        matched_sample_count = len(rows)
+    else:
+        sign = 1.0 if direction_key == "north" else -1.0
+        source_position[1] = target_position[1] + sign * ((float(target.depth) + float(source.depth)) * 0.5)
+        source_position[0] = aligned_center(target_position[0], float(target.width), float(source.width))
+        source_row = 0 if direction_key == "north" else len(source.heights) - 1
+        target_y = float(target.depth) * (0.5 if direction_key == "north" else -0.5)
+        for column_index in range(len(rows[source_row])):
+            local_x = -float(source.width) * 0.5 + (
+                float(source.width) * float(column_index) / max(1, len(rows[source_row]) - 1)
+            )
+            target_local_x = source_position[0] + local_x - target_position[0]
+            world_height = target_position[2] + sample_terrain_height(target, x=target_local_x, y=target_y)
+            rows[source_row][column_index] = world_height - source_position[2]
+        matched_sample_count = len(rows[source_row])
+
+    stitched = replace(
+        source,
+        heights=tuple(tuple(float(value) for value in row) for row in rows),
+        metadata={
+            **dict(source.metadata),
+            "last_operation": "terrain_edge_snap",
+            "terrain_seam_target": target_key,
+            "terrain_seam_direction": direction_key,
+            "terrain_seam_alignment": alignment_key,
+            "terrain_seam_matched_sample_count": matched_sample_count,
+            "source": "map_studio:terrain_edge_snap",
+        },
+    )
+    updated_source = replace(
+        source_room,
+        primitive=stitched,
+        composition=None,
+        position=tuple(float(value) for value in source_position),
+        visible_rooms=tuple(dict.fromkeys((*source_room.visible_rooms, source_key, target_key))),
+        metadata={
+            **dict(source_room.metadata),
+            "primitive": "terrain_heightfield",
+            "last_operation": "terrain_edge_snap",
+            "terrain_seam_target": target_key,
+        },
+    )
+    updated_target = replace(
+        target_room,
+        visible_rooms=tuple(dict.fromkeys((*target_room.visible_rooms, target_key, source_key))),
+        metadata={**dict(target_room.metadata), "terrain_seam_source": source_key},
+    )
+    rooms = list(project.rooms)
+    rooms[source_index] = updated_source
+    rooms[target_index] = updated_target
+    updated_project = _replace_rooms(project, tuple(rooms), operation="terrain_edge_snap")
+    summary = (
+        f"Snapped {source_key} {direction_key} of {target_key}; matched "
+        f"{matched_sample_count} boundary height sample(s). Validate the WOK seam before staging."
+    )
+    return updated_project, AuthoredTerrainSeamSnap(
+        source_room_resref=source_key,
+        target_room_resref=target_key,
+        direction=direction_key,
+        alignment=alignment_key,
+        source_position=tuple(float(value) for value in source_position),
+        matched_sample_count=matched_sample_count,
+        summary=summary,
+    )
 
 
 def _target_room_index(project: AuthoredModuleProject, room_resref: str = "") -> int:
@@ -6233,6 +6372,15 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
     if op.startswith("brush_stroke:"):
         brush_name = op.split(":", 1)[1].strip().lower()
         op = "brush_stroke"
+    if op in {"snap_edge", "edge_snap", "snap_terrain_edge", "terrain_edge_snap"}:
+        updated, _result = snap_authored_terrain_room_to_edge(
+            project,
+            source_room_resref=str(kwargs.get("source_room_resref", kwargs.get("room_resref", ""))),
+            target_room_resref=str(kwargs.get("target_room_resref", "")),
+            direction=str(kwargs.get("direction", "east")),
+            alignment=str(kwargs.get("alignment", "center")),
+        )
+        return updated
     index = _target_room_index(project, str(kwargs.get("room_resref", "")))
     room = project.rooms[index]
     primitive = _terrain_for_room(room)
@@ -6371,6 +6519,7 @@ __all__ = [
     "AuthoredPrimitiveVertexSnapCandidate",
     "AuthoredFloorPlanRoomChoice",
     "AuthoredTerrainRoomChoice",
+    "AuthoredTerrainSeamSnap",
     "add_authored_floor_plan_opening_transition_marker",
     "add_authored_room_composition_primitive",
     "apply_authored_terrain_operation",
@@ -6421,6 +6570,7 @@ __all__ = [
     "set_authored_room_composition_primitive_transform",
     "split_authored_floor_plan_face",
     "shrink_wrap_authored_room_composition_primitive_to_terrain",
+    "snap_authored_terrain_room_to_edge",
     "snap_authored_room_composition_primitive_pivot_to_vertex",
     "snap_authored_floor_plan_vertex_to_vertex",
     "transform_snap_authored_room_composition_primitive_level",

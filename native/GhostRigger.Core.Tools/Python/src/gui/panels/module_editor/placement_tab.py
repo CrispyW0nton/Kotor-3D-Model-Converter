@@ -286,7 +286,10 @@ class PlacementTab(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
-        guide = QtWidgets.QLabel("1  Find an asset   →   2  Drag it onto the level   →   3  W/E adjust   →   4  Validate")
+        guide = QtWidgets.QLabel(
+            "1  Choose a real game template   →   2  Drag it onto visible floor   →   "
+            "3  It snaps to WOK   →   4  Adjust and validate"
+        )
         guide.setObjectName("mapStudioPlacementGuideLabel")
         guide.setWordWrap(True)
         root.addWidget(guide)
@@ -316,7 +319,11 @@ class PlacementTab(QtWidgets.QWidget):
         self.palette_combo.setVisible(False)
         self.template_edit = QtWidgets.QLineEdit(asset_box)
         self.template_edit.setObjectName("mapStudioPlacementTemplateLineEdit")
-        self.template_edit.setPlaceholderText("Template resref")
+        self.template_edit.setPlaceholderText("Template resref, e.g. tat_gizka_01")
+        self.template_edit.setToolTip(
+            "A creature needs a UTC resref, not its similarly named MDL model. "
+            "Use Blueprints to author a custom template, then refresh the configured game/project resources."
+        )
         self.tag_edit = QtWidgets.QLineEdit(asset_box)
         self.tag_edit.setObjectName("mapStudioPlacementTagLineEdit")
         self.tag_edit.setPlaceholderText("Instance tag (optional)")
@@ -603,7 +610,11 @@ class PlacementTab(QtWidgets.QWidget):
                 f"Showing {shown:,} of {total:,} matches. Type a name or resref to narrow the list."
             )
         else:
-            self.asset_result_label.setText(f"{total:,} matching asset{'s' if total != 1 else ''}.")
+            self.asset_result_label.setText(
+                f"{total:,} matching asset{'s' if total != 1 else ''}."
+                if total
+                else "No matching templates. Check the target game, clear the search, or author a custom resource on Blueprints."
+            )
         blocked = self.palette_combo.blockSignals(True)
         self.palette_combo.clear()
         for entry in self._filtered_palette_entries:
@@ -853,14 +864,35 @@ class PlacementTab(QtWidgets.QWidget):
         context = self.placement_context()
         kind = context["kind"]
         template = context["template_resref"]
+        selected_entry = self.palette_combo.currentData()
+        selected_template = str(self._value(selected_entry, "template_resref", "") or "").strip()
+        selected_is_authoritative = bool(selected_entry is not None and selected_template == template)
         if kind != "camera" and not template:
-            text = "Choose a game resource or type a template resref."
+            text = "Choose an indexed game template. Custom resources can be authored from Blueprints."
         elif kind == "store":
             text = "Store resources are module-level; use Add at coordinates because they have no viewport marker."
+        elif kind == "creature" and not selected_is_authoritative:
+            text = (
+                f"{template} was typed manually. A creature requires {template}.utc in the target game, Override, "
+                "or project resources; an MDL with the same name is not enough. Choose an indexed NPC or author a UTC on Blueprints."
+            )
         elif kind == "door":
             text = f"Ready to place animated door {template}: previewed as its resolved model and exported as UTD + GIT Door List."
+        elif not selected_is_authoritative and kind != "camera":
+            extension = {
+                "placeable": "utp",
+                "trigger": "utt",
+                "waypoint": "utw",
+                "sound": "uts",
+                "encounter": "ute",
+            }.get(kind, "template")
+            text = (
+                f"{template} was typed manually. Placement can keep a marker, but export requires a resolvable "
+                f".{extension} resource. Choose an indexed template or author the resource on Blueprints."
+            )
         else:
-            text = f"Ready to place {template or 'camera'}: resolved assets preview as their actual model; unresolved assets keep a marker."
+            source = str(context.get("library_source") or "indexed game resources")
+            text = f"Ready to place {template or 'camera'} from {source}. It will snap to walkmesh by default."
         self.asset_status_label.setText(text)
         self.statusChanged.emit(text)
 

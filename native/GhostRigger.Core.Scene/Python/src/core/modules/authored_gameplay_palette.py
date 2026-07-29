@@ -118,7 +118,10 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
     # placing a visual ``plc_*``/``dor_*`` model name as a GIT template.
     typed_template = ""
     if isinstance(row, dict):
-        if row.get("door_template_resref"):
+        if row.get("utc_template_resref"):
+            typed_template = str(row.get("utc_template_resref") or "")
+            restype = "utc"
+        elif row.get("door_template_resref"):
             typed_template = str(row.get("door_template_resref") or "")
             restype = "utd"
         elif row.get("placeable_template_resref"):
@@ -135,16 +138,13 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
     if not kind:
         return None
     confidence = "template" if restype in _RESTYPE_KIND else "model_or_resref"
-    if confidence != "template" and kind in {"placeable", "door"}:
+    if confidence != "template":
         # Geometry models remain useful in the asset browser, but cannot seed a
-        # runtime GIT row until a real UTP/UTD template identity is known.
+        # runtime GIT row until a real UTC/UTP/UTD/etc. template identity is
+        # known.  In particular, creature appearance models such as
+        # ``c_gizka.mdl`` are not evidence that ``c_gizka.utc`` exists.
         return None
     warning = ""
-    if confidence != "template":
-        warning = (
-            f"{resref} was selected from model/category data. Verify this resref has a matching "
-            f"{kind} template before expecting it to resolve in-game."
-        )
     category_label = f"{category} / {subcategory}" if category and subcategory else category or kind.title()
     authoring_family = authored_gameplay_authoring_family(kind)
     if kind == "door":

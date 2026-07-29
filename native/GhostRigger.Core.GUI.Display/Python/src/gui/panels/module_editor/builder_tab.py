@@ -48,6 +48,7 @@ class BuilderTab(QtWidgets.QWidget):
     modelingContextChanged = QtCore.Signal(str)
     buildSectionChanged = QtCore.Signal(str)
     terrainCreateRequested = QtCore.Signal()
+    terrainEdgeSnapRequested = QtCore.Signal(str, str, str, str)
     terrainDressingRequested = QtCore.Signal()
     terrainPaintRequested = QtCore.Signal()
     snapRoomsAtDoorwayRequested = QtCore.Signal()
@@ -159,6 +160,15 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingWorkflowStepsLabel.setWordWrap(True)
         self.buildingWorkflowStepsLabel.setAccessibleName("Environment builder workflow")
         building_layout.addWidget(self.buildingWorkflowStepsLabel)
+        self.usableFloorGuideLabel = QtWidgets.QLabel(
+            "Usable floor is automatic: Draw Room creates the visible floor and its walkable WOK together. "
+            "Do not tile manual Floor/Plane blocks to enlarge a normal room. Draw the next room, add a door, "
+            "then drag it to the doorway magnet; matching vanilla room modules can attach at the same openings."
+        )
+        self.usableFloorGuideLabel.setObjectName("mapStudioUsableFloorGuideLabel")
+        self.usableFloorGuideLabel.setAccessibleName("How to create usable floor")
+        self.usableFloorGuideLabel.setWordWrap(True)
+        building_layout.addWidget(self.usableFloorGuideLabel)
         tool_row = QtWidgets.QHBoxLayout()
         tool_row.setContentsMargins(0, 4, 0, 4)
         self.buildingToolButtonGroup = QtWidgets.QButtonGroup(self)
@@ -175,7 +185,7 @@ class BuilderTab(QtWidgets.QWidget):
                 "Draw Room",
                 "walls",
                 "quad_draw",
-                "Click successive floor points; click the first point to close and build the room.",
+                "Click successive floor points; close the outline to create floor, walls, and walkmesh automatically.",
             ),
             (
                 "Add Door",
@@ -487,7 +497,7 @@ class BuilderTab(QtWidgets.QWidget):
         magnetic_layout.addWidget(magnetic_hint)
         magnetic_layout.addWidget(self.snapRoomsAtDoorwayButton)
         magnetic_layout.addWidget(self.snapRoomsToGridButton)
-        self._roomAdvancedLayout.addWidget(magnetic_box)
+        self._roomPrimaryLayout.addWidget(magnetic_box)
         operation_box = QtWidgets.QGroupBox("Shape Current Room")
         operation_layout = QtWidgets.QFormLayout(operation_box)
         self.roomOperationHintLabel = QtWidgets.QLabel(
@@ -748,6 +758,50 @@ class BuilderTab(QtWidgets.QWidget):
         self.createTerrainSurfaceButton.setToolTip("Create a walkable terrain heightfield and immediately enable viewport sculpting.")
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
+        seam_box = QtWidgets.QGroupBox("Connect Terrain Patches")
+        seam_box.setObjectName("mapStudioTerrainSeamSnapGroup")
+        seam_layout = QtWidgets.QFormLayout(seam_box)
+        self.terrainSeamGuideLabel = QtWidgets.QLabel(
+            "Choose the patch to move and the fixed neighbor. Edge Snap places them corner-to-corner, "
+            "matches boundary heights, and regenerates matching visible terrain/WOK edges."
+        )
+        self.terrainSeamGuideLabel.setObjectName("mapStudioTerrainSeamGuideLabel")
+        self.terrainSeamGuideLabel.setWordWrap(True)
+        self.terrainSeamSourceComboBox = QtWidgets.QComboBox()
+        self.terrainSeamSourceComboBox.setObjectName("mapStudioTerrainSeamSourceComboBox")
+        self.terrainSeamTargetComboBox = QtWidgets.QComboBox()
+        self.terrainSeamTargetComboBox.setObjectName("mapStudioTerrainSeamTargetComboBox")
+        self.terrainSeamDirectionComboBox = QtWidgets.QComboBox()
+        self.terrainSeamDirectionComboBox.setObjectName("mapStudioTerrainSeamDirectionComboBox")
+        for label, value in (
+            ("East of target", "east"),
+            ("West of target", "west"),
+            ("North of target", "north"),
+            ("South of target", "south"),
+        ):
+            self.terrainSeamDirectionComboBox.addItem(label, value)
+        self.terrainSeamAlignmentComboBox = QtWidgets.QComboBox()
+        self.terrainSeamAlignmentComboBox.setObjectName("mapStudioTerrainSeamAlignmentComboBox")
+        self.terrainSeamAlignmentComboBox.addItem("Center edges", "center")
+        self.terrainSeamAlignmentComboBox.addItem("Align start corners", "start")
+        self.terrainSeamAlignmentComboBox.addItem("Align end corners", "end")
+        self.snapTerrainEdgeButton = QtWidgets.QPushButton("Snap Edge + Match Heights")
+        self.snapTerrainEdgeButton.setObjectName("mapStudioSnapTerrainEdgeButton")
+        self.snapTerrainEdgeButton.setToolTip(
+            "Moves only the source patch. The shared boundary is height-matched; validate the WOK seam before staging."
+        )
+        self.terrainSeamStatusLabel = QtWidgets.QLabel(
+            "Create at least two terrain patches to connect an exterior area."
+        )
+        self.terrainSeamStatusLabel.setObjectName("mapStudioTerrainSeamStatusLabel")
+        self.terrainSeamStatusLabel.setWordWrap(True)
+        seam_layout.addRow(self.terrainSeamGuideLabel)
+        seam_layout.addRow("Move:", self.terrainSeamSourceComboBox)
+        seam_layout.addRow("Onto:", self.terrainSeamTargetComboBox)
+        seam_layout.addRow("Place:", self.terrainSeamDirectionComboBox)
+        seam_layout.addRow("Align:", self.terrainSeamAlignmentComboBox)
+        seam_layout.addRow(self.snapTerrainEdgeButton)
+        seam_layout.addRow(self.terrainSeamStatusLabel)
         self.terrainBrushComboBox = QtWidgets.QComboBox()
         self.terrainBrushComboBox.setObjectName("mapStudioTerrainBrushComboBox")
         self.terrainShapePresetComboBox = QtWidgets.QComboBox()
@@ -829,6 +883,7 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout.addLayout(terrain_brush_form)
         terrain_layout.addWidget(self.terrainHintLabel)
         terrain_layout.addWidget(self.terrainBrushStatusLabel)
+        terrain_layout.addWidget(seam_box)
 
         self.terrainAdvancedToggle = QtWidgets.QToolButton(terrain_box)
         self.terrainAdvancedToggle.setObjectName("mapStudioTerrainAdvancedToolsButton")
@@ -1377,6 +1432,9 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.buildSectionTabs.currentChanged.connect(self._emit_build_section_changed)
         self.createTerrainSurfaceButton.clicked.connect(lambda _checked=False: self.terrainCreateRequested.emit())
+        self.snapTerrainEdgeButton.clicked.connect(self._emit_terrain_edge_snap)
+        self.terrainSeamSourceComboBox.currentIndexChanged.connect(self._update_terrain_seam_controls)
+        self.terrainSeamTargetComboBox.currentIndexChanged.connect(self._update_terrain_seam_controls)
         self.browseTerrainDressingButton.clicked.connect(lambda _checked=False: self.terrainDressingRequested.emit())
         self.openTerrainPaintingButton.clicked.connect(lambda _checked=False: self.terrainPaintRequested.emit())
         self.snapRoomsAtDoorwayButton.clicked.connect(lambda _checked=False: self.snapRoomsAtDoorwayRequested.emit())
@@ -2185,6 +2243,11 @@ class BuilderTab(QtWidgets.QWidget):
 
         current = self._current_terrain_room_resref()
         self.terrainRoomComboBox.blockSignals(True)
+        current_source = self._current_combo_resref(self.terrainSeamSourceComboBox)
+        current_target = self._current_combo_resref(self.terrainSeamTargetComboBox)
+        for combo in (self.terrainSeamSourceComboBox, self.terrainSeamTargetComboBox):
+            combo.blockSignals(True)
+            combo.clear()
         self.terrainRoomComboBox.clear()
         restore_index = -1
         for choice in tuple(rooms or ()):
@@ -2203,6 +2266,8 @@ class BuilderTab(QtWidgets.QWidget):
                 "room_index": int(getattr(choice, "room_index", 0) or 0),
             }
             self.terrainRoomComboBox.addItem(label, data)
+            self.terrainSeamSourceComboBox.addItem(label, data)
+            self.terrainSeamTargetComboBox.addItem(label, data)
             if resref == current:
                 restore_index = self.terrainRoomComboBox.count() - 1
         if self.terrainRoomComboBox.count() <= 0:
@@ -2210,7 +2275,50 @@ class BuilderTab(QtWidgets.QWidget):
         elif restore_index >= 0:
             self.terrainRoomComboBox.setCurrentIndex(restore_index)
         self.terrainRoomComboBox.blockSignals(False)
+        for combo, wanted in (
+            (self.terrainSeamSourceComboBox, current_source),
+            (self.terrainSeamTargetComboBox, current_target),
+        ):
+            if combo.count() <= 0:
+                combo.addItem("No terrain heightfield rooms", None)
+            elif wanted:
+                self._select_combo_room_resref(combo, wanted)
+            combo.blockSignals(False)
+        if self.terrainSeamTargetComboBox.count() > 1 and (
+            self._current_combo_resref(self.terrainSeamTargetComboBox)
+            == self._current_combo_resref(self.terrainSeamSourceComboBox)
+        ):
+            self.terrainSeamTargetComboBox.setCurrentIndex(1)
+        self._update_terrain_seam_controls()
         self._update_terrain_controls()
+
+    def _update_terrain_seam_controls(self) -> None:
+        source = self._current_combo_resref(self.terrainSeamSourceComboBox)
+        target = self._current_combo_resref(self.terrainSeamTargetComboBox)
+        ready = bool(source and target and source != target)
+        self.snapTerrainEdgeButton.setEnabled(ready)
+        if ready:
+            self.terrainSeamStatusLabel.setText(
+                f"Ready: move {source} beside {target}. The target stays fixed; validate the regenerated WOK seam afterward."
+            )
+        elif source and target:
+            self.terrainSeamStatusLabel.setText("Choose two different terrain patches.")
+        else:
+            self.terrainSeamStatusLabel.setText(
+                "Create at least two terrain patches to connect an exterior area."
+            )
+
+    def _emit_terrain_edge_snap(self) -> None:
+        source = self._current_combo_resref(self.terrainSeamSourceComboBox)
+        target = self._current_combo_resref(self.terrainSeamTargetComboBox)
+        if not source or not target or source == target:
+            return
+        self.terrainEdgeSnapRequested.emit(
+            source,
+            target,
+            str(self.terrainSeamDirectionComboBox.currentData() or "east"),
+            str(self.terrainSeamAlignmentComboBox.currentData() or "center"),
+        )
 
     def set_terrain_shape_presets(self, presets) -> None:
         """Populate named terrain shape presets for non-technical terrain authoring."""

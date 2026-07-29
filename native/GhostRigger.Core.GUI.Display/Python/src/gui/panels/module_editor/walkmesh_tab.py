@@ -35,25 +35,36 @@ class WalkmeshTab(QtWidgets.QWidget):
             "without a WOK requires a reviewed floor-face selection first."
         ),
     }
+    PRIMARY_ACTIONS = (
+        "Auto Generate Walkmesh",
+        "Validate Walkmesh",
+        "Show Face Types",
+        "Show Walkable/Non-walkable",
+    )
+    ACTION_LABELS = {
+        "Auto Generate Walkmesh": "Regenerate Automatic Walkmesh",
+        "Validate Walkmesh": "Validate Walkable Floor",
+        "Show Face Types": "Preview Surface Types",
+        "Show Walkable/Non-walkable": "Preview Walkable vs Blocked",
+    }
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         self.workflow_label = QtWidgets.QLabel(
-            "Walkmesh workflow: create or load room geometry, generate WOK faces from authored geometry; "
-            "for imported rooms without WOK, select the true "
-            "floor faces and generate from that reviewed selection; paint surface types, validate, then use "
-            "Walkmesh Preview before staging."
+            "Walkmesh is the invisible floor KOTOR uses for movement. Authored rooms, ramps, stairs, and terrain "
+            "create it automatically; validate it before staging."
         )
         self.workflow_label.setObjectName("mapStudioWalkmeshWorkflowLabel")
         self.workflow_label.setWordWrap(True)
         self.surface_label = QtWidgets.QLabel(
-            "KOTOR WOK face types: 1 WALK for reachable floors, 7 NON_WALK for walls/blockers, 18 DOOR for doorway portals, 23 WATER for water surfaces."
+            "Surface legend: WALK = reachable floor · NON_WALK = blocker · DOOR = room transition · WATER = water."
         )
         self.surface_label.setObjectName("mapStudioWalkmeshSurfaceLabel")
         self.surface_label.setWordWrap(True)
         self.validation_label = QtWidgets.QLabel(
-            "Validation should confirm player start, doors, triggers, waypoints, creatures, and placeables sit on walkable faces before export/install."
+            "Automatic workflow: draw a room or terrain patch → connect openings/edges → validate. "
+            "Use manual face tools only for an imported mesh that has no source WOK."
         )
         self.validation_label.setObjectName("mapStudioWalkmeshValidationHintLabel")
         self.validation_label.setWordWrap(True)
@@ -63,15 +74,26 @@ class WalkmeshTab(QtWidgets.QWidget):
         self.next_action_label = QtWidgets.QLabel("Next: create a starter room or terrain patch.")
         self.next_action_label.setObjectName("mapStudioWalkmeshNextActionLabel")
         self.next_action_label.setWordWrap(True)
+        self.overlay_label = QtWidgets.QLabel(
+            "About the green triangles: this is a diagnostic WOK overlay, composited above the scene so it remains "
+            "readable. It is not an extra floor and the overlay display does not move the exported WOK upward. "
+            "If an asset is physically above or below it, use Snap to WOK or inspect that asset's Z position."
+        )
+        self.overlay_label.setObjectName("mapStudioWalkmeshOverlayExplanationLabel")
+        self.overlay_label.setAccessibleName("Green walkmesh overlay explanation")
+        self.overlay_label.setWordWrap(True)
         layout.addWidget(self.workflow_label)
         layout.addWidget(self.surface_label)
         layout.addWidget(self.validation_label)
         layout.addWidget(self.status_label)
         layout.addWidget(self.next_action_label)
+        layout.addWidget(self.overlay_label)
         self.face_type = QtWidgets.QComboBox()
         self.face_type.setObjectName("mapStudioWalkmeshFaceTypeComboBox")
         self.face_type.addItems(["1 WALK", "7 NON_WALK", "18 DOOR", "23 WATER"])
-        layout.addWidget(self.face_type)
+        face_row = QtWidgets.QFormLayout()
+        face_row.addRow("Paint surface:", self.face_type)
+        layout.addLayout(face_row)
         assignment_box = QtWidgets.QGroupBox("Room WOK Surface Assignment")
         assignment_layout = QtWidgets.QFormLayout(assignment_box)
         self.room_choice = QtWidgets.QComboBox()
@@ -90,18 +112,47 @@ class WalkmeshTab(QtWidgets.QWidget):
         assignment_layout.addRow(self.surface_assignment_label)
         assignment_layout.addRow(self.apply_surface_button)
         layout.addWidget(assignment_box)
+        primary_box = QtWidgets.QGroupBox("Recommended")
+        primary_layout = QtWidgets.QVBoxLayout(primary_box)
+        self.advanced_toggle = QtWidgets.QToolButton(self)
+        self.advanced_toggle.setObjectName("mapStudioWalkmeshAdvancedToggle")
+        self.advanced_toggle.setText("Manual / imported-mesh tools")
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.setChecked(False)
+        self.advanced_toggle.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.advanced_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.advanced_widget = QtWidgets.QWidget(self)
+        self.advanced_widget.setObjectName("mapStudioWalkmeshAdvancedTools")
+        advanced_layout = QtWidgets.QVBoxLayout(self.advanced_widget)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_buttons: dict[str, QtWidgets.QPushButton] = {}
         for label in self.ACTIONS:
-            button = QtWidgets.QPushButton(label)
+            button = QtWidgets.QPushButton(self.ACTION_LABELS.get(label, label))
             button.setObjectName(self.ACTION_OBJECT_NAMES.get(label, ""))
             tooltip = self.ACTION_TOOLTIPS.get(label, "")
             if tooltip:
                 button.setToolTip(tooltip)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
-            layout.addWidget(button)
+            self.action_buttons[label] = button
+            if label in self.PRIMARY_ACTIONS:
+                primary_layout.addWidget(button)
+            else:
+                advanced_layout.addWidget(button)
+        self.advanced_widget.setVisible(False)
+        self.advanced_toggle.toggled.connect(self._set_advanced_visible)
+        layout.addWidget(primary_box)
+        layout.addWidget(self.advanced_toggle)
+        layout.addWidget(self.advanced_widget)
         layout.addStretch(1)
         self.room_choice.currentIndexChanged.connect(self._update_surface_assignment_controls)
         self.surface_choice.currentIndexChanged.connect(self._update_surface_assignment_label)
         self.apply_surface_button.clicked.connect(self._emit_room_surface)
+
+    def _set_advanced_visible(self, visible: bool) -> None:
+        self.advanced_widget.setVisible(bool(visible))
+        self.advanced_toggle.setArrowType(
+            QtCore.Qt.ArrowType.DownArrow if visible else QtCore.Qt.ArrowType.RightArrow
+        )
 
     def set_walkmesh_status(self, status) -> None:
         """Display core-authored walkmesh status without mutating the project."""

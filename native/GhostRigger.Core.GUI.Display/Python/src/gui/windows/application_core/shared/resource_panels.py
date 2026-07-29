@@ -2226,6 +2226,9 @@ class ResourcePanelsMixin:
                     theme_manager=getattr(self, "theme_manager", None),
                     layout_manager=getattr(self, "layout_manager", None),
                 )
+                theme_manager = getattr(self, "theme_manager", None)
+                if theme_manager is not None:
+                    theme_manager.register_theme_aware_widget(window)
             except Exception as exc:
                 message = f"Map Studio could not open: {exc}"
                 log = getattr(self, "_log", None)

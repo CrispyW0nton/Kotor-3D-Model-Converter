@@ -11,6 +11,90 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make Map Studio teach complete level-authoring workflows
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core Scene authored room/gameplay services; Core Tools Map Studio
+orchestration; Core GUI Display Map Studio workflow panels, viewport overlays,
+theme lifecycle, and native Python payload manifests.
+
+Reframed Map Studio around the complete things level designers intend to make
+instead of isolated engine primitives. The first Build screen now says that
+**Draw Room** creates visible floor and walkmesh together, explains why manual
+Floor/Plane tiling is not the normal way to enlarge a room, and puts room,
+doorway-magnet, and compatible vanilla-module assembly ahead of advanced
+layout tools. Rooms, Place, Walkmesh, and Blueprints use the same progressive
+workflow order and keep imported/manual mesh controls collapsed until needed.
+
+Walkmesh is now named and explained as KOTOR's invisible movement floor.
+Authored rooms, ramps, stairs, and terrain advertise automatic generation and
+provide primary regenerate, validate, and surface-preview actions. The green
+triangle overlay explicitly identifies itself as a composited diagnostic
+display: it does not add a second floor or raise exported WOK data. An
+in-viewport badge reinforces that fact whenever a walkmesh or terrain overlay
+is active.
+
+Exterior authors can connect two terrain heightfield patches by choosing the
+moving patch, fixed neighbor, edge direction, and start/center/end alignment.
+The operation places their corners/edges together, matches the shared boundary
+heights, refreshes the corresponding WOK geometry, records the seam, and adds
+symmetric VIS intent while still requiring final Odyssey traversal validation.
+
+Creature placement no longer treats a model/category row such as
+`c_gizka.mdl` as proof that a matching UTC exists. Map Studio indexes every
+real UTC exposed by the configured K1/K2 installation, including Override and
+module sources, labels those results as installed UTC templates, and gives a
+plain recovery explanation for manually typed model names. Blueprints now
+defines a blueprint as a reusable KOTOR template—rather than a room layout—and
+lists the UTC/UTP/UTD/UTT/UTW/UTS/UTE/UTM roles before opening the real
+Blueprint Editor.
+
+Map Studio is also registered with the shared theme lifecycle. Reused or
+temporarily closed studios now receive palette changes, preventing a stale
+Classic workflow dock from appearing beneath Dark editor chrome after a theme
+switch.
+
+Affected:
+
+- package-local `authored_gameplay_palette.py` and
+  `authored_room_operations.py` copies in Core Scene and Core Tools
+- Map Studio Builder, Rooms, Placement, Walkmesh, Blueprints, and viewport
+  panels in Core GUI Display and Core Tools
+- Core Tools `module_editor_window.py` UTC indexing, workflow routing,
+  Blueprint Editor handoff, and terrain-seam orchestration
+- shared Map Studio opener theme registration in Core GUI Display and Core
+  Tools
+- focused gameplay-palette, authored-room-operation, workflow-panel, and
+  native payload tests
+- regenerated Core GUI Display, Core Scene, and Core Tools payload manifests
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Sixteen focused gameplay-palette/terrain-seam tests and eight focused
+  Build/Rooms/Place/Walkmesh/Blueprint workflow tests passed. The live-theme
+  reopen contract and both native payload identity/manifest checks passed.
+- The isolated solution rebuilt in the active Visual Studio Community instance
+  as `Debug|x64` with zero failed projects.
+- In the actual Debug application, Map Studio opened on Build and visibly
+  presented automatic floor/WOK guidance and doorway-magnet assembly. Rooms
+  kept layout/file tools collapsed; Terrain exposed **Snap Edge + Match
+  Heights**; Walkmesh exposed the four primary automatic/validation/preview
+  actions with manual tools collapsed; and Blueprints defined every supported
+  template family.
+- The configured K1 installation returned `c_gizka` as a genuine
+  **Installed UTC Templates** result. Attempting coordinate placement without
+  an authored module produced the specific recovery message to create or load
+  an authored module first instead of the previous “nothing found under that
+  UTC” ambiguity.
+- Default/native, Classic, Dark, Droid, Light, and Matrix were applied through
+  the real Settings window and checked in the actual reopened Map Studio.
+  A discovered Classic-to-Dark stale workflow panel was corrected and
+  reverified on the same reusable studio instance. Matrix was restored.
+
 ### [2026-07-28] make startup and idle rendering adapt to the user's machine
 
 Owner: LordVaderCW

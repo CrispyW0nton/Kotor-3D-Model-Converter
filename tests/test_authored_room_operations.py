@@ -1540,6 +1540,60 @@ def test_t2908_controller_edits_terrain_heightfield_and_remains_exportable() -> 
     assert geometry.wok.walkable_face_count() > 0
 
 
+def test_t3204_controller_snaps_exterior_terrain_edges_and_matches_wok_heights() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="terrain_seams", game="K1")
+    target = controller.create_terrain_patch(
+        room_resref="target_patch",
+        resolution=3,
+        width=10.0,
+        depth=10.0,
+    )
+    source = controller.create_terrain_patch(
+        room_resref="moving_patch",
+        resolution=3,
+        width=10.0,
+        depth=10.0,
+    )
+    for row, height in enumerate((0.0, 1.0, 2.0)):
+        controller.apply_authored_terrain_operation(
+            operation="set_height",
+            room_resref=target,
+            row_index=row,
+            column_index=2,
+            height=height,
+        )
+
+    result = controller.apply_authored_terrain_operation(
+        operation="snap_edge",
+        source_room_resref=source,
+        target_room_resref=target,
+        direction="east",
+        alignment="center",
+    )
+    authored = authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    )
+    by_name = {room.normalised_resref(): room for room in authored.rooms}
+    moved = by_name[source]
+    fixed = by_name[target]
+
+    assert result.readiness is not None
+    assert moved.position == (10.0, 0.0, 0.0)
+    assert tuple(row[0] for row in moved.primitive.heights) == (0.0, 1.0, 2.0)
+    assert moved.primitive.metadata["last_operation"] == "terrain_edge_snap"
+    assert moved.primitive.metadata["terrain_seam_target"] == target
+    assert fixed.position == (0.0, 0.0, 0.0)
+    assert target in moved.visible_rooms
+    assert source in fixed.visible_rooms
+    assert controller.command_history.undo_label == "Apply terrain operation snap_edge"
+
+
 def test_t2908_controller_smooths_and_flattens_terrain_heightfield() -> None:
     _install_native_payload_paths()
 
@@ -2485,6 +2539,53 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
         assert "self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)" in window_source
     assert "self.controller.apply_authored_terrain_operation" in window_source
     assert "self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)" in window_source
+
+
+def test_t3204_map_studio_explains_automatic_floors_walkmesh_and_terrain_seams() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    gui_root = (
+        repo
+        / "native"
+        / "GhostRigger.Core.GUI.Display"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+    )
+    builder_source = (gui_root / "builder_tab.py").read_text(encoding="utf-8")
+    walkmesh_source = (gui_root / "walkmesh_tab.py").read_text(encoding="utf-8")
+    placement_source = (gui_root / "placement_tab.py").read_text(encoding="utf-8")
+    blueprint_source = (gui_root / "blueprints_tab.py").read_text(encoding="utf-8")
+    viewport_source = (gui_root / "module_editor_viewport_panel.py").read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Core.Tools"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "mapStudioUsableFloorGuideLabel" in builder_source
+    assert "Do not tile manual Floor/Plane blocks" in builder_source
+    assert "self._roomPrimaryLayout.addWidget(magnetic_box)" in builder_source
+    assert "mapStudioTerrainSeamSnapGroup" in builder_source
+    assert "Snap Edge + Match Heights" in builder_source
+    assert "terrainEdgeSnapRequested" in builder_source
+    assert "mapStudioWalkmeshOverlayExplanationLabel" in walkmesh_source
+    assert "composited above the scene" in walkmesh_source
+    assert "mapStudioWalkmeshAdvancedToggle" in walkmesh_source
+    assert "requires {template}.utc" in placement_source
+    assert "an MDL with the same name is not enough" in placement_source
+    assert "A blueprint is a reusable KOTOR template file" in blueprint_source
+    assert "mapStudioWalkmeshOverlayBadge" in viewport_source
+    assert "self.builder_tab.terrainEdgeSnapRequested.connect(self.snap_authored_terrain_edge)" in window_source
+    assert '("Build", self.builder_tab)' in window_source
+    assert '("Walkmesh", self.walkmesh_tab)' in window_source
+    assert "_installed_utc_template_rows" in window_source
 
 
 def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:

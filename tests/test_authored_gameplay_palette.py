@@ -51,7 +51,7 @@ def test_t2656_palette_maps_template_resource_types_to_gameplay_kinds() -> None:
     assert all(not entry.warning for entry in entries)
 
 
-def test_t2656_palette_only_allows_safe_model_category_fallbacks_with_warnings() -> None:
+def test_t3204_palette_rejects_models_that_are_not_runtime_templates() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_gameplay_palette import authored_gameplay_palette_from_library_rows
@@ -66,14 +66,35 @@ def test_t2656_palette_only_allows_safe_model_category_fallbacks_with_warnings()
     entries = authored_gameplay_palette_from_library_rows(rows)
     by_resref = {entry.template_resref: entry for entry in entries}
 
-    assert by_resref["c_rancor"].kind == "creature"
-    # Placeable and door geometry names are not runtime template authority.
-    # Those rows enter the placement palette only after library discovery has
-    # attached a true UTP/UTD resref.
+    # Geometry names are not runtime template authority. These rows enter the
+    # placement palette only after discovery attaches a real UTC/UTP/UTD
+    # template resref. This prevents a c_gizka model from being offered as a
+    # c_gizka UTC that does not exist.
+    assert "c_rancor" not in by_resref
     assert "plc_bench" not in by_resref
     assert "dor_metal01" not in by_resref
     assert "w_blstrpstl_001" not in by_resref
-    assert "Verify this resref has a matching creature template" in by_resref["c_rancor"].warning
+
+
+def test_t3204_palette_accepts_an_explicit_utc_backing_for_a_model_row() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_gameplay_palette import gameplay_palette_entry_from_library_row
+
+    entry = gameplay_palette_entry_from_library_row(
+        {
+            "game": "K1",
+            "resref": "c_gizka",
+            "category": "Creatures",
+            "utc_template_resref": "tat_gizka_01",
+            "source": "models.bif",
+        }
+    )
+
+    assert entry is not None
+    assert entry.kind == "creature"
+    assert entry.template_resref == "tat_gizka_01"
+    assert entry.confidence == "template"
 
 
 def test_t2656_palette_filters_by_game_kind_and_query() -> None:

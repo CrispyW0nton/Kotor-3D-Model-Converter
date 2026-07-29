@@ -111,7 +111,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_GAMEPLAY_PALETTE",
             "source_path": "src/core/modules/authored_gameplay_palette.py",
             "packaged_path": "Python/src/core/modules/authored_gameplay_palette.py",
-            "sha256": "28ffe3dd8f7357e9ba415482c94074d3c85092ffd09837cef92e18080f7fc2d6"
+            "sha256": "a9ed45da5174465b22a4044ae71958655d958d07d8d9e121ef1b16e66ec8df48"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_GAMEPLAY_PREVIEW",
@@ -261,7 +261,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
             "source_path": "src/core/modules/authored_room_operations.py",
             "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-            "sha256": "3e73f324e874b81526502f737899a4847a8d36fcac38d5d09f4c512daed2ec36"
+            "sha256": "e1025c08239489b9b7797cbcdcf9a28a9a2649488d950bc8dc49c79c38231efc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OUTLINE_GEOMETRY",

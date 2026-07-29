@@ -2106,13 +2106,17 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "def set_walkmesh_surfaces" in source
         assert "def set_walkmesh_status" in source
         assert "Walkmesh status unavailable" in source
-        assert "create or load room geometry, generate WOK faces" in source
-        assert "1 WALK for reachable floors" in source
-        assert "7 NON_WALK for walls/blockers" in source
-        assert "18 DOOR for doorway portals" in source
-        assert "23 WATER for water surfaces" in source
+        assert "Walkmesh is the invisible floor KOTOR uses for movement" in source
+        assert "Authored rooms, ramps, stairs, and terrain" in source
+        assert "WALK = reachable floor" in source
+        assert "NON_WALK = blocker" in source
+        assert "DOOR = room transition" in source
+        assert "WATER = water" in source
         assert "Use DOOR only for doorway/transition surfaces." in source
-        assert "player start, doors, triggers, waypoints, creatures, and placeables sit on walkable faces" in source
+        assert "Use manual face tools only for an imported mesh" in source
+        assert "mapStudioWalkmeshOverlayExplanationLabel" in source
+        assert "display does not move the exported WOK upward" in source
+        assert "mapStudioWalkmeshAdvancedToggle" in source
         assert "mapStudioWalkmeshGenerateButton" in source
         assert "mapStudioWalkmeshGenerateSelectedFloorButton" in source
         assert "mapStudioWalkmeshAssignFaceTypeButton" in source
@@ -2201,10 +2205,13 @@ def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
         assert "mapStudioBlueprintWorkflowLabel" in source
         assert "mapStudioBlueprintResourceTypesLabel" in source
         assert "mapStudioBlueprintPlacementHintLabel" in source
-        assert "edit KOTOR resource templates, validate them, then place instances" in source
+        assert "A blueprint is a reusable KOTOR template file" in source
+        assert "not a room layout" in source
         assert "UTC creatures, UTP placeables, UTD doors, UTT triggers" in source
         assert "UTW waypoints, UTS sounds, UTE encounters, and UTM merchants/stores" in source
-        assert "position, bearing, transition/script fields, and walkmesh validation" in source
+        assert "automatically indexes every UTC" in source
+        assert "similarly named MDL model is not a creature blueprint" in source
+        assert "mapStudioBlueprintTypeDescriptionLabel" in source
         assert "mapStudioBlueprintTypeComboBox" in source
         assert "mapStudioBlueprintOpenButton" in source
         assert "mapStudioBlueprintSaveButton" in source
@@ -4527,3 +4534,16 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     )
     assert "def planarize_pascal_building_rooms" in graph_source
     assert '"junction_vertex_ids"' in graph_source
+
+
+def test_t3204_map_studio_receives_live_theme_changes_after_reopen() -> None:
+    for resource_panel_path in (
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_panels.py",
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/application_core/shared/resource_panels.py",
+    ):
+        source = _read(resource_panel_path)
+        open_window = source[
+            source.index("def _open_module_editor_window") :
+            source.index("def _map_studio_visual_proof_from_ipc")
+        ]
+        assert "theme_manager.register_theme_aware_widget(window)" in open_window

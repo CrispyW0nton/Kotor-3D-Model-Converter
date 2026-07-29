@@ -4206,6 +4206,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.marker_summary_label.setObjectName("mapStudioPlacementMarkerSummaryLabel")
         self.marker_summary_label.setWordWrap(True)
         toolbar_frame_layout.addWidget(self.marker_summary_label)
+        self.walkmesh_overlay_badge = QtWidgets.QLabel(
+            "Walkmesh preview ON · green triangles are a diagnostic overlay drawn above the scene; exported WOK height is unchanged."
+        )
+        self.walkmesh_overlay_badge.setObjectName("mapStudioWalkmeshOverlayBadge")
+        self.walkmesh_overlay_badge.setAccessibleName("Walkmesh overlay visible")
+        self.walkmesh_overlay_badge.setWordWrap(True)
+        self.walkmesh_overlay_badge.setVisible(False)
+        toolbar_frame_layout.addWidget(self.walkmesh_overlay_badge)
         self.bevel_options_frame = QtWidgets.QFrame(self.viewport_toolbar_frame)
         self.bevel_options_frame.setObjectName("mapStudioInteractiveBevelOptions")
         bevel_layout = QtWidgets.QHBoxLayout(self.bevel_options_frame)
@@ -4781,6 +4789,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             setattr(target, "lighting_mode", lighting_mode)
         if hasattr(self.viewport, "walkmesh_button"):
             self.viewport.walkmesh_button.setChecked("walkmesh" in lower)
+        self.walkmesh_overlay_badge.setVisible("walkmesh" in lower)
         request = getattr(self.viewport, "_request_render", None)
         if callable(request):
             request(fast=True, reason=f"Map Studio view mode: {mode}", resources=True, lighting=True, overlay=True, hud=True)
@@ -10259,6 +10268,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             setter(presentation)
         else:
             setattr(viewport, "_map_studio_viewport_presentation", presentation)
+        overlay_visible = bool(presentation.get("show_terrain_walkability", False))
+        self.walkmesh_overlay_badge.setVisible(overlay_visible)
+        if overlay_visible:
+            self.walkmesh_overlay_badge.setText(
+                "Walkmesh preview ON · green triangles are composited above the scene for readability; "
+                "this display does not raise the exported WOK. Snap misplaced assets to WOK or inspect their Z."
+            )
         canvas = getattr(viewport, "canvas", None)
         clear_diagnostics = getattr(canvas, "clear_diagnostics_text", None)
         if callable(clear_diagnostics):

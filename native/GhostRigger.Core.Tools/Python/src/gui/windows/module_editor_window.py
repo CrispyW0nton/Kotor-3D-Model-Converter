@@ -1205,6 +1205,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._library_rows: list[dict[str, Any]] = []
         self._base_library_rows: list[dict[str, Any]] = []
         self._placeable_library_rows: list[dict[str, Any]] = []
+        self._utc_template_library_rows: list[dict[str, Any]] = []
+        self._blueprint_editor_window: QtWidgets.QMainWindow | None = None
         self._placeable_library_root = ""
         self._placeable_game_resource_provider: Any = None
         self._placeable_library_game = ""
@@ -1644,14 +1646,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.blueprints_tab = BlueprintsTab()
         self.blueprints_tab.adopt_script_hook_tools(self.builder_tab.scriptHooksGroup)
         for label, widget in (
+            ("Build", self.builder_tab),
             ("Rooms", self.rooms_tab),
             ("Place", self.placement_tab),
-            ("WOK", self.walkmesh_tab),
+            ("Walkmesh", self.walkmesh_tab),
             ("Paint", self.texture_paint_tab),
             ("Environment", self.environment_tab),
+            ("Blueprints", self.blueprints_tab),
             ("Porter", self.porter_tab),
-            ("Build", self.builder_tab),
-            ("Data", self.blueprints_tab),
         ):
             self.workflow_tabs.addTab(widget, label)
             self.workflow_selector.addItem(label)
@@ -2103,6 +2105,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanFaceTriangulateRequested.connect(self.triangulate_authored_floor_plan_face)
         self.builder_tab.floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
+        self.builder_tab.terrainEdgeSnapRequested.connect(self.snap_authored_terrain_edge)
         self.builder_tab.terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)
         self.builder_tab.terrainCreateRequested.connect(self._create_and_focus_map_studio_terrain_patch)
         self.builder_tab.terrainDressingRequested.connect(self.show_map_studio_placement_tools)
@@ -3460,7 +3463,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _apply_combined_library_rows(self) -> None:
         combined: dict[tuple[str, str, str], dict[str, Any]] = {}
-        for row in (*self._base_library_rows, *self._placeable_library_rows, *self._plcaa_manual_proof_rows):
+        for row in (
+            *self._base_library_rows,
+            *self._utc_template_library_rows,
+            *self._placeable_library_rows,
+            *self._plcaa_manual_proof_rows,
+        ):
             value = dict(row)
             key = (
                 str(value.get("game") or "").upper(),
@@ -3473,6 +3481,56 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         palette = self.controller.authored_gameplay_palette_entries(self._library_rows)
         self.builder_tab.set_gameplay_palette_entries(palette)
         self.placement_tab.set_palette_entries(palette)
+
+    def _installed_utc_template_rows(self) -> tuple[dict[str, Any], ...]:
+        """Return typed creature templates from the configured game indexes."""
+
+        manager = getattr(self, "resource_manager", None)
+        if manager is None:
+            return ()
+        try:
+            from src.core.assets.resource_manager import RES_UTC
+        except Exception:
+            RES_UTC = 2027
+        rows: list[dict[str, Any]] = []
+        active_game = str(getattr(self.project, "game", "") or "").upper()
+        for game, getter_name in (("K1", "get_k1"), ("K2", "get_k2")):
+            if active_game in {"K1", "K2"} and game != active_game:
+                continue
+            getter = getattr(manager, getter_name, None)
+            installation = getter() if callable(getter) else None
+            list_resrefs = getattr(installation, "list_resrefs", None)
+            if not callable(list_resrefs):
+                continue
+            try:
+                resrefs = list_resrefs(RES_UTC)
+            except Exception as exc:
+                self._log(f"{game} UTC template index warning: {exc}")
+                continue
+            source = str(
+                getattr(installation, "game_dir", "")
+                or getattr(installation, "root", "")
+                or f"{game} installed resources"
+            )
+            for raw_resref in resrefs or ():
+                resref = str(raw_resref or "").strip().lower()
+                if not resref:
+                    continue
+                rows.append(
+                    {
+                        "game": game,
+                        "resref": resref,
+                        "template_resref": resref,
+                        "utc_template_resref": resref,
+                        "restype": "utc",
+                        "kind": "creature",
+                        "category": "Creatures / Installed UTC Templates",
+                        "source": source,
+                        "confidence": "stock_template",
+                    }
+                )
+        rows.sort(key=lambda row: (str(row["game"]), str(row["resref"])))
+        return tuple(rows)
 
     def set_placeable_library_root(self, root: str | Path, *, provider: Any = None) -> None:
         """Attach the reusable Placeable Builder library to this Map Studio."""
@@ -3540,7 +3598,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
 
     def refresh_placeable_library(self) -> tuple[dict[str, Any], ...]:
-        """Refresh target-game UTP templates and authored placeable assets."""
+        """Refresh typed UTC/UTP/UTD templates and authored placeable assets."""
 
         rows: tuple[dict[str, Any], ...] = ()
         provider = self._map_studio_gameplay_provider()
@@ -3560,6 +3618,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             except Exception as exc:
                 self._log(f"Placeable Library refresh warning: {exc}")
         self._placeable_library_rows = [dict(row) for row in rows]
+        self._utc_template_library_rows = [
+            dict(row) for row in self._installed_utc_template_rows()
+        ]
         self._placeable_library_game = str(getattr(self.project, "game", "") or "").upper()
         self._placeable_library_module_root = self._authored_module_root()
         proof_build = self._plcaa_manual_proof_build
@@ -3569,6 +3630,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.controller.set_authored_placeable_resources(())
         self.controller.set_authored_placeable_preview_rows(self._placeable_library_rows)
         self._apply_combined_library_rows()
+        if self._utc_template_library_rows:
+            self._log(
+                f"Map Studio indexed {len(self._utc_template_library_rows):,} installed UTC creature template(s)."
+            )
         return tuple(self._placeable_library_rows)
 
     def set_scripting_studio_resources(self, resources: object) -> None:
@@ -9704,6 +9769,48 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             refresh_terrain=True,
         )
 
+    def snap_authored_terrain_edge(
+        self,
+        source_room_resref: str,
+        target_room_resref: str,
+        direction: str,
+        alignment: str,
+    ) -> None:
+        """Place one exterior terrain patch beside another and close its seam."""
+
+        try:
+            result = self.controller.apply_authored_terrain_operation(
+                operation="snap_edge",
+                source_room_resref=source_room_resref,
+                target_room_resref=target_room_resref,
+                direction=direction,
+                alignment=alignment,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Connect Terrain Patches",
+                f"The terrain patches were not moved.\n\n{exc}",
+            )
+            return
+        readiness = result.readiness
+        message = (
+            f"Snapped {source_room_resref} {direction} of {target_room_resref} and matched the shared boundary heights. "
+            "Visible terrain and WOK edges were regenerated; validate the cross-room WOK seam before staging."
+        )
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        seam_status = getattr(self.builder_tab, "terrainSeamStatusLabel", None)
+        if seam_status is not None:
+            seam_status.setText(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
+
     def preview_map_studio_terrain_sculpt_frame(
         self,
         brush: str,
@@ -15068,6 +15175,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if action == "Add Blueprint":
             blueprint = self.controller.add_blueprint(blueprint_type=self.blueprints_tab.type_combo.currentText())
             self._refresh_all(f"Added blueprint {blueprint.name}.")
+            return
+        if action in {"Open Blueprint", "Save Blueprint"}:
+            from src.gui.windows.qt_blueprint_editor import QtBlueprintEditorWindow
+
+            if self._blueprint_editor_window is None:
+                self._blueprint_editor_window = QtBlueprintEditorWindow(self)
+            self._blueprint_editor_window.show()
+            self._blueprint_editor_window.raise_()
+            self._blueprint_editor_window.activateWindow()
+            if action == "Open Blueprint":
+                self._blueprint_editor_window.open_blueprint()
+            else:
+                self._blueprint_editor_window.save_blueprint()
             return
         if action == "Add Camera":
             self.add_map_studio_camera()
