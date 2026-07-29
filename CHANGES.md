@@ -11,6 +11,78 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make startup and idle rendering adapt to the user's machine
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core Rendering performance policy; Core GUI Display startup,
+viewport chrome, Settings, deferred workbench construction, and native Python
+payload manifests.
+
+Intersects: `codex/map-studio-ux-overhaul`; Map Studio and the other product
+surfaces consume the shared renderer settings and shell startup path, but the
+branches remain separate and were not merged.
+
+Replaced the one-size-fits-all startup path with progressive, hardware-aware
+work. Prelaunch diagnostics and game-library indexing now receive 750 ms of
+foreground time instead of holding the splash for up to 3.5 seconds; unfinished
+work continues through the existing post-paint completion path. Viewport
+construction no longer launches a blocking PowerShell GPU query merely to pick
+a decorative icon, icon roots are cached, and Autodesk FBX SDK directory
+discovery now waits until an FBX action actually needs it.
+
+Rigging, Texture Tool, and Blueprint Editor windows are created on first use
+and reused, removing 163 hidden widgets from the initial workspace. Settings
+now exposes a plain-language **Performance** profile with **Auto for this
+computer (Recommended)**, Balanced, Low power, Quality, and Custom choices,
+plus the effective behavior. Auto detects integrated graphics or entry-level
+4-core/8-thread systems like the reported i5-1135G7 laptop. Its Low power tier
+caps active rendering at 45 FPS, disables bloom, lowers diagnostics to 1 Hz,
+uses a 256 MB texture budget, limits upload bursts to eight per frame, and
+starts large-scene simplification earlier while preserving all authoring
+features and dirty-only idle rendering.
+
+Decorative Matrix header animation also follows the effective profile. Low
+power mode reduces it from 12 to 4 FPS and can update live after background
+hardware detection or a Settings change instead of spending a significant
+fraction of a laptop CPU core while the scene is idle.
+
+Affected:
+
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/renderer_settings.py`
+- shared GUI Display app runner, main-window construction, deferred tool
+  openers, startup completion, and Settings
+- viewport icon and Matrix animation helpers
+- GUI Display and Core Rendering native Python payload manifests
+- focused renderer-profile, startup, deferred-window, and payload tests
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Eleven focused renderer-profile, Settings, startup, and deferred-workbench
+  tests passed. All 22 native Python payload identity/manifest tests passed.
+- The isolated solution rebuilt in the active Visual Studio Community instance
+  as `Debug|x64` with zero failed projects.
+- Headless shell import plus construction fell from about 10.9 seconds to about
+  5.1 seconds; startup widget count fell from 1,794 to 1,631. Each deferred
+  workbench was created once and reused.
+- In the actual Visual Studio Debug application, the final run reached first
+  visible splash at 7.05 seconds and the usable main workspace at 16.03
+  seconds. Repeated runs ranged from 16.03 to 24.19 seconds, improving on the
+  roughly 35-second baseline by about 31–54%. Startup working set was about
+  369–373 MB.
+- The actual Settings window visibly exposed the recommended Auto profile and
+  its effective behavior. A focused i5-1135G7/Intel Iris Xe hardware fixture
+  resolved to Low power with the documented 45 FPS/bloom/upload limits.
+  Rigging, Texture Tool, and Blueprint Editor were each opened from Tools after
+  startup and remained responsive.
+- With Low power applied and the Matrix theme idle, reducing decorative
+  animation to 4 FPS lowered the settled process CPU sample from about 9.9% to
+  about 3.8% on the verification machine while the viewport stayed in
+  dirty-only mode.
+
 ### [2026-07-28] make shared controls keyboard, contrast, and screen-scale safe
 
 Owner: LordVaderCW

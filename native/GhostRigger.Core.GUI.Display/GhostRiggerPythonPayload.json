@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_QT_MATRIX_BACKGROUND",
             "source_path": "src/gui/assets/qt_matrix_background.py",
             "packaged_path": "Python/src/gui/assets/qt_matrix_background.py",
-            "sha256": "018abf7b1a400ef2a52622a156fa487bba27907f6d88405629c875bb2f8980b5"
+            "sha256": "48538d2e21fde181c2081e5cb96c5ec02eadd4e066aa28336a9201e25f7a2889"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_QT_THEME",
@@ -195,7 +195,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_SETTINGS_DIALOG",
             "source_path": "src/gui/dialogs/qt_settings_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_settings_dialog.py",
-            "sha256": "2afe27c4f38a844048557590503c524ac289d82eadcccea1f0589f34613c94f9"
+            "sha256": "4f102964e32102aa00bd80d046e11cd6861d042b36e7a1817d85fecc8868304f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_UV_GEOMETRY_PREVIEW_WINDOW",
@@ -1473,7 +1473,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_ICONS",
             "source_path": "src/gui/viewports/viewport_core/shared/icons.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/icons.py",
-            "sha256": "6af24a3fe7fad0e62237e5ed1f15f5de1a8768db818e8c28a5d77293d8107d50"
+            "sha256": "8781c49c3238be367d3390a5842f8f5bd7abe7da79320ad06c45ed330ac565d9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_JOINT_PALETTE",
@@ -1683,7 +1683,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_APP_RUNNER",
             "source_path": "src/gui/windows/application_core/functions/app_runner.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/app_runner.py",
-            "sha256": "08eeee2ddb33bc19368a23341ced98b0886d8346d5feb3a41e61538a6432c3ce"
+            "sha256": "e660884e613e2b56268da42cb08e9ad68f9bfe4aa2c274baed9e68a1eb9aa85e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_GEOMETRY",
@@ -1767,7 +1767,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MAIN_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/main_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
-            "sha256": "3030dde60ad68be1e4d046cbfcb05460f08afd4d3f965ceb40cc21612d305c61"
+            "sha256": "a457ad83b764e2e6bd4d13096135b6f17bd6be21bb8dfce68718c4ab1cbc5ea1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MODEL_IO",
@@ -1791,13 +1791,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS",
             "source_path": "src/gui/windows/application_core/shared/resource_panels.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_panels.py",
-            "sha256": "14b1c0945932d90d1e59e48fff4d3cc1f647b0ccafc0c83ef525bd682fb1e83e"
+            "sha256": "31bb05f114481628ccc50091026e1400c0a9058480b06480588dc5f93c524f02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RETARGET_WINDOW_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/retarget_window_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/retarget_window_workflow.py",
-            "sha256": "485f42b28dc444da6dfe2cb610f6162294da8eb11727734c4b2272a9353032ac"
+            "sha256": "44f700494d1b647502c6dc169b93121b395821aad39eed119647110d5bc1a234"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RETARGET_WORKFLOW",
@@ -1827,7 +1827,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_STARTUP_LIBRARY",
             "source_path": "src/gui/windows/application_core/shared/startup_library.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/startup_library.py",
-            "sha256": "5cb04c45fd879f90a4f5b4ce61c7212fd952e25cb8dc9245a1ff06f4e689791b"
+            "sha256": "b8db74e83fc10be90fdbab66c6d719152890dc321ce9f8a81f6619f165259f13"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_THEME_LAYOUT",
@@ -1845,7 +1845,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_VIEWPORT_TOOLS",
             "source_path": "src/gui/windows/application_core/shared/viewport_tools.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/viewport_tools.py",
-            "sha256": "b9b89f7d614044569bb32a73b4be8dfd58fb18728ec21d98662d873a39e27eff"
+            "sha256": "4605d1a8d84199b98c5ad0794633eab6a352c949af34ee4a7550f985a8f8930f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
@@ -1857,7 +1857,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
             "source_path": "src/gui/windows/application_core/shared/window_lifecycle.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_lifecycle.py",
-            "sha256": "459596b6f13c3b3cdf41269596b16ba72d9a255e3832e500d034acb25fb5c946"
+            "sha256": "d698ee116725028d2d3a34436c6554c93f5f6415334f6dbccb8bcd61742f9b3b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",
@@ -1917,7 +1917,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "fa92ea697d879a41d6addf283213d42205096b2a2bb536a07013776f2d8d3c21"
+            "sha256": "0c6e1251db885810f885e1436c317a07f6b8a24d7f2bf556ae49540016a37cba"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_SCRIPTING_BLUEPRINT_PAGE",

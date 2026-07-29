@@ -699,7 +699,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_SETTINGS",
             "source_path": "src/core/rendering/renderer_settings.py",
             "packaged_path": "Python/src/core/rendering/renderer_settings.py",
-            "sha256": "db2f7891c9cd40bcd998012efb1ba61ff704f3c48e88d6bdb5f320a539fa11cd"
+            "sha256": "4e58c1a1c7e9bfeba5cb775e8f9ae8b89886396c498a7be49c77e0745fa61d10"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",

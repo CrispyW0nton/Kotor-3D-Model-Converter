@@ -153,6 +153,18 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_fallback_check = QtWidgets.QCheckBox("Allow renderer fallback")
         self.renderer_diagnostics_check = QtWidgets.QCheckBox("Show renderer diagnostics")
         self.renderer_safe_mode_check = QtWidgets.QCheckBox("Force safe mode")
+        self.renderer_performance_profile_combo = QtWidgets.QComboBox()
+        self.renderer_performance_profile_combo.addItem("Auto for this computer (Recommended)", "auto")
+        self.renderer_performance_profile_combo.addItem("Balanced", "balanced")
+        self.renderer_performance_profile_combo.addItem("Low power", "low_power")
+        self.renderer_performance_profile_combo.addItem("Quality", "quality")
+        self.renderer_performance_profile_combo.addItem("Custom", "custom")
+        self.renderer_performance_profile_combo.setToolTip(
+            "Auto detects integrated graphics and entry-level CPUs, then reduces expensive "
+            "effects and upload bursts while preserving authoring features."
+        )
+        self.renderer_performance_profile_status = QtWidgets.QLabel()
+        self.renderer_performance_profile_status.setWordWrap(True)
         self.renderer_target_fps_spin = QtWidgets.QSpinBox()
         self.renderer_target_fps_spin.setRange(15, 240)
         self.renderer_target_fps_spin.setSingleStep(5)
@@ -186,11 +198,16 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_status_label = QtWidgets.QLabel()
         self.renderer_status_label.setWordWrap(True)
         self.renderer_backend_combo.currentIndexChanged.connect(self._update_renderer_status)
+        self.renderer_performance_profile_combo.currentIndexChanged.connect(
+            self._update_performance_profile_status
+        )
         self.renderer_bloom_check.toggled.connect(self._update_bloom_controls)
         renderer_form.addRow("Renderer:", self.renderer_backend_combo)
         renderer_form.addRow("", self.renderer_fallback_check)
         renderer_form.addRow("", self.renderer_diagnostics_check)
         renderer_form.addRow("", self.renderer_safe_mode_check)
+        renderer_form.addRow("Performance:", self.renderer_performance_profile_combo)
+        renderer_form.addRow("", self.renderer_performance_profile_status)
         renderer_form.addRow("Target FPS:", self.renderer_target_fps_spin)
         renderer_form.addRow("Idle Rendering:", self.renderer_idle_mode_combo)
         renderer_form.addRow("", self.renderer_throttle_diagnostics_check)
@@ -413,6 +430,10 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_fallback_check.setChecked(renderer_settings.allow_fallback)
         self.renderer_diagnostics_check.setChecked(renderer_settings.show_renderer_diagnostics)
         self.renderer_safe_mode_check.setChecked(renderer_settings.force_safe_mode)
+        self._set_combo_data(
+            self.renderer_performance_profile_combo,
+            renderer_settings.performance_profile,
+        )
         self.renderer_target_fps_spin.setValue(int(renderer_settings.target_fps))
         self._set_combo_data(self.renderer_idle_mode_combo, renderer_settings.idle_render_mode)
         self.renderer_throttle_diagnostics_check.setChecked(renderer_settings.throttle_diagnostics)
@@ -422,6 +443,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_bloom_threshold_spin.setValue(float(renderer_settings.bloom_threshold))
         self.renderer_bloom_strength_spin.setValue(float(renderer_settings.bloom_strength))
         self._update_bloom_controls()
+        self._update_performance_profile_status()
         self._update_renderer_status()
         self._load_cached_hardware_text()
         self._set_combo_data(self.theme_mode_combo, self.theme_layout_settings.theme_mode)
@@ -542,6 +564,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 "allow_fallback": self.renderer_fallback_check.isChecked(),
                 "show_renderer_diagnostics": self.renderer_diagnostics_check.isChecked(),
                 "force_safe_mode": self.renderer_safe_mode_check.isChecked(),
+                "performance_profile": self.renderer_performance_profile_combo.currentData(),
                 "target_fps": self.renderer_target_fps_spin.value(),
                 "idle_render_mode": self.renderer_idle_mode_combo.currentData(),
                 "throttle_diagnostics": self.renderer_throttle_diagnostics_check.isChecked(),
@@ -613,10 +636,40 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
     def _update_bloom_controls(self, *_args) -> None:
         modern_gl = str(self.renderer_backend_combo.currentData() or "") == RendererBackend.MODERNGL_GL330.value
-        self.renderer_bloom_check.setEnabled(modern_gl)
-        enabled = modern_gl and self.renderer_bloom_check.isChecked()
+        custom_profile = str(self.renderer_performance_profile_combo.currentData() or "auto") == "custom"
+        self.renderer_bloom_check.setEnabled(modern_gl and custom_profile)
+        enabled = modern_gl and custom_profile and self.renderer_bloom_check.isChecked()
         self.renderer_bloom_threshold_spin.setEnabled(enabled)
         self.renderer_bloom_strength_spin.setEnabled(enabled)
+
+    def _update_performance_profile_status(self, *_args) -> None:
+        requested = str(self.renderer_performance_profile_combo.currentData() or "auto")
+        custom_profile = requested == "custom"
+        self.renderer_target_fps_spin.setEnabled(custom_profile)
+        self.renderer_diagnostics_hz_spin.setEnabled(custom_profile)
+        self._update_bloom_controls()
+        probe = {
+            **self.settings,
+            "renderer": {
+                **dict(self.settings.get("renderer") or {}),
+                "performance_profile": requested,
+            },
+        }
+        effective = RendererSettings.from_settings(
+            probe,
+            hardware=self._hardware_diagnostics.to_dict(),
+        ).effective_performance_profile
+        descriptions = {
+            "low_power": "45 FPS cap, bloom disabled, smaller texture/upload budgets.",
+            "balanced": "Standard visual quality with dirty-only idle rendering.",
+            "quality": "At least 60 FPS, bloom enabled, and larger GPU budgets.",
+            "custom": "Uses the detailed renderer controls below without profile overrides.",
+        }
+        prefix = f"Auto selected {effective.replace('_', ' ')}. " if requested == "auto" else ""
+        suffix = "" if custom_profile else " Choose Custom to edit FPS and effects."
+        self.renderer_performance_profile_status.setText(
+            prefix + descriptions.get(effective, descriptions["balanced"]) + suffix
+        )
 
     def _renderer_restart_required(self, old_settings: RendererSettings, new_settings: RendererSettings) -> bool:
         old_type = _wgpu_backend_type(old_settings.backend.value)

@@ -327,6 +327,9 @@ class StartupLibraryMixin:
                 diagnostics = prelaunch_run.result(0, timeout=0) or {}
                 self._preloaded_renderer_capabilities = list(diagnostics.get("renderer_capabilities") or [])
                 self._preloaded_hardware_diagnostics = dict(diagnostics.get("hardware_diagnostics") or {})
+                apply_performance_profile = getattr(self, "_apply_hardware_performance_profile", None)
+                if callable(apply_performance_profile):
+                    apply_performance_profile()
                 self._log("Startup renderer and hardware diagnostics completed in the background.", "success")
             except Exception as exc:
                 self._log(f"Startup renderer and hardware diagnostics failed after launch: {exc}", "warning")

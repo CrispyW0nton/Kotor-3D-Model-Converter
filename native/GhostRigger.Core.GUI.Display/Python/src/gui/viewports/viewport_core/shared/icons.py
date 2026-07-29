@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from .dependencies import Path, QtCore, QtGui, subprocess
+import os
+from functools import lru_cache
+
+from .dependencies import Path, QtCore, QtGui
 
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _ICON_DIR = _GUI_DIR / "icons"
 
 
+@lru_cache(maxsize=1)
 def _icon_dirs() -> tuple[Path, ...]:
     """Return every valid source/packaged icon root in priority order.
 
@@ -102,22 +106,20 @@ def _generated_fallback_icon(name: str, size: int = 22) -> QtGui.QIcon:
 
 
 def _detect_gpu_brand() -> str:
-    try:
-        output = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=1.5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        text = f"{output.stdout}\n{output.stderr}".lower()
-    except Exception:
-        text = ""
+    """Resolve optional GPU branding without blocking viewport construction.
+
+    Hardware diagnostics already run on a startup worker.  Spawning PowerShell
+    here used to stall the UI thread for up to 1.5 seconds merely to choose a
+    decorative toolbar icon.  Native hosts or diagnostics may provide the
+    adapter name through the environment; otherwise the stable generic icon is
+    intentionally used.
+    """
+
+    text = str(
+        os.environ.get("GHOSTRIGGER_GPU_ADAPTER")
+        or os.environ.get("GHOSTRIGGER_GPU_BRAND")
+        or ""
+    ).lower()
     if any(token in text for token in ("nvidia", "geforce", "quadro", "rtx", "gtx")):
         return "nvidia"
     if any(token in text for token in ("amd", "radeon", "rx ", "firepro")):

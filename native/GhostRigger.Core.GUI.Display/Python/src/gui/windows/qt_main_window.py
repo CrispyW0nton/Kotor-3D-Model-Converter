@@ -362,7 +362,12 @@ class QtGhostRiggerMainWindow(
         self.sequence_editor_window: Optional[SequenceEditorWindow] = None
         self.sequence_editor_dock: Optional[QtWidgets.QDockWidget] = None
         self.sequence_editor_docked_window: Optional[SequenceEditorWindow] = None
-        self._matrix_engine = QtMatrixEngine(self, fps=12)
+        startup_renderer_settings = RendererSettings.from_settings(
+            self.settings_data,
+            hardware=self._preloaded_hardware_diagnostics,
+        )
+        matrix_fps = 4 if startup_renderer_settings.effective_performance_profile == "low_power" else 12
+        self._matrix_engine = QtMatrixEngine(self, fps=matrix_fps)
         self._animation_timer = QtCore.QTimer(self)
         self._animation_timer.setTimerType(QtCore.Qt.PreciseTimer)
         self._animation_timer.setInterval(30)
@@ -370,8 +375,6 @@ class QtGhostRiggerMainWindow(
         self._retarget_timer = QtCore.QTimer(self)
         self._retarget_timer.setInterval(33)
         self._retarget_timer.timeout.connect(self._tick_retarget_animation)
-        self._configure_fbx_sdk_paths(refresh=True)
-
         self.setWindowTitle(self.APP_TITLE)
         initial_layout = self.layout_manager.get_layout()
         self.resize(initial_layout.main_width, initial_layout.main_height)

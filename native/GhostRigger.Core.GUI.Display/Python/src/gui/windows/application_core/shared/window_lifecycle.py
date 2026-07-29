@@ -25,7 +25,6 @@ from src.gui.qt_lib.windows.qt_custom_rigged_character_builder_controller import
 )
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanelHandler
 from src.core.rendering.renderer_backend import renderer_backend_label
-from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _wgpu_backend_restart_required
 from src.measurement.unit_settings import MeasurementSettings
@@ -101,7 +100,7 @@ class WindowLifecycleMixin:
             )
         if mode:
             self._character_builder_window.open_mode(mode)
-        self._character_builder_window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
+        self._character_builder_window.set_renderer_settings(self._effective_renderer_settings())
         self._character_builder_window.show()
         self._character_builder_window.raise_()
         self._character_builder_window.activateWindow()
@@ -263,8 +262,8 @@ class WindowLifecycleMixin:
             self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else "",
             self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else "",
         )
-        old_renderer_settings = RendererSettings.from_settings(self.settings_data)
-        new_renderer_settings = RendererSettings.from_settings(values)
+        old_renderer_settings = self._effective_renderer_settings(self.settings_data)
+        new_renderer_settings = self._effective_renderer_settings(values)
         renderer_restart_required = _wgpu_backend_restart_required(
             old_renderer_settings,
             new_renderer_settings,
@@ -284,6 +283,7 @@ class WindowLifecycleMixin:
         viewport = getattr(self, "viewport", None)
         if viewport is not None and not renderer_restart_required:
             viewport.set_renderer_settings(new_renderer_settings)
+            self._apply_visual_performance_settings(new_renderer_settings)
             viewport.set_navigation_profile(
                 normalize_viewport_navigation_profile(
                     values.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)

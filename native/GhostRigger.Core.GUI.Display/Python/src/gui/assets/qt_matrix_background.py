@@ -61,7 +61,15 @@ class QtMatrixEngine(QtCore.QObject):
         super().__init__(parent)
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.tick.emit)
-        self.interval_ms = max(16, int(1000 / max(1, fps)))
+        self.interval_ms = 0
+        self.set_fps(fps)
+
+    def set_fps(self, fps: int) -> None:
+        """Adjust decorative animation cost without recreating the header."""
+
+        self.interval_ms = max(16, int(1000 / max(1, int(fps or 1))))
+        if self.timer.isActive():
+            self.timer.start(self.interval_ms)
 
     def start(self) -> None:
         if not self.timer.isActive():

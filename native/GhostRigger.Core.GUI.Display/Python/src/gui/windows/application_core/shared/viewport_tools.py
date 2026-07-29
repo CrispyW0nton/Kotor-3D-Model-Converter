@@ -1015,7 +1015,8 @@ class ViewportToolsMixin:
         self._log(f"Created viewport {result['kind']} scaffold: {result['path']}", "success")
         return result
     def _open_texture_tool_window(self):
-        window = getattr(self, "texture_tool_window", None)
+        ensure_window = getattr(self, "_ensure_texture_tool_window", None)
+        window = ensure_window() if callable(ensure_window) else getattr(self, "texture_tool_window", None)
         if window is None:
             self._not_migrated("Texture Tool")
             return
@@ -1023,7 +1024,8 @@ class ViewportToolsMixin:
         window.raise_()
         window.activateWindow()
     def _open_blueprint_editor_window(self):
-        window = getattr(self, "blueprint_window", None)
+        ensure_window = getattr(self, "_ensure_blueprint_window", None)
+        window = ensure_window() if callable(ensure_window) else getattr(self, "blueprint_window", None)
         if window is None:
             self._not_migrated("Blueprint Editor")
             return

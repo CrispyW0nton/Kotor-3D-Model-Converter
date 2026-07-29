@@ -16,7 +16,6 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
 
@@ -2238,7 +2237,7 @@ class ResourcePanelsMixin:
             self.module_editor_window = window
             window.destroyed.connect(lambda _obj=None: setattr(self, "module_editor_window", None))
             window.set_library_rows(getattr(self, "_library_rows", []) or [])
-        window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
+        window.set_renderer_settings(self._effective_renderer_settings())
         window.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
@@ -3194,7 +3193,8 @@ class ResourcePanelsMixin:
         game = str(row.get("game") or "")
         self._log(f"New Level Editor <- {game}:{resref}", "success")
     def _open_rig_window(self):
-        window = getattr(self, "rig_window", None)
+        ensure_window = getattr(self, "_ensure_rig_window", None)
+        window = ensure_window() if callable(ensure_window) else getattr(self, "rig_window", None)
         if window is None:
             self._not_migrated("Rigging Window")
             return

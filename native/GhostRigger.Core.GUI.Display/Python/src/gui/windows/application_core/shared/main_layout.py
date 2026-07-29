@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 try:
     from PySide6 import QtCore, QtWidgets
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
@@ -19,15 +21,12 @@ from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, Qt2DABrowserPanel
-from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
-from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
-from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter, RetargetPreviewUiController
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import RetargetWorkbenchController
 from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
@@ -113,12 +112,12 @@ class MainWindowLayoutMixin:
         self.module_geometry_panel = QtPropertiesPanel(self)
         self.module_geometry_panel.set_module_browser_only(True)
         self.skeleton_panel.nodeSelected.connect(self.properties_panel.show_node)
-        self.rig_window = QtRigWindow(self)
-        self.rig_window.rigActionRequested.connect(self._handle_rig_action)
-        self.rig_panel = self.rig_window.panel
-        self.texture_tool_window = QtTextureToolWindow(self)
-        self.texture_panel = self.texture_tool_window.texture_panel
-        self.normal_map_panel = self.texture_tool_window.normal_map_panel
+        # Independent workbench windows are created on first use.  They are
+        # hidden at startup and should not add hundreds of widgets to the
+        # time-to-first-workspace path.
+        self.rig_window = None
+        self.texture_tool_window = None
+        self.blueprint_window = None
         self.diagnostics_window = None
         self.diagnostics_panel = QtDiagnosticsPanel(self._get_model, self)
         self.animations_panel = QtAnimationsPanel(self)
@@ -154,8 +153,6 @@ class MainWindowLayoutMixin:
         self.module_editor_window = None
         self.mesh_tools_panel = QtMeshToolsPanel(self)
         self.adjust_pivot_panel = AdjustPivotPanel(self)
-        self.blueprint_window = QtBlueprintEditorWindow(self)
-        self.blueprint_panel = self.blueprint_window.panel
         self._detachable_panels: dict[str, QtWidgets.QDockWidget] = {}
         self._detachable_panel_sizes = {
             "content_browser": (760, 520),
@@ -248,7 +245,7 @@ class MainWindowLayoutMixin:
         self._stack_content_browser_under_scene()
 
         self.viewport = QtMainViewportWidget(self)
-        self.viewport.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
+        self.viewport.set_renderer_settings(self._effective_renderer_settings())
         self.viewport.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
@@ -385,6 +382,64 @@ class MainWindowLayoutMixin:
         # Apply the saved workspace preset after the layout is fully assembled.
         QtCore.QTimer.singleShot(0, self._apply_startup_workspace)
 
+    def _ensure_rig_window(self):
+        window = getattr(self, "rig_window", None)
+        if window is None or not _qt_object_alive(window):
+            from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
+
+            window = QtRigWindow(self)
+            window.rigActionRequested.connect(self._handle_rig_action)
+            self.rig_window = window
+            self.rig_panel = window.panel
+        return window
+
+    def _ensure_texture_tool_window(self):
+        window = getattr(self, "texture_tool_window", None)
+        if window is None or not _qt_object_alive(window):
+            from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
+
+            window = QtTextureToolWindow(self)
+            self.texture_tool_window = window
+            self.texture_panel = window.texture_panel
+            self.normal_map_panel = window.normal_map_panel
+        return window
+
+    def _ensure_blueprint_window(self):
+        window = getattr(self, "blueprint_window", None)
+        if window is None or not _qt_object_alive(window):
+            from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
+
+            window = QtBlueprintEditorWindow(self)
+            self.blueprint_window = window
+            self.blueprint_panel = window.panel
+        return window
+
+    def _effective_renderer_settings(self, values: dict | None = None) -> RendererSettings:
+        return RendererSettings.from_settings(
+            values if values is not None else self.settings_data,
+            hardware=getattr(self, "_preloaded_hardware_diagnostics", None),
+        )
+
+    def _apply_hardware_performance_profile(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        settings = self._effective_renderer_settings()
+        viewport.set_renderer_settings(settings)
+        self._apply_visual_performance_settings(settings)
+        if settings.effective_performance_profile == "low_power":
+            self._log(
+                "Auto performance profile: Low power "
+                "(45 FPS cap, bloom off, lighter uploads). Change it in Settings > General.",
+                "info",
+            )
+
+    def _apply_visual_performance_settings(self, settings: RendererSettings) -> None:
+        matrix_engine = getattr(self, "_matrix_engine", None)
+        set_fps = getattr(matrix_engine, "set_fps", None)
+        if callable(set_fps):
+            set_fps(4 if settings.effective_performance_profile == "low_power" else 12)
+
     # ── Workspace presets (#5) ──────────────────────────────────────────
 
     def apply_workspace(self, preset_name: str) -> None:
@@ -394,9 +449,6 @@ class MainWindowLayoutMixin:
             self._log(f"Unknown workspace preset: {preset_name}", "warning")
             return
         panels = getattr(self, "_detachable_panels", {})
-        visible = set(preset.get("visible_docks", []))
-        hidden = set(preset.get("hidden_docks", []))
-
         for key in preset.get("visible_docks", []):
             if key in panels:
                 self._show_workspace_dock(key)

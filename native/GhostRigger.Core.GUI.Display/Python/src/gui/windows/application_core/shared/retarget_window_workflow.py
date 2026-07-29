@@ -12,7 +12,6 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
-from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter
@@ -469,7 +468,7 @@ class RetargetWindowWorkflowMixin:
                 window.set_docked_preview(False, window.source_viewport)
             except Exception:
                 pass
-        window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
+        window.set_renderer_settings(self._effective_renderer_settings())
         window.show()
         window.raise_()
         window.activateWindow()

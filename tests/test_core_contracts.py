@@ -10383,17 +10383,22 @@ def test_main_window_moves_rig_panel_to_modules_window() -> None:
 
     source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     assert 'right_tabs.addTab(self.rig_panel' not in source
-    assert "self.rig_window = QtRigWindow(self)" in source
-    assert "self.rig_panel = self.rig_window.panel" in source
+    assert "self.rig_window = None" in source
+
+    ensure_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_rig_window)
+    assert "from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow" in ensure_source
+    assert "window = QtRigWindow(self)" in ensure_source
+    assert "self.rig_panel = window.panel" in ensure_source
 
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     assert "self.rig_window_action" in actions_source
     assert "self._open_rig_window" in actions_source
 
     menu_source = inspect.getsource(QtGhostRiggerMainWindow._build_menu)
-    assert "modules_menu.addAction(self.rig_window_action)" in menu_source
+    assert "tools_menu.addAction(self.rig_window_action)" in menu_source
 
     open_source = inspect.getsource(QtGhostRiggerMainWindow._open_rig_window)
+    assert "_ensure_rig_window" in open_source
     assert "window.show()" in open_source
     assert "window.raise_()" in open_source
     assert QtRigWindow.__name__ == "QtRigWindow"
@@ -10709,13 +10714,20 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
         "right_tabs.addTab(self.blueprint_panel",
     ):
         assert tab_expr not in source
-    assert "self.texture_tool_window = QtTextureToolWindow(self)" in source
+    assert "self.texture_tool_window = None" in source
     assert "self.diagnostics_panel = QtDiagnosticsPanel(self._get_model, self)" in source
     assert "self.diagnostics_dock = self._create_detachable_panel(" in source
-    assert "self.blueprint_window = QtBlueprintEditorWindow(self)" in source
-    assert "self.texture_panel = self.texture_tool_window.texture_panel" in source
-    assert "self.normal_map_panel = self.texture_tool_window.normal_map_panel" in source
-    assert "self.blueprint_panel = self.blueprint_window.panel" in source
+    assert "self.blueprint_window = None" in source
+
+    texture_ensure_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_texture_tool_window)
+    assert "from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow" in texture_ensure_source
+    assert "window = QtTextureToolWindow(self)" in texture_ensure_source
+    assert "self.texture_panel = window.texture_panel" in texture_ensure_source
+    assert "self.normal_map_panel = window.normal_map_panel" in texture_ensure_source
+    blueprint_ensure_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_blueprint_window)
+    assert "from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow" in blueprint_ensure_source
+    assert "window = QtBlueprintEditorWindow(self)" in blueprint_ensure_source
+    assert "self.blueprint_panel = window.panel" in blueprint_ensure_source
 
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     assert "self.texture_tool_action" in actions_source
@@ -10731,11 +10743,11 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     assert "Legacy Tk" not in menu_source
     assert "_launch_legacy_tk" not in inspect.getsource(QtGhostRiggerMainWindow)
 
-    model_menu_block = menu_source.split("mdlops_menu = self.menuBar().addMenu", 1)[0]
-    assert "self.diag_action" not in model_menu_block
+    assert 'mdlops_menu = tools_menu.addMenu("MDLOps")' in menu_source
 
     for method_name in ("_open_texture_tool_window", "_open_blueprint_editor_window"):
         open_source = inspect.getsource(getattr(QtGhostRiggerMainWindow, method_name))
+        assert "ensure_window" in open_source
         assert "window.show()" in open_source
         assert "window.raise_()" in open_source
 
@@ -10926,6 +10938,7 @@ def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
     assert "if self._wrapped is not None" in source
     assert "GHOSTRIGGER_SPLASH_HOLD_MS" in source
     assert "GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS" in source
+    assert 'GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS", "750"' in source
     assert "splash.append_log_line(line)" in source
     assert "drain_splash_log()" in source
     assert "settle_prelaunch_queues()" in source

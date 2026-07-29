@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from src.core.rendering.renderer_backend import RendererBackend, supported_renderer_backend
 
@@ -33,6 +33,48 @@ def _safe_float(value: object, default: float, minimum: float = 0.0) -> float:
         return max(float(minimum), float(value))
     except Exception:
         return max(float(minimum), float(default))
+
+
+_PERFORMANCE_PROFILES = {"auto", "balanced", "low_power", "quality", "custom"}
+_INTEGRATED_GPU_TOKENS = (
+    "intel",
+    "iris",
+    "uhd",
+    "hd graphics",
+    "vega",
+    "radeon graphics",
+)
+_DISCRETE_GPU_TOKENS = (
+    "nvidia",
+    "geforce",
+    "quadro",
+    "rtx",
+    "gtx",
+    "radeon rx",
+    "firepro",
+    "intel arc a",
+)
+
+
+def normalize_performance_profile(value: object) -> str:
+    key = str(value or "auto").strip().lower().replace("-", "_").replace(" ", "_")
+    return key if key in _PERFORMANCE_PROFILES else "auto"
+
+
+def effective_performance_profile(requested: object, hardware: dict | None = None) -> str:
+    """Resolve an explicit or automatic renderer performance tier."""
+
+    profile = normalize_performance_profile(requested)
+    if profile != "auto":
+        return profile
+    payload = dict(hardware or {})
+    adapter = str(payload.get("gpu_adapter") or "").lower()
+    physical_cores = _safe_int(payload.get("physical_cores", 0), 0, minimum=0)
+    logical_threads = _safe_int(payload.get("logical_threads", 0), 0, minimum=0)
+    discrete_gpu = any(token in adapter for token in _DISCRETE_GPU_TOKENS)
+    integrated_gpu = not discrete_gpu and any(token in adapter for token in _INTEGRATED_GPU_TOKENS)
+    entry_cpu = bool(physical_cores and physical_cores <= 4) or bool(logical_threads and logical_threads <= 8)
+    return "low_power" if integrated_gpu or entry_cpu else "balanced"
 
 
 @dataclass(frozen=True)
@@ -66,13 +108,17 @@ class RendererSettings:
     wgpu_max_uploads_per_frame: int = 16
     dynamic_quality_large_scene_threshold: int = 5000
     dynamic_quality_simplify_while_navigating: bool = True
+    performance_profile: str = "auto"
+    effective_performance_profile: str = "balanced"
 
     @classmethod
-    def from_settings(cls, settings: dict | None) -> "RendererSettings":
+    def from_settings(cls, settings: dict | None, hardware: dict | None = None) -> "RendererSettings":
         values = dict((settings or {}).get("renderer") or {})
         wgpu_values = dict(values.get("wgpu") or {})
         dynamic_quality = dict(values.get("dynamic_quality") or {})
-        return cls(
+        requested_profile = normalize_performance_profile(values.get("performance_profile", "auto"))
+        resolved_profile = effective_performance_profile(requested_profile, hardware)
+        result = cls(
             backend=supported_renderer_backend(values.get("backend", RendererBackend.MODERNGL_GL330.value)),
             preferred_windows_backend=supported_renderer_backend(
                 values.get("preferred_windows_backend", RendererBackend.WGPU_D3D12.value)
@@ -116,7 +162,31 @@ class RendererSettings:
                 dynamic_quality.get("simplify_while_navigating", values.get("dynamic_quality_simplify_while_navigating", True)),
                 True,
             ),
+            performance_profile=requested_profile,
+            effective_performance_profile=resolved_profile,
         )
+        if resolved_profile == "low_power":
+            return replace(
+                result,
+                target_fps=min(result.target_fps, 45),
+                diagnostics_hz=min(result.diagnostics_hz, 1.0),
+                bloom_enabled=False,
+                wgpu_max_texture_memory_mb=min(result.wgpu_max_texture_memory_mb, 256),
+                wgpu_max_uploads_per_frame=min(result.wgpu_max_uploads_per_frame, 8),
+                dynamic_quality_large_scene_threshold=min(
+                    result.dynamic_quality_large_scene_threshold,
+                    2500,
+                ),
+            )
+        if resolved_profile == "quality":
+            return replace(
+                result,
+                target_fps=max(result.target_fps, 60),
+                bloom_enabled=True,
+                wgpu_max_texture_memory_mb=max(result.wgpu_max_texture_memory_mb, 768),
+                wgpu_max_uploads_per_frame=max(result.wgpu_max_uploads_per_frame, 20),
+            )
+        return result
 
     def to_settings_dict(self) -> dict[str, object]:
         return {
@@ -125,6 +195,7 @@ class RendererSettings:
             "allow_fallback": self.allow_fallback,
             "show_renderer_diagnostics": self.show_renderer_diagnostics,
             "force_safe_mode": self.force_safe_mode,
+            "performance_profile": self.performance_profile,
             "target_fps": self.target_fps,
             "idle_render_mode": self.idle_render_mode,
             "throttle_diagnostics": self.throttle_diagnostics,

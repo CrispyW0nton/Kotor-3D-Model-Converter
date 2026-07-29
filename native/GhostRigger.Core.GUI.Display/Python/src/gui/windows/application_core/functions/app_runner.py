@@ -140,10 +140,10 @@ def _splash_hold_seconds_from_env() -> float:
 
 def _prelaunch_foreground_seconds_from_env() -> float:
     try:
-        hold_ms = int(os.environ.get("GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS", "3500") or 3500)
+        hold_ms = int(os.environ.get("GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS", "750") or 750)
     except ValueError:
-        hold_ms = 3500
-    return max(0.5, min(float(hold_ms) / 1000.0, 12.0))
+        hold_ms = 750
+    return max(0.25, min(float(hold_ms) / 1000.0, 12.0))
 
 
 def _start_without_activation_from_env() -> bool:
