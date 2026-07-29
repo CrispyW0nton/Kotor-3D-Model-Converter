@@ -8,6 +8,7 @@ the GUI from becoming the owner of Map Studio workflow policy.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 
@@ -80,6 +81,13 @@ class MapStudioViewportPerformancePolicy:
     dirty_region_policy: str
     rebuild_policy: str
     validation_policy: str
+    profile_key: str = "balanced"
+    profile_label: str = "Balanced"
+    target_fps: int = 45
+    interactive_render_scale: float = 0.82
+    idle_render_scale: float = 1.0
+    hover_interval_ms: int = 22
+    texture_memory_budget_mb: int = 384
 
 
 @dataclass(frozen=True)
@@ -763,14 +771,58 @@ _TERRAIN_BRUSHES: tuple[MapStudioTerrainBrush, ...] = (
 )
 
 
-_VIEWPORT_PERFORMANCE_POLICY = MapStudioViewportPerformancePolicy(
-    target_frame_ms=8.33,
-    terrain_brush_budget_ms=4.0,
-    input_event_policy="Coalesce high-frequency mouse/tablet samples, drop stale stroke frames, and apply only the newest brush state per viewport frame.",
-    dirty_region_policy="Update dirty terrain tiles, affected WOK preview triangles, and local bounding boxes only; never rebuild the whole module during pointer movement.",
-    rebuild_policy="Defer MDL/WOK/export rebuilds until stroke end, explicit validation, or staged export.",
-    validation_policy="Run lightweight slope/walkability feedback during strokes and full ValidationBus/export checks after the edit is committed.",
-)
+def _performance_policy(
+    profile_key: str,
+    *,
+    label: str,
+    target_fps: int,
+    interactive_scale: float,
+    hover_interval_ms: int,
+    texture_memory_budget_mb: int,
+) -> MapStudioViewportPerformancePolicy:
+    return MapStudioViewportPerformancePolicy(
+        target_frame_ms=1000.0 / float(target_fps),
+        terrain_brush_budget_ms=6.0 if target_fps <= 30 else 4.0,
+        input_event_policy="Coalesce high-frequency mouse/tablet samples, drop stale stroke frames, and apply only the newest brush state per viewport frame.",
+        dirty_region_policy="Update dirty terrain tiles, affected WOK preview triangles, and local bounding boxes only; never rebuild the whole module during pointer movement.",
+        rebuild_policy="Defer MDL/WOK/export rebuilds until stroke end, explicit validation, or staged export.",
+        validation_policy="Run lightweight slope/walkability feedback during strokes and full ValidationBus/export checks after the edit is committed.",
+        profile_key=profile_key,
+        profile_label=label,
+        target_fps=target_fps,
+        interactive_render_scale=interactive_scale,
+        idle_render_scale=1.0,
+        hover_interval_ms=hover_interval_ms,
+        texture_memory_budget_mb=texture_memory_budget_mb,
+    )
+
+
+_VIEWPORT_PERFORMANCE_POLICIES = {
+    "portable": _performance_policy(
+        "portable",
+        label="Portable / integrated graphics",
+        target_fps=30,
+        interactive_scale=0.72,
+        hover_interval_ms=33,
+        texture_memory_budget_mb=256,
+    ),
+    "balanced": _performance_policy(
+        "balanced",
+        label="Balanced",
+        target_fps=45,
+        interactive_scale=0.82,
+        hover_interval_ms=22,
+        texture_memory_budget_mb=384,
+    ),
+    "quality": _performance_policy(
+        "quality",
+        label="High-performance",
+        target_fps=60,
+        interactive_scale=1.0,
+        hover_interval_ms=16,
+        texture_memory_budget_mb=512,
+    ),
+}
 
 
 _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
@@ -2170,10 +2222,31 @@ def available_map_studio_terrain_brushes() -> tuple[MapStudioTerrainBrush, ...]:
     return _TERRAIN_BRUSHES
 
 
-def map_studio_viewport_performance_policy() -> MapStudioViewportPerformancePolicy:
-    """Return the no-lag interaction contract for Map Studio viewport tools."""
+def map_studio_viewport_performance_policy(
+    profile: str = "adaptive",
+    *,
+    logical_threads: int | None = None,
+    gpu_adapter: str = "",
+) -> MapStudioViewportPerformancePolicy:
+    """Return an adaptive Map Studio interaction profile.
 
-    return _VIEWPORT_PERFORMANCE_POLICY
+    ``GHOSTRIGGER_MAP_STUDIO_PERFORMANCE`` may force ``portable``,
+    ``balanced``, or ``quality`` for troubleshooting and lab comparisons.
+    """
+
+    requested = str(
+        os.environ.get("GHOSTRIGGER_MAP_STUDIO_PERFORMANCE") or profile or "adaptive"
+    ).strip().lower()
+    if requested in _VIEWPORT_PERFORMANCE_POLICIES:
+        return _VIEWPORT_PERFORMANCE_POLICIES[requested]
+    threads = int(logical_threads or os.cpu_count() or 4)
+    adapter = str(gpu_adapter or "").strip().lower()
+    integrated = any(token in adapter for token in ("intel", "iris", "uhd", "integrated"))
+    if threads <= 8 or integrated:
+        return _VIEWPORT_PERFORMANCE_POLICIES["portable"]
+    if threads <= 16:
+        return _VIEWPORT_PERFORMANCE_POLICIES["balanced"]
+    return _VIEWPORT_PERFORMANCE_POLICIES["quality"]
 
 
 def available_map_studio_tool_belt_actions() -> tuple[MapStudioToolBeltAction, ...]:

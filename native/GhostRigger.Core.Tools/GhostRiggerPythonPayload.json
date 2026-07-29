@@ -501,7 +501,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_GAMEPLAY_PALETTE",
             "source_path": "src/core/modules/authored_gameplay_palette.py",
             "packaged_path": "Python/src/core/modules/authored_gameplay_palette.py",
-            "sha256": "28ffe3dd8f7357e9ba415482c94074d3c85092ffd09837cef92e18080f7fc2d6"
+            "sha256": "05e2ce6004b53e143d529ff16098445517d6d5cc152b46ca4ee6b65004a60bba"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_GAMEPLAY_PREVIEW",
@@ -531,7 +531,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
             "source_path": "src/core/modules/authored_module_layout.py",
             "packaged_path": "Python/src/core/modules/authored_module_layout.py",
-            "sha256": "8a4b3b9083f9b42595a2f2c26445d79797c72d925038f8f1daaddb4c74d01d70"
+            "sha256": "317694fc688ba12192aaac1109a175aa3e99b1079b1ac45aa3cc71cf2ef9b756"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LIGHTING",
@@ -795,7 +795,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_TOOLS",
             "source_path": "src/core/modules/map_studio_modeling_tools.py",
             "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-            "sha256": "d4cfc5c93bcfdd45add13bed3c54e83000df51bc74a1f31da866162026241915"
+            "sha256": "dee3bbb5a2d51816206660bcd3cbc45f272ed05f134399c9d2744d38d2517b09"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MULTI_CUT",
@@ -1011,7 +1011,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "837df811082a70d6de98a2656e95f3370cdc631b094db59c21cb03f6efdbc47e"
+            "sha256": "2832580e850609a4952555d27552c4534d17dbcbc91f572bada4b80472248aa6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1719,13 +1719,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BLUEPRINTS_TAB",
             "source_path": "src/gui/panels/module_editor/blueprints_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/blueprints_tab.py",
-            "sha256": "e9576fcb826de799d80b27f941aea4412a3d4f671df26f501672048f6c8f7912"
+            "sha256": "d1a23b1c1ef701ec73eecdc1098c60c245bb8e16681fccfaae3d9a483a1be529"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "8d3c4de865fbf96f65d8a8f3e1632a39ef43d17b723ed4b9496e48db4e6afb4d"
+            "sha256": "75a73bb578d7a2a1332b3861b062808d79e1f76f39ac65a0dbcc1ed449aaab4b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_COMPONENT_MARKING_MENU",
@@ -1791,13 +1791,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "32bc89c7dcf4823c099fd77f401bef2ea9e146a16dc900911cbae9f100416788"
+            "sha256": "6ef6511d5c01edc78328abff508b72ba3d87a2ccdd7005b2411041e56b627e07"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
             "source_path": "src/gui/panels/module_editor/placement_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/placement_tab.py",
-            "sha256": "50c7f487f999a0ac09a76b2aaf73182ec3fff5d43a814cd065613c8a9800b7aa"
+            "sha256": "e91057304f2647b25bca6cb615207e2fb44e1d6764367507483f580bc0bc8029"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PORTER_TAB",
@@ -1827,7 +1827,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TERRAIN_SCULPT_SHELF",
             "source_path": "src/gui/panels/module_editor/terrain_sculpt_shelf.py",
             "packaged_path": "Python/src/gui/panels/module_editor/terrain_sculpt_shelf.py",
-            "sha256": "e857e395d9ac44a0c8ef5cd5d49f4541a407c2c2c91a5a8b0fc4096b699e4ae2"
+            "sha256": "40f4b53b06b029bd908e583ef24fa56249e380413e66d8e0bb228e44d4d8f953"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TEXTURE_BROWSER_DIALOG",
@@ -1857,7 +1857,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WORKFLOW_PANEL",
             "source_path": "src/gui/panels/module_editor/workflow_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/workflow_panel.py",
-            "sha256": "43a87a0f841c59d969c2ce980b1c5846a1588a9dacdb20eccb9142f20bd7fab3"
+            "sha256": "df7314a57cef2b8d855a9ba6a573002dd823fdaeafc4a3e82de0464be016ee4c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
@@ -2007,7 +2007,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "eb31f8c2c5ab05f93c40104fab95b72a9fcd8813d92677a6d37383a8968f3b62"
+            "sha256": "0a35791bd866dbe1b8f6b3da1b0493039a7e2d279afb2a3a95006e4a2c649b93"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",
@@ -2037,7 +2037,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER_CONTROLLER",
             "source_path": "src/gui/windows/qt_placeable_builder_controller.py",
             "packaged_path": "Python/src/gui/windows/qt_placeable_builder_controller.py",
-            "sha256": "9a0bf3a166d074beffe401e2380b49225a80b510fb1bce8572e6ca91b7432481"
+            "sha256": "62cf97cb3217d2779adea0ec5cd9ddcdefbe086a44004004f841500f9180305d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_PREVIEW_CONTROLLER",

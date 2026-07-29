@@ -1205,6 +1205,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._library_rows: list[dict[str, Any]] = []
         self._base_library_rows: list[dict[str, Any]] = []
         self._placeable_library_rows: list[dict[str, Any]] = []
+        self._custom_creature_resources: dict[str, tuple[bytes, str]] = {}
         self._placeable_library_root = ""
         self._placeable_game_resource_provider: Any = None
         self._placeable_library_game = ""
@@ -1646,7 +1647,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for label, widget in (
             ("Rooms", self.rooms_tab),
             ("Place", self.placement_tab),
-            ("WOK", self.walkmesh_tab),
+            ("Walkmesh (WOK)", self.walkmesh_tab),
             ("Paint", self.texture_paint_tab),
             ("Environment", self.environment_tab),
             ("Porter", self.porter_tab),
@@ -2104,6 +2105,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
         self.builder_tab.terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)
+        self.builder_tab.starterRoomRequested.connect(self.create_map_studio_starter_room)
+        self.builder_tab.starterTerrainRequested.connect(self.create_map_studio_starter_terrain)
         self.builder_tab.terrainCreateRequested.connect(self._create_and_focus_map_studio_terrain_patch)
         self.builder_tab.terrainDressingRequested.connect(self.show_map_studio_placement_tools)
         self.builder_tab.terrainPaintRequested.connect(self._show_map_studio_texture_paint_workflow)
@@ -2161,6 +2164,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.placement_tab.dialogueEditorRequested.connect(self._request_creature_dialogue_editor)
         self.placement_tab.actionRequested.connect(self._handle_placement_tab_action)
         self.placement_tab.thumbnailRequested.connect(self._render_map_studio_placement_thumbnail)
+        self.placement_tab.customUtcImportRequested.connect(self._import_custom_creature_utc)
         self.terrain_kit_browser.thumbnailRequested.connect(self._render_map_studio_terrain_kit_thumbnail)
         self.terrain_kit_browser.refreshVanillaRequested.connect(self._refresh_vanilla_terrain_kit_catalog)
         self.terrain_kit_browser.collectionStyleChanged.connect(
@@ -3686,14 +3690,47 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _sync_authored_creature_behavior_resources_for_export(self) -> None:
         """Resolve donor UTCs and compile target-game creature behavior resources."""
 
-        rows = [
+        all_creatures = [
             row
             for row in self.controller.authored_gameplay_placements()
             if str(getattr(row, "kind", "") or "").strip().lower() == "creature"
-            and str(getattr(row, "creature_behavior_role", "template") or "template").strip().lower() != "template"
         ]
+        authored_snapshot = self.controller._map_studio_authored_project_snapshot()
+        instance_provenance = dict(
+            getattr(getattr(authored_snapshot, "placements", None), "metadata", {}).get(
+                "instance_provenance", {}
+            )
+            if authored_snapshot is not None
+            else {}
+        )
+        for creature in all_creatures:
+            provenance = dict(instance_provenance.get(str(creature.placement_id), {}) or {})
+            asset_path = Path(str(provenance.get("asset_path") or ""))
+            if asset_path.suffix.lower() != ".utc" or not asset_path.is_file():
+                continue
+            resref = str(creature.template_resref or asset_path.stem).strip().lower()
+            try:
+                self._custom_creature_resources[resref] = (
+                    asset_path.read_bytes(),
+                    str(asset_path.resolve()),
+                )
+            except OSError as exc:
+                raise ValueError(
+                    f"Custom creature UTC {resref} could not be reread from {asset_path}: {exc}"
+                ) from exc
+        rows = [
+            row
+            for row in all_creatures
+            if str(getattr(row, "creature_behavior_role", "template") or "template").strip().lower() != "template"
+        ]
+        merged: dict[tuple[str, str], bytes] = {
+            (resref, "utc"): bytes(payload)
+            for resref, (payload, _path) in self._custom_creature_resources.items()
+            if payload
+        }
         if not rows:
-            self.controller.set_authored_creature_resources(())
+            resources = tuple((resref, restype, data) for (resref, restype), data in sorted(merged.items()))
+            self.controller.set_authored_creature_resources(resources)
             return
         provider = self._map_studio_gameplay_provider()
         reader = getattr(provider, "read_resource", None)
@@ -3705,8 +3742,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         from src.core.modules.authored_creature_behavior import build_authored_creature_behavior_resources
 
         game = str(getattr(self.project, "game", "") or "K1").strip().upper()
-        merged: dict[tuple[str, str], bytes] = {}
-
         def add_resource(resref: str, restype: str, data: bytes) -> None:
             key = (str(resref or "").strip().lower(), str(restype or "").strip().lower().lstrip("."))
             payload = bytes(data or b"")
@@ -3761,6 +3796,78 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         resources = tuple((resref, restype, data) for (resref, restype), data in sorted(merged.items()))
         self.controller.set_authored_creature_resources(resources)
         self._log(f"Creature behavior export resolved {len(rows)} authored creature(s) into {len(resources)} UTC/script/dialog resource(s).")
+
+    def _import_custom_creature_utc(self) -> None:
+        """Add a real local UTC to the placement palette and export resource set."""
+
+        path_text, _selected_filter = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Import Custom Creature UTC",
+            "",
+            "KOTOR Creature Templates (*.utc);;All Files (*)",
+        )
+        if not path_text:
+            return
+        path = Path(path_text)
+        try:
+            payload = path.read_bytes()
+            from pykotor.resource.generics.utc import read_utc
+
+            read_utc(payload)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Import Custom Creature UTC",
+                f"{path.name} is not a readable KOTOR UTC template:\n{exc}",
+            )
+            return
+        from src.core.modules.authored_module_objects import normalise_resource_resref
+
+        resref = normalise_resource_resref(path.stem)
+        if not resref:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Import Custom Creature UTC",
+                "The UTC filename must contain a valid KOTOR resource name.",
+            )
+            return
+        game = str(getattr(self.project, "game", "") or "K1").strip().upper()
+        self._custom_creature_resources[resref] = (payload, str(path.resolve()))
+        existing = [
+            row
+            for row in self._base_library_rows
+            if not (
+                str(row.get("resref") or "").strip().lower() == resref
+                and str(row.get("restype") or "").strip().lower().lstrip(".") == "utc"
+            )
+        ]
+        existing.append(
+            {
+                "game": game,
+                "resref": resref,
+                "template_resref": resref,
+                "restype": "utc",
+                "category": "Creatures",
+                "source": "Custom UTC import",
+                "path": str(path.resolve()),
+            }
+        )
+        self._base_library_rows = existing
+        self.controller.set_authored_creature_resources(
+            tuple(
+                (name, "utc", bytes(data))
+                for name, (data, _source_path) in sorted(self._custom_creature_resources.items())
+            )
+        )
+        self._apply_combined_library_rows()
+        creature_index = self.placement_tab.kind_combo.findData("creature")
+        if creature_index >= 0:
+            self.placement_tab.kind_combo.setCurrentIndex(creature_index)
+        self.placement_tab.search_edit.setText(resref)
+        self.statusBar().showMessage(
+            f"Imported verified custom UTC {resref}; drag it onto authored room or terrain geometry.",
+            7000,
+        )
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
@@ -15227,17 +15334,26 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         delta = tuple(values.get("world_delta") or ())
         room_opening_snap = values.get("room_opening_snap")
         if isinstance(room_opening_snap, dict) and bool(room_opening_snap.get("magnet_snapped", False)):
+            terrain_seam = str(room_opening_snap.get("snap_kind") or "").strip().lower() == "terrain_seam"
             try:
                 update = self.controller.connect_authored_room_drag_snap(room_opening_snap)
             except Exception as exc:
                 self.viewport_panel.cancel_pending_room_primitive_commit_preview()
-                QtWidgets.QMessageBox.warning(self, "Snap Rooms at Doorway", str(exc))
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Join Terrain Edges" if terrain_seam else "Snap Rooms at Doorway",
+                    str(exc),
+                )
                 self._refresh_all()
                 return
             source = str(getattr(update.source_hook, "room_resref", "") or "")
             target = str(getattr(update.target_hook, "room_resref", "") or "")
             self._refresh_all(
-                f"Snapped {source} to {target}; openings, shared door, VIS intent, and PIE portal are aligned."
+                (
+                    f"Joined {source} to {target}; terrain heights and reciprocal WOK traversal are seamless."
+                    if terrain_seam
+                    else f"Snapped {source} to {target}; openings, shared door, VIS intent, and PIE portal are aligned."
+                )
             )
             self._select_map_studio_items(item_ids or ((f"authored_room:{source}",) if source else ()))
             return

@@ -6407,18 +6407,26 @@ class ModuleEditorController:
         return preview.as_payload()
 
     def connect_authored_room_drag_snap(self, preview: Any):
-        """Commit a previewed whole-room doorway magnet as one undo step."""
+        """Commit a previewed doorway or terrain-edge magnet as one undo step."""
 
         values = dict(preview) if isinstance(preview, dict) else preview
+        snap_kind = (
+            str(values.get("snap_kind") or "doorway").strip().lower()
+            if isinstance(values, dict)
+            else str(getattr(values, "snap_kind", "doorway") or "doorway").strip().lower()
+        )
+        terrain_seam = snap_kind == "terrain_seam"
         before = self._capture_map_studio_command_state()
         authored = self._load_authored_project_or_raise()
         update = connect_authored_room_drag_snap_in_project(authored, values)
         self._store_authored_project(update.project)
-        self.model.log(
-            f"{update.summary} Whole-room doorway magnet committed with one shared KOTOR door actor."
-        )
+        self.model.log(update.summary if terrain_seam else f"{update.summary} Whole-room doorway magnet committed with one shared KOTOR door actor.")
         self._record_map_studio_command(
-            action_key="map_studio.rooms.drag_snap_opening",
+            action_key=(
+                "map_studio.terrain.drag_snap_edge"
+                if terrain_seam
+                else "map_studio.rooms.drag_snap_opening"
+            ),
             label=f"Snap {update.source_hook.room_resref} to {update.target_hook.room_resref}",
             before=before,
             metadata={
@@ -6427,9 +6435,11 @@ class ModuleEditorController:
                 "rotation_degrees": update.rotation_degrees,
                 "translation": list(update.translation),
                 "auto_cut_source": bool(dict(values or {}).get("auto_cut_source", False)) if isinstance(values, dict) else False,
-                "shared_runtime_door": True,
-                "vis_intent_updated": True,
-                "wok_transition_proof_required": True,
+                "snap_kind": snap_kind,
+                "shared_runtime_door": not terrain_seam,
+                "terrain_edge_welded": terrain_seam,
+                "vis_intent_updated": not terrain_seam,
+                "wok_auto_generated": True,
             },
         )
         return update

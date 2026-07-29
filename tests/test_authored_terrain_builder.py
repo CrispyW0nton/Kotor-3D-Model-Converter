@@ -58,6 +58,117 @@ def _terrain_stroke_project(resolution: int = 9, *, patterned: bool = False):
     )
 
 
+def test_t2907_terrain_room_drag_snaps_matching_edges_and_builds_reciprocal_wok_portal() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_layout import (
+        connect_authored_room_drag_snap,
+        preview_authored_room_drag_snap,
+    )
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredRoomSpec, create_terrain_room_project
+    from src.core.modules.authored_module_walkmesh import compile_authored_room_connection_walkmeshes
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive
+
+    target = TerrainHeightfieldPrimitive(
+        room_resref="grterr_target",
+        width=8.0,
+        depth=8.0,
+        heights=(
+            (0.0, 0.0, 0.0),
+            (0.2, 0.2, 0.2),
+            (0.4, 0.4, 0.4),
+        ),
+    )
+    source = TerrainHeightfieldPrimitive(
+        room_resref="grterr_source",
+        width=8.0,
+        depth=8.0,
+        heights=(
+            (1.0, 1.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (1.0, 1.0, 1.0),
+        ),
+    )
+    project = create_terrain_room_project(
+        module_root="grterr",
+        game="K1",
+        display_name="Terrain seam fixture",
+        terrain=target,
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grterr")),
+    )
+    project = replace(
+        project,
+        rooms=project.rooms
+        + (
+            AuthoredRoomSpec(
+                room_resref=source.room_resref,
+                primitive=source,
+                position=(9.0, 0.0, 0.0),
+                visible_rooms=(source.room_resref,),
+                metadata={"primitive": "terrain_heightfield"},
+            ),
+        ),
+    )
+
+    preview = preview_authored_room_drag_snap(
+        project,
+        source_room_resref=source.room_resref,
+        world_delta=(-0.6, 0.0, 0.0),
+        snap_distance=1.0,
+    )
+    assert preview.magnet_snapped is True
+    assert preview.snap_kind == "terrain_seam"
+    assert preview.source_opening_name == "terrain_left"
+    assert preview.target_label == "grterr_target — right terrain edge"
+    assert preview.position == (8.0, 0.0, 0.0)
+
+    update = connect_authored_room_drag_snap(project, preview)
+    connected_source = next(
+        room for room in update.project.rooms if room.normalised_resref() == source.room_resref
+    )
+    assert connected_source.position == (8.0, 0.0, 0.0)
+    # Source left edge is welded to the target right edge in world Z.
+    assert tuple(row[0] for row in connected_source.primitive.heights) == (0.0, 0.2, 0.4)
+    assert update.project.extra["last_walkmesh_build"]["auto_generated"] is True
+    assert update.project.extra["last_walkmesh_build"]["operation"] == "connect_terrain_edges"
+
+    walkmesh = compile_authored_room_connection_walkmeshes(update.project)
+    assert walkmesh.ready is True
+    assert len(walkmesh.portals) == 1
+    assert walkmesh.portals[0].midpoint_gap <= 1.0e-7
+
+
+def test_t2907_map_studio_adapts_to_portable_integrated_graphics() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_modeling_tools import (
+        map_studio_viewport_performance_policy,
+    )
+
+    portable = map_studio_viewport_performance_policy(
+        logical_threads=8,
+        gpu_adapter="Intel Iris Xe Graphics",
+    )
+    assert portable.profile_key == "portable"
+    assert portable.target_fps == 30
+    assert portable.interactive_render_scale == 0.72
+    assert portable.idle_render_scale == 1.0
+    assert portable.hover_interval_ms == 33
+    assert portable.texture_memory_budget_mb == 256
+
+    quality = map_studio_viewport_performance_policy(
+        "quality",
+        logical_threads=32,
+        gpu_adapter="Discrete GPU",
+    )
+    assert quality.profile_key == "quality"
+    assert quality.target_fps == 60
+    assert quality.interactive_render_scale == 1.0
+
+
 def test_t2907_flat_terrain_heightfield_builds_mesh_and_walkable_wok() -> None:
     _install_native_payload_paths()
 

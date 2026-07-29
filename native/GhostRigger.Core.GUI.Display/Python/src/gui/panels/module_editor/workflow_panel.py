@@ -74,11 +74,39 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         root.addWidget(self.test_state_label)
 
         self.purpose_label = QtWidgets.QLabel(
-            "Map Studio checks that the module has the game files KOTOR needs before it is staged or installed."
+            "The white/gray grid is editor workspace, not usable floor. Start with an interior Room or an exterior Terrain Surface; both generate matching WOK automatically."
         )
         self.purpose_label.setObjectName("mapStudioWorkflowPurposeLabel")
         self.purpose_label.setWordWrap(True)
         root.addWidget(self.purpose_label)
+
+        self.start_here_group = QtWidgets.QGroupBox("Start here: choose the kind of level")
+        self.start_here_group.setObjectName("mapStudioWorkflowStartHereGroup")
+        start_here_layout = QtWidgets.QVBoxLayout(self.start_here_group)
+        self.start_here_label = QtWidgets.QLabel(
+            "Interior rooms include floor, walls, and WOK. Exterior terrain includes visible ground and WOK. "
+            "Add doors to rooms and drag another room or vanilla module to the doorway magnet to connect them."
+        )
+        self.start_here_label.setObjectName("mapStudioWorkflowStartHereLabel")
+        self.start_here_label.setWordWrap(True)
+        start_here_layout.addWidget(self.start_here_label)
+        start_here_buttons = QtWidgets.QHBoxLayout()
+        self.starter_room_button = QtWidgets.QPushButton("Interior: Create Room")
+        self.starter_room_button.setObjectName("mapStudioWorkflowStarterRoomButton")
+        self.starter_room_button.setToolTip(
+            "Create a usable interior room with a generated floor and matching walkmesh."
+        )
+        self.starter_terrain_button = QtWidgets.QPushButton("Exterior: Create Terrain")
+        self.starter_terrain_button.setObjectName("mapStudioWorkflowStarterTerrainButton")
+        self.starter_terrain_button.setToolTip(
+            "Create actual exterior ground with a matching generated walkmesh. Drag matching terrain edges together to weld them."
+        )
+        self.starter_room_button.clicked.connect(self.starterRoomRequested.emit)
+        self.starter_terrain_button.clicked.connect(self.starterTerrainRequested.emit)
+        start_here_buttons.addWidget(self.starter_room_button)
+        start_here_buttons.addWidget(self.starter_terrain_button)
+        start_here_layout.addLayout(start_here_buttons)
+        root.addWidget(self.start_here_group)
 
         self.advanced_details_toggle = QtWidgets.QToolButton(self)
         self.advanced_details_toggle.setObjectName("mapStudioWorkflowAdvancedDetailsButton")
@@ -122,8 +150,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
                 ),
                 (
                     "Geometry",
-                    "Create Starter Room",
-                    "A simple room exists before resource placement.",
+                    "Create Room or Terrain Surface",
+                    "Usable geometry and its matching WOK exist before resource placement.",
                 ),
                 (
                     "Gameplay",
@@ -302,14 +330,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.open_builder_button.setObjectName("mapStudioWorkflowOpenBuilderButton")
         self.geometry_tools_button = QtWidgets.QPushButton("Open Geometry Tools")
         self.geometry_tools_button.setObjectName("mapStudioWorkflowGeometryToolsButton")
-        self.starter_room_button = QtWidgets.QPushButton("Create Starter Room")
-        self.starter_room_button.setObjectName("mapStudioWorkflowStarterRoomButton")
         self.doorway_blockout_button = QtWidgets.QPushButton("Create Doorway Blockout")
         self.doorway_blockout_button.setObjectName("mapStudioWorkflowDoorwayBlockoutButton")
         self.corridor_button = QtWidgets.QPushButton("Create Corridor")
         self.corridor_button.setObjectName("mapStudioWorkflowCorridorButton")
-        self.starter_terrain_button = QtWidgets.QPushButton("Create Terrain Patch")
-        self.starter_terrain_button.setObjectName("mapStudioWorkflowStarterTerrainButton")
         self.terrain_tools_button = QtWidgets.QPushButton("Open Terrain Tools")
         self.terrain_tools_button.setObjectName("mapStudioWorkflowTerrainToolsButton")
         self.lighting_tools_button = QtWidgets.QPushButton("Open Lighting Tools")
@@ -334,10 +358,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.proof_button.setObjectName("mapStudioWorkflowProofButton")
         self.open_builder_button.clicked.connect(self.builderRequested.emit)
         self.geometry_tools_button.clicked.connect(self.geometryToolsRequested.emit)
-        self.starter_room_button.clicked.connect(self.starterRoomRequested.emit)
         self.doorway_blockout_button.clicked.connect(self.doorwayBlockoutRequested.emit)
         self.corridor_button.clicked.connect(self.corridorRequested.emit)
-        self.starter_terrain_button.clicked.connect(self.starterTerrainRequested.emit)
         self.terrain_tools_button.clicked.connect(self.terrainToolsRequested.emit)
         self.lighting_tools_button.clicked.connect(self.lightingToolsRequested.emit)
         self.placement_tools_button.clicked.connect(self.placementToolsRequested.emit)
@@ -359,10 +381,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         root.addLayout(primary_actions)
 
         actions.addWidget(self.geometry_tools_button, 0, 0)
-        actions.addWidget(self.starter_room_button, 0, 1)
         actions.addWidget(self.doorway_blockout_button, 1, 0)
         actions.addWidget(self.corridor_button, 1, 1)
-        actions.addWidget(self.starter_terrain_button, 2, 0)
         actions.addWidget(self.terrain_tools_button, 2, 1)
         actions.addWidget(self.lighting_tools_button, 3, 0)
         actions.addWidget(self.script_tools_button, 3, 1)
@@ -394,6 +414,9 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.proof_label,
             self.selection_actions_widget,
             self.secondary_actions_widget,
+            self.install_button,
+            self.launch_handoff_button,
+            self.proof_button,
         )
         for button in self.findChildren(QtWidgets.QPushButton):
             button.setMinimumWidth(0)

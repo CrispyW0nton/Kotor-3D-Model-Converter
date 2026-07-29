@@ -11,6 +11,68 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make Map Studio beginner-readable, terrain-connected, and adaptive
+
+Owner: LordVaderCW
+
+Task: T2907
+
+Subsystem: Map Studio authoring UX, authored terrain/WOK connections, gameplay
+placement resources, and viewport performance.
+
+Intersects: existing Map Studio room, terrain, WOK, placement, viewport, and
+embedded-payload work in the shared working tree.
+
+Map Studio now opens on a visible two-choice starting point: create an interior
+room or create exterior terrain. The screen explains that the viewport grid is
+only a guide; both choices create usable geometry and matching walkmesh.
+Interior guidance describes the intended door-magnet workflow for joining
+rooms and vanilla modules. Exterior terrain patches can magnet-snap compatible
+edges, weld their boundary heights, and generate reciprocal WOK portals
+automatically.
+
+The always-on-top green terrain visualization is now an opt-in
+`X-ray terrain WOK diagnostic` with a walkable/blocked/review legend, making it
+clear that it is an editor overlay rather than floating exported geometry.
+Blueprint and placement copy now distinguish reusable KOTOR object templates
+from rooms, guide users toward verified UTC/UTP/UTD resources, and provide a
+custom creature UTC import path. Model-only creature rows such as `c_gizka`
+are no longer advertised as placeable UTC templates.
+
+Map Studio selects a portable, balanced, or quality viewport policy from the
+machine's CPU/GPU profile. The portable tier targets 30 FPS, reduces only the
+interactive 3D raster to 72 percent, coalesces hover work, and lowers texture
+residency/upload pressure while preserving full-resolution idle frames, UI,
+HUD, and exported resources. The first-screen hierarchy and wording apply
+Jakob's, Fitts's, Hick's, Miller's, Postel's, von Restorff's, Tesler's, and
+Doherty's principles from Jon Yablonski's *Laws of UX*: familiar labels,
+large grouped starters, fewer initial choices, chunked workflows, forgiving
+errors, restrained emphasis, automated complexity, and responsive feedback.
+
+Affected:
+
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/`
+- Map Studio panels and window under
+  `native/GhostRigger.Core.Tools/Python/src/gui/`
+- mirrored Map Studio panels and rendering pipeline under
+  `native/GhostRigger.Core.GUI.Display/Python/src/gui/`
+- `tests/test_authored_terrain_builder.py`
+- `tests/test_game_resource_provider.py`
+- `tests/test_map_studio_workflow_panel.py`
+
+Verification: 10 focused Map Studio tests plus targeted payload identity checks
+passed for verified creature
+templates, terrain edge/WOK welding, existing doorway snapping, adaptive
+performance selection, visible starter controls, Blueprint and smoke-test
+guidance, PIE helper masking, and the three touched embedded payloads. Focused Python
+compilation and diff whitespace checks passed. The Debug x64 native host built
+successfully and staged all 18 payload DLLs. In the actual Debug application,
+Map Studio opened responsively; the two starter choices were visible on the
+default Build surface; `Exterior: Create Terrain` created and focused a visible
+terrain patch; and enabling the X-ray WOK diagnostic displayed the green
+triangulation with its editor-only legend. Retail-game proof remains pending.
+
 ### [2026-07-28] turn tester onboarding into a six-step Ghost-Studio installation guide
 
 Owner: LordVaderCW

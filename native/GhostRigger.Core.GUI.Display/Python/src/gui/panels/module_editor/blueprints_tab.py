@@ -23,12 +23,15 @@ class BlueprintsTab(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         self.workflow_label = QtWidgets.QLabel(
-            "Blueprint workflow: edit KOTOR resource templates, validate them, then place instances into the module through Map Studio placement tools."
+            "Blueprint workflow: edit KOTOR resource templates, validate them, then place instances through Place. "
+            "A Blueprint is reusable object data, not a room: for example a UTC creature, UTP placeable, or UTD door. "
+            "Rooms and terrain are level geometry built in Builder."
         )
         self.workflow_label.setObjectName("mapStudioBlueprintWorkflowLabel")
         self.workflow_label.setWordWrap(True)
         self.resource_label = QtWidgets.QLabel(
-            "Template types: UTC creatures, UTP placeables, UTD doors, UTT triggers, UTW waypoints, UTS sounds, UTE encounters, and UTM merchants/stores."
+            "Template types: UTC creatures, UTP placeables, UTD doors, UTT triggers, UTW waypoints, UTS sounds, UTE encounters, and UTM merchants/stores. "
+            "Import a custom NPC with Place → Import custom creature UTC; an MDL appearance alone is not a placeable NPC."
         )
         self.resource_label.setObjectName("mapStudioBlueprintResourceTypesLabel")
         self.resource_label.setWordWrap(True)

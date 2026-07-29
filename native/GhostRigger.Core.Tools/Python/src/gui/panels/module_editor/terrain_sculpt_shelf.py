@@ -135,13 +135,21 @@ class TerrainSculptShelf(QtWidgets.QFrame):
             settings.addWidget(QtWidgets.QLabel(label, self))
             settings.addWidget(widget)
 
-        self.walkability_box = QtWidgets.QCheckBox("Slope / WOK overlay", self)
+        self.walkability_box = QtWidgets.QCheckBox("X-ray terrain WOK diagnostic", self)
         self.walkability_box.setObjectName("mapStudioTerrainSlopeOverlayCheckBox")
         self.walkability_box.setChecked(False)
         self.walkability_box.setToolTip(
-            "Show walkable and blocked WOK triangles. Leave off while shaping for a clean surface; enable before export."
+            "Editor-only diagnostic drawn on top of the scene: green is walkable, red is blocked, yellow is unknown. "
+            "It does not raise, move, or export the WOK; turn it off for an unobstructed scene."
         )
         settings.addWidget(self.walkability_box)
+        self.walkability_legend = QtWidgets.QLabel(
+            "Green = walkable · Red = blocked · Yellow = review · editor-only X-ray",
+            self,
+        )
+        self.walkability_legend.setObjectName("mapStudioTerrainWokDiagnosticLegend")
+        self.walkability_legend.setVisible(False)
+        settings.addWidget(self.walkability_legend)
         settings.addStretch(1)
         self.gesture_hint = QtWidgets.QLabel(
             "LMB sculpt  ·  Shift+LMB lower  ·  RMB orbit  ·  Alt+MMB pan  ·  Shift+wheel resize  ·  Alt+RMB size/falloff",
@@ -156,6 +164,7 @@ class TerrainSculptShelf(QtWidgets.QFrame):
         self.strength_spin.valueChanged.connect(self._emit_options)
         self.delta_spin.valueChanged.connect(self._emit_options)
         self.walkability_box.toggled.connect(self.walkabilityChanged.emit)
+        self.walkability_box.toggled.connect(self.walkability_legend.setVisible)
         self.set_brush("raise")
 
     @staticmethod

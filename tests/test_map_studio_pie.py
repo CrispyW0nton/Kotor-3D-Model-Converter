@@ -945,7 +945,8 @@ def test_pie_clean_runtime_presentation_masks_editor_helpers_without_disabling_l
 
     gpu_frame = _method_source(render_source, "_render_gpu_frame")
     assert 'clean_runtime = bool(self.property("_gr_map_studio_pie_clean_runtime"))' in gpu_frame
-    assert "interactive_render_scale = 0.90 if clean_runtime else 1.0" in gpu_frame
+    assert '"_gr_map_studio_interactive_render_scale"' in gpu_frame
+    assert "interactive_render_scale = default_interactive_scale" in gpu_frame
     assert "show_light_gizmos" in gpu_frame and "and not clean_runtime" in gpu_frame
     assert "show_light_radius_volumes" in gpu_frame
     assert "show_dummy_helpers" in gpu_frame
