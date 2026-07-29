@@ -354,6 +354,7 @@ class ThemeLayoutMixin:
             finally:
                 combo.blockSignals(False)
         QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
+        QtCore.QTimer.singleShot(0, self._update_command_bar_responsiveness)
 
     def _refresh_startup_layout_after_show(self) -> None:
         """Re-apply the selected layout once startup widgets have real screen geometry."""

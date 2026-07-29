@@ -11,6 +11,65 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make the main shell scannable and preserve user presentation choices
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core GUI Display shared shell, product navigation, Settings, and
+native Python payload manifests.
+
+Intersects: `codex/map-studio-ux-overhaul` and its Map Studio launcher/runtime
+contracts; the Map Studio branch remains separate and was not merged into this
+change.
+
+GhostStudio's first view now prioritizes scene actions, a labeled
+**Studios and Tools** launcher, grouped Import/Export/Create/Panels actions,
+help, Settings, Workspace, and layout choice instead of presenting 32
+peer-level icon buttons. The searchable launcher groups every existing studio,
+tool, browser, and panel by user intent, shows shortcuts and descriptions, and
+supports keyboard activation. Buttons use font-derived minimum targets,
+accessible names, and useful tooltips; at narrower widths secondary actions
+collapse while the product launcher stays labeled.
+
+Developer-only IPC and diagnostics commands are hidden until **Enable
+Developer Mode** is selected in Settings. Startup and Settings changes no
+longer overwrite the user's navigation profile, selected layout, layout
+overrides, or pivot-toolbox preference. The duplicate Retarget shortcut was
+also removed.
+
+Affected:
+
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_lifecycle.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/theme_layout.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/qt_settings_dialog.py`
+- `tests/test_main_shell_ux.py` and focused shell-entry contract tests
+- regenerated GUI Display payload manifest and repaired stale Rendering/Tools
+  payload hashes discovered by the generator
+- `docs/audits/ghoststudio_program_wide_ux_audit_2026-07-28.md`
+- `docs/plans/2026-07-28-program-wide-ui-ux-overhaul.md`
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Seventeen focused shell, launcher, Settings, product-route, layout, and
+  payload tests passed; the Map Studio route emitted six existing Qt
+  deprecation warnings.
+- Visual Studio Community built the corrected `Debug|x64` state with
+  `1 succeeded, 0 failed, 18 up-to-date`, then launched the real
+  `build/vs/x64/Debug/GhostStudio.exe`.
+- In the Debug application, the shell remained unclipped at 1366x768 and
+  reflowed at 1280x720; the launcher was opened, filtered to Map Studio, and
+  activated with Enter; Default, Matrix, Droid, Dark, Light, and Classic
+  themes all remained readable and responsive.
+- The shell used about 428 MB before opening Map Studio. Opening Map Studio
+  temporarily blocked the UI for roughly 23 seconds and raised the process to
+  about 691 MB; that measured baseline is assigned to the later startup and
+  studio-performance units rather than treated as acceptable performance.
+
 ### [2026-07-28] turn tester onboarding into a six-step Ghost-Studio installation guide
 
 Owner: LordVaderCW

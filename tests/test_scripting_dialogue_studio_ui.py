@@ -124,7 +124,8 @@ def test_map_context_uses_suggested_binding_and_main_shell_has_one_clear_launche
         ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
     ).read_text(encoding="utf-8")
     assert '"Open Scripting Suite..."' in chrome
-    assert '"CommandStripScriptingDialogueStudioButton"' in chrome
+    assert "def _command_launcher_groups" in chrome
+    assert "self.scripting_dialogue_studio_action," in chrome
     assert "tools_menu.addAction(self.scripting_dialogue_studio_action)" in chrome
     assert "tools_menu.addAction(self.ping_scripter_action)" not in chrome
     assert '"scripting_studio": self._open_scripting_dialogue_studio_window' in main

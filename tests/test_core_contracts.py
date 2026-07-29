@@ -10789,7 +10789,7 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert QtContentBrowserPanel.__name__ == "QtContentBrowserPanel"
 
 
-def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport() -> None:
+def test_main_command_strip_groups_secondary_commands_and_keeps_controls_accessible() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -10802,22 +10802,11 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     menu_source = inspect.getsource(QtGhostRiggerMainWindow._menu_button)
     visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
 
-    assert 'layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Properties", self.properties_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment"' in command_source
-    assert 'layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Log", self.output_log_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action' in command_source
-    assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
+    assert 'launcher_button.setObjectName("CommandLauncherButton")' in command_source
+    assert '"Studios and Tools"' in command_source
+    assert 'panels_button = self._menu_button(' in command_source
+    assert '"Panels"' in command_source
+    assert 'create_button = self._menu_button(' in command_source
     assert actions_source.count("self._configure_dock_toggle_action(") >= 15
     for action_name in (
         "content_browser_action",
@@ -10838,8 +10827,8 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
         "diag_action",
     ):
         assert f"self.{action_name}" in actions_source
-    assert "button.setCheckable(True)" in button_source
-    assert "action.toggled.connect(button.setChecked)" in button_source
+        assert f"self.{action_name}" in command_source or action_name == "sequence_editor_action"
+    assert "button.setDefaultAction(action)" in button_source
     assert "display_text = self._command_button_label(text, action)" in button_source
     assert 'label.split("  ", 1)[0].strip()' in label_source
     assert "label.endswith(shortcut)" in label_source
@@ -10851,21 +10840,23 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert "self._tab_workspace_dock_with_visible_peer(key, dock)" in workspace_source
     assert "self.tabifyDockWidget(anchor, dock)" in tab_source
     assert '"Anims  Ctrl+A"' not in command_source
-    assert command_source.index('"New Scene  Ctrl+N"') < command_source.index('"Open Scene  Ctrl+O"')
-    assert command_source.index('"Settings  F2"') < command_source.index("layout.addStretch(1)")
-    assert command_source.index("layout.addStretch(1)") < command_source.index('"Scene Information"')
-    assert command_source.index("layout.addStretch(1)") < command_source.index('"Animation Browser"')
-    assert command_source.index('"Sequence Editor"') < command_source.index('"Animation Browser"')
-    assert command_source.index('"Animation Browser"') < command_source.index('"Nodes"')
-    assert 'button.setText("")' in button_source
-    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in button_source
-    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in button_source
-    assert "button.setFixedSize(30, 22)" in button_source
+    assert command_source.index('"New Scene"') < command_source.index('"Open Scene"')
+    assert command_source.index('"Open Scene"') < command_source.index('"Studios and Tools"')
+    assert command_source.index('"Studios and Tools"') < command_source.index('"Import"')
+    assert command_source.index("layout.addStretch(1)") < command_source.index('"Getting Started"')
+    assert 'button.setText("" if compact else display_text)' in button_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", compact)' in button_source
+    assert "QtCore.Qt.ToolButtonTextBesideIcon" in button_source
+    assert "target_size = max(32" in button_source
+    assert "button.setFixedSize" not in button_source
     assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source
-    assert 'button.setText("")' in menu_source
-    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in menu_source
-    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in menu_source
-    assert "button.setFixedSize(34, 22)" in menu_source
+    assert "button.setAccessibleName" in button_source
+    assert 'button.setText("" if compact else text)' in menu_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", compact)' in menu_source
+    assert "QtCore.Qt.ToolButtonTextBesideIcon" in menu_source
+    assert "target_size = max(32" in menu_source
+    assert "button.setFixedSize" not in menu_source
+    assert "button.setAccessibleName" in menu_source
 
 
 def test_startup_theme_apply_defers_hidden_dock_panel_hooks() -> None:

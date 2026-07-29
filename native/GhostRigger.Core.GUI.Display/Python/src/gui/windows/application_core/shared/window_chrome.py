@@ -77,6 +77,153 @@ MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
 }
 
 
+class _CommandLauncherDialog(QtWidgets.QDialog):
+    """Searchable, categorized access to existing shell actions."""
+
+    def __init__(
+        self,
+        groups: list[tuple[str, list[QtGui.QAction]]],
+        parent: Optional[QtWidgets.QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("CommandLauncherDialog")
+        self.setWindowTitle("Open a Studio or Tool")
+        self.setModal(False)
+        self.setWindowModality(QtCore.Qt.NonModal)
+        self._actions: list[QtGui.QAction] = []
+
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(8)
+
+        heading = QtWidgets.QLabel("What do you want to open?")
+        heading.setObjectName("CommandLauncherHeading")
+        heading.setAccessibleName("Open a Studio or Tool")
+        root.addWidget(heading)
+
+        guidance = QtWidgets.QLabel(
+            "Search by task or browse the categories. Press Enter or double-click to open the selected command."
+        )
+        guidance.setObjectName("CommandLauncherGuidance")
+        guidance.setWordWrap(True)
+        root.addWidget(guidance)
+
+        self.search_edit = QtWidgets.QLineEdit(self)
+        self.search_edit.setObjectName("CommandLauncherSearch")
+        self.search_edit.setAccessibleName("Search studios and tools")
+        self.search_edit.setPlaceholderText("Search studios, tools, browsers, and panels...")
+        self.search_edit.setClearButtonEnabled(True)
+        root.addWidget(self.search_edit)
+
+        self.command_tree = QtWidgets.QTreeWidget(self)
+        self.command_tree.setObjectName("CommandLauncherTree")
+        self.command_tree.setAccessibleName("Available studios and tools")
+        self.command_tree.setHeaderLabels(["Command", "Shortcut"])
+        self.command_tree.setRootIsDecorated(True)
+        self.command_tree.setUniformRowHeights(True)
+        self.command_tree.setAlternatingRowColors(True)
+        self.command_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.command_tree.setAllColumnsShowFocus(True)
+        header = self.command_tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        root.addWidget(self.command_tree, 1)
+
+        for category, actions in groups:
+            category_item = QtWidgets.QTreeWidgetItem([category, ""])
+            category_item.setData(0, QtCore.Qt.UserRole, -1)
+            category_item.setFlags(category_item.flags() & ~QtCore.Qt.ItemIsSelectable)
+            self.command_tree.addTopLevelItem(category_item)
+            for action in actions:
+                action_index = len(self._actions)
+                self._actions.append(action)
+                shortcut = action.shortcut().toString(QtGui.QKeySequence.NativeText)
+                child = QtWidgets.QTreeWidgetItem([action.text().replace("&", ""), shortcut])
+                child.setData(0, QtCore.Qt.UserRole, action_index)
+                child.setIcon(0, action.icon())
+                description = str(action.statusTip() or action.toolTip() or "")
+                if description:
+                    child.setToolTip(0, description)
+                category_item.addChild(child)
+            category_item.setExpanded(True)
+
+        self.search_edit.textChanged.connect(self._filter_commands)
+        self.search_edit.returnPressed.connect(self._activate_current)
+        self.command_tree.itemActivated.connect(self._activate_item)
+
+        close_button = QtWidgets.QPushButton("Close", self)
+        close_button.setAccessibleName("Close command launcher")
+        close_button.clicked.connect(self.close)
+        button_row = QtWidgets.QHBoxLayout()
+        button_row.addStretch(1)
+        button_row.addWidget(close_button)
+        root.addLayout(button_row)
+
+        font_metrics = self.fontMetrics()
+        em_width = max(1, font_metrics.horizontalAdvance("M"))
+        line_height = max(1, font_metrics.lineSpacing())
+        self.resize(em_width * 72, line_height * 24)
+        self._select_first_visible_command()
+        self.search_edit.setFocus(QtCore.Qt.OtherFocusReason)
+
+    def _filter_commands(self, text: str) -> None:
+        query = str(text or "").strip().casefold()
+        for category_index in range(self.command_tree.topLevelItemCount()):
+            category_item = self.command_tree.topLevelItem(category_index)
+            category_match = query in category_item.text(0).casefold()
+            visible_children = 0
+            for child_index in range(category_item.childCount()):
+                child = category_item.child(child_index)
+                action_index = int(child.data(0, QtCore.Qt.UserRole))
+                action = self._actions[action_index]
+                searchable = " ".join(
+                    (
+                        category_item.text(0),
+                        child.text(0),
+                        child.text(1),
+                        str(action.statusTip() or action.toolTip() or ""),
+                    )
+                ).casefold()
+                visible = not query or category_match or query in searchable
+                child.setHidden(not visible)
+                visible_children += int(visible)
+            category_item.setHidden(visible_children == 0)
+            category_item.setExpanded(True)
+        self._select_first_visible_command()
+
+    def _select_first_visible_command(self) -> None:
+        for category_index in range(self.command_tree.topLevelItemCount()):
+            category_item = self.command_tree.topLevelItem(category_index)
+            if category_item.isHidden():
+                continue
+            for child_index in range(category_item.childCount()):
+                child = category_item.child(child_index)
+                if not child.isHidden() and child.flags() & QtCore.Qt.ItemIsEnabled:
+                    self.command_tree.setCurrentItem(child)
+                    return
+        self.command_tree.setCurrentItem(None)
+
+    def _activate_current(self) -> None:
+        self._activate_item(self.command_tree.currentItem())
+
+    def _activate_item(
+        self,
+        item: Optional[QtWidgets.QTreeWidgetItem],
+        _column: int = 0,
+    ) -> None:
+        if item is None:
+            return
+        action_index = item.data(0, QtCore.Qt.UserRole)
+        if not isinstance(action_index, int) or action_index < 0:
+            return
+        action = self._actions[action_index]
+        if not action.isEnabled():
+            return
+        action.trigger()
+        self.accept()
+
+
 class WindowChromeMixin:
     """Actions, menus, command strip, and Matrix header behavior."""
 
@@ -140,6 +287,16 @@ class WindowChromeMixin:
         self.settings_action = QtGui.QAction(self._icon("settings"), "Settings...", self)
         self.settings_action.setShortcut("Ctrl+Comma")
         self.settings_action.triggered.connect(self._open_settings_dialog)
+        self.command_launcher_action = QtGui.QAction(
+            self._icon("content_browser"),
+            "Open Studio or Tool...",
+            self,
+        )
+        self.command_launcher_action.setShortcut("Ctrl+K")
+        self.command_launcher_action.setStatusTip(
+            "Search every GhostStudio studio, tool, browser, and panel"
+        )
+        self.command_launcher_action.triggered.connect(self._open_command_launcher)
         self.theme_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["theme_editor"]), "Theme Editor...", self)
         self.theme_editor_action.triggered.connect(self._open_theme_editor_window)
         self.autorig_action = QtGui.QAction(self._icon("autorig"), "Auto-Rig Current Model", self)
@@ -220,7 +377,7 @@ class WindowChromeMixin:
             lambda: self._show_workspace_dock("body_attachment"),
         )
         self.retarget_workbench_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["retarget_workbench"]), "Animation Retargeting Workbench...", self)
-        self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
+        self.retarget_workbench_action.setShortcut("Ctrl+Alt+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
         self.load_retarget_source_clip_action = QtGui.QAction("Load UE/FBX Source Animation...", self)
         self.load_retarget_source_clip_action.triggered.connect(self._load_retarget_source_clip)
@@ -405,6 +562,82 @@ class WindowChromeMixin:
         self.quit_action.setShortcut("Alt+F4")
         self.quit_action.triggered.connect(self.close)
 
+    def _command_launcher_groups(self) -> list[tuple[str, list[QtGui.QAction]]]:
+        """Return task-oriented launcher groups without duplicating action ownership."""
+
+        return [
+            (
+                "World Building",
+                [
+                    self.modules_action,
+                    self.stock_module_editor_action,
+                    self.gui_editor_action,
+                    self.placeable_builder_action,
+                    self.particle_editor_action,
+                    self.scripting_dialogue_studio_action,
+                ],
+            ),
+            (
+                "Character & Animation",
+                [
+                    self.character_builder_action,
+                    self.head_builder_action,
+                    self.anims_action,
+                    self.retarget_workbench_action,
+                    self.unreal_animator_action,
+                    self.rig_window_action,
+                    self.sequence_editor_action,
+                ],
+            ),
+            (
+                "Asset Tools",
+                [
+                    self.texture_tool_action,
+                    self.blueprint_editor_action,
+                    self.autorig_action,
+                    self.uv_action,
+                    self.theme_editor_action,
+                ],
+            ),
+            (
+                "Browsers & Panels",
+                [
+                    self.content_browser_action,
+                    self.animation_browser_dock_action,
+                    self.scene_panel_action,
+                    self.properties_panel_action,
+                    self.body_attachment_panel_action,
+                    self.nodes_panel_action,
+                    self.lighting_panel_action,
+                    self.camera_panel_action,
+                    self.module_meshes_panel_action,
+                    self.mesh_tools_panel_action,
+                    self.sprite_materials_panel_action,
+                    self.adjust_pivot_panel_action,
+                    self.twoda_panel_action,
+                    self.resources_panel_action,
+                    self.output_log_panel_action,
+                    self.python_terminal_panel_action,
+                    self.diag_action,
+                ],
+            ),
+        ]
+
+    def _open_command_launcher(self) -> None:
+        dialog = getattr(self, "_command_launcher_dialog", None)
+        if dialog is None:
+            dialog = _CommandLauncherDialog(self._command_launcher_groups(), self)
+            dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+            dialog.destroyed.connect(
+                lambda _obj=None: setattr(self, "_command_launcher_dialog", None)
+            )
+            self._command_launcher_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        dialog.search_edit.selectAll()
+        dialog.search_edit.setFocus(QtCore.Qt.ShortcutFocusReason)
+
     def _build_menu(self):
         # Menu structure follows the standard File/Edit/View/Tools/Window/Help
         # convention. The previous Customise/Model/Modules/MDLOps/Retarget/Create/
@@ -472,6 +705,8 @@ class WindowChromeMixin:
         # and module-authoring entries that were previously separate top-level
         # menus. IPC tooling is parked at the end under a Developer separator.
         tools_menu = self.menuBar().addMenu("Tools")
+        tools_menu.addAction(self.command_launcher_action)
+        tools_menu.addSeparator()
         tools_menu.addAction(self.autorig_action)
         tools_menu.addAction(self.remove_rig_action)
         tools_menu.addSeparator()
@@ -522,20 +757,20 @@ class WindowChromeMixin:
         tools_menu.addAction(self.head_builder_action)
         tools_menu.addAction(self.validate_character_action)
         tools_menu.addSeparator()
-        # Developer / IPC tooling. These low-level diagnostics should be hidden
-        # behind a debug flag in the future rather than shipped on the main menu.
-        developer_label = QtGui.QAction("Developer", self)
-        developer_label.setSeparator(True)
-        tools_menu.addAction(developer_label)
+        # Developer / IPC tooling stays available without competing with the
+        # authoring workflow for users who have not explicitly enabled it.
+        developer_menu = tools_menu.addMenu("Developer")
+        self.developer_menu_action = developer_menu.menuAction()
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
         server_action.setEnabled(False)
-        tools_menu.addAction(server_action)
-        tools_menu.addAction(self.ping_gmodular_action)
-        tools_menu.addAction(self.notify_gmodular_action)
-        tools_menu.addAction(self.refresh_gmodular_action)
+        developer_menu.addAction(server_action)
+        developer_menu.addAction(self.ping_gmodular_action)
+        developer_menu.addAction(self.notify_gmodular_action)
+        developer_menu.addAction(self.refresh_gmodular_action)
         ipc_info_action = QtGui.QAction("IPC Protocol Info", self)
         ipc_info_action.triggered.connect(lambda: show_ipc_info(self))
-        tools_menu.addAction(ipc_info_action)
+        developer_menu.addAction(ipc_info_action)
+        self._sync_developer_actions_visibility()
 
         # Window: the dock/panel toggles that previously lived under 'Modules'.
         window_menu = self.menuBar().addMenu("Window")
@@ -574,6 +809,13 @@ class WindowChromeMixin:
         help_menu.addAction(format_action)
         diagnostics_menu = help_menu.addMenu("Diagnostics")
         diagnostics_menu.addAction(self.fbx_sdk_status_action)
+
+    def _sync_developer_actions_visibility(self) -> None:
+        menu_action = getattr(self, "developer_menu_action", None)
+        if menu_action is None:
+            return
+        settings = getattr(self, "settings_data", {})
+        menu_action.setVisible(bool(settings.get("developer_mode", False)))
 
     def _build_toolbar(self):
         # The original GhostRigger top chrome is rebuilt as regular Qt widgets
@@ -762,7 +1004,6 @@ class WindowChromeMixin:
     def _make_command_bar(self) -> QtWidgets.QWidget:
         host = QtWidgets.QFrame()
         host.setObjectName("CommandBarHost")
-        host.setMinimumHeight(36)
         self.command_bar_host = host
 
         host_layout = QtWidgets.QHBoxLayout(host)
@@ -771,7 +1012,6 @@ class WindowChromeMixin:
 
         bar = QtWidgets.QFrame(host)
         bar.setObjectName("CommandBar")
-        bar.setMinimumHeight(36)
         self.command_bar = bar
 
         layout = QtWidgets.QHBoxLayout(bar)
@@ -780,141 +1020,223 @@ class WindowChromeMixin:
 
         self.model_pill = QtWidgets.QLabel("// Untitled Scene")
         self.model_pill.setObjectName("ModelPill")
-        self.model_pill.setMinimumWidth(170)
-        self.model_pill.setMaximumWidth(260)
+        self.model_pill.setMinimumWidth(
+            self.model_pill.fontMetrics().horizontalAdvance("// Scene") + 16
+        )
+        self.model_pill.setMaximumWidth(
+            self.model_pill.fontMetrics().horizontalAdvance("// Untitled Scene Name") + 24
+        )
         self.model_pill.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        self.model_pill.setToolTip("Active KMAX scene.")
+        self.model_pill.setAccessibleName("Active scene")
+        self.model_pill.setToolTip("The active KMAX scene. The asterisk indicates unsaved changes.")
         layout.addWidget(self.model_pill, 0, QtCore.Qt.AlignVCenter)
 
-        layout.addWidget(self._tool_button("New Scene  Ctrl+N", self.new_scene_action, "new_scene"))
-        layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
-        layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
-        layout.addWidget(self._tool_button("Auto-Rig  Ctrl+Shift+G", self.autorig_action, "autorig"))
-        layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["character_builder"]))
-        head_builder_button = self._tool_button(
-            "Head Builder",
-            self.head_builder_action,
-            MAIN_COMMAND_STRIP_ICON_KEYS["character_builder"],
+        new_button = self._tool_button(
+            "New Scene",
+            self.new_scene_action,
+            "new_scene",
         )
-        head_builder_button.setObjectName("CommandStripHeadBuilderButton")
-        head_builder_button.setToolTip(
-            "Open the Custom KOTOR Head Builder in the reusable Character Studio window"
+        open_button = self._tool_button(
+            "Open Scene",
+            self.open_scene_action,
+            "open",
         )
-        layout.addWidget(head_builder_button)
-        map_studio_button = self._tool_button("Map Studio", self.modules_action, MAIN_COMMAND_STRIP_ICON_KEYS["map_studio"])
-        map_studio_button.setObjectName("CommandStripMapStudioButton")
-        map_studio_button.setToolTip("Open Map Studio (KMAP Area Authoring)")
-        layout.addWidget(map_studio_button)
-        gui_editor_button = self._tool_button(
-            "GUI Editor",
-            self.gui_editor_action,
-            MAIN_COMMAND_STRIP_ICON_KEYS["gui_editor"],
+        save_button = self._tool_button(
+            "Save",
+            self.save_scene_action,
+            "save",
         )
-        gui_editor_button.setObjectName("CommandStripGuiEditorButton")
-        gui_editor_button.setToolTip("Open the standalone GUI Editor for KOTOR .gui resources and PIE HUD previews")
-        layout.addWidget(gui_editor_button)
-        placeable_builder_button = self._tool_button(
-            "Placeables", self.placeable_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["placeable_builder"]
-        )
-        placeable_builder_button.setObjectName("CommandStripPlaceableBuilderButton")
-        placeable_builder_button.setToolTip(
-            "Open Placeable Builder and author reusable objects for the Map Studio Placeable Library"
-        )
-        layout.addWidget(placeable_builder_button)
-        particle_editor_button = self._tool_button(
-            "Particles", self.particle_editor_action, MAIN_COMMAND_STRIP_ICON_KEYS["particle_editor"]
-        )
-        particle_editor_button.setObjectName("CommandStripParticleEditorButton")
-        particle_editor_button.setToolTip(
-            "Open the Particle Editor: live emitter editing plus the K1/K2 retail emitter template library"
-        )
-        layout.addWidget(particle_editor_button)
-        scripting_studio_button = self._tool_button(
-            "Scripting Suite",
-            self.scripting_dialogue_studio_action,
-            MAIN_COMMAND_STRIP_ICON_KEYS["scripting_dialogue_studio"],
-        )
-        scripting_studio_button.setObjectName("CommandStripScriptingDialogueStudioButton")
-        scripting_studio_button.setToolTip(
-            "Open the complete Scripting Suite for narrative authoring, projects, packaging, and Map Studio handoff"
-        )
-        layout.addWidget(scripting_studio_button)
-        module_editor_button = self._tool_button("Module Editor", self.stock_module_editor_action, MAIN_COMMAND_STRIP_ICON_KEYS["module_editor"])
-        module_editor_button.setObjectName("CommandStripModuleEditorButton")
-        module_editor_button.setToolTip("Open Module Editor (Stock MOD/RIM Patcher)")
-        layout.addWidget(module_editor_button)
-        layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
-        layout.addWidget(self._tool_button("Settings  Ctrl+Comma", self.settings_action, "settings", compact=True))
+        layout.addWidget(new_button)
+        layout.addWidget(open_button)
+        layout.addWidget(save_button)
 
-        import_button = self._menu_button("Import", "import", [
-            self.import_obj_action,
-            self.import_fbx_action,
-            self.import_gltf_action,
-            None,
-            self.open_ascii_action,
-        ])
-        export_button = self._menu_button("Export", "export", [
-            self.export_binary_action,
-            self.export_obj_action,
-            self.export_fbx_action,
-            self.export_gltf_action,
-            None,
-            self.export_humanoid_action,
-            None,
-            self.save_ascii_action,
-            self.compile_action,
-        ])
-        camera_create_button = self._menu_button("Create Camera", "camera_cinematic", [
-            self.create_free_camera_action,
-            self.create_target_camera_action,
-            self.create_cinematic_camera_action,
-        ])
-        light_create_button = self._menu_button("Create Light", "light_point", [
-            self.create_point_light_action,
-            self.create_spot_light_action,
-            self.create_directional_light_action,
-            self.create_area_light_action,
-            self.create_ambient_light_action,
-        ])
+        launcher_button = self._tool_button(
+            "Studios and Tools",
+            self.command_launcher_action,
+            "content_browser",
+        )
+        launcher_button.setObjectName("CommandLauncherButton")
+        launcher_button.setAccessibleName("Open Studios and Tools")
+        launcher_button.setToolTip(
+            "Search and open any studio, tool, browser, or panel (Ctrl+K)"
+        )
+        layout.addWidget(launcher_button)
+
+        import_button = self._menu_button(
+            "Import",
+            "import",
+            [
+                self.open_model_action,
+                None,
+                self.import_obj_action,
+                self.import_fbx_action,
+                self.import_gltf_action,
+            ],
+            compact=True,
+        )
+        export_button = self._menu_button(
+            "Export",
+            "export",
+            [
+                self.export_scene_action,
+                self.export_binary_action,
+                self.export_obj_action,
+                self.export_fbx_action,
+                self.export_selected_fbx_action,
+                self.export_gltf_action,
+                None,
+                self.export_humanoid_action,
+                self.save_ascii_action,
+            ],
+            compact=True,
+        )
+        create_button = self._menu_button(
+            "Create",
+            "scene_add",
+            [
+                self.create_free_camera_action,
+                self.create_target_camera_action,
+                self.create_cinematic_camera_action,
+                None,
+                self.create_point_light_action,
+                self.create_spot_light_action,
+                self.create_directional_light_action,
+                self.create_area_light_action,
+                self.create_ambient_light_action,
+            ],
+        )
+        panels_button = self._menu_button(
+            "Panels",
+            "scene",
+            [
+                self.content_browser_action,
+                self.scene_panel_action,
+                self.properties_panel_action,
+                self.animation_browser_dock_action,
+                self.body_attachment_panel_action,
+                self.nodes_panel_action,
+                self.lighting_panel_action,
+                self.camera_panel_action,
+                self.module_meshes_panel_action,
+                self.mesh_tools_panel_action,
+                self.sprite_materials_panel_action,
+                self.adjust_pivot_panel_action,
+                self.twoda_panel_action,
+                self.resources_panel_action,
+                None,
+                self.output_log_panel_action,
+                self.python_terminal_panel_action,
+                self.diag_action,
+            ],
+        )
         layout.addWidget(import_button)
         layout.addWidget(export_button)
-        layout.addWidget(camera_create_button)
-        layout.addWidget(light_create_button)
+        layout.addWidget(create_button)
+        layout.addWidget(panels_button)
 
         layout.addStretch(1)
-        layout.addWidget(self._tool_button("Content", self.content_browser_action, MAIN_COMMAND_STRIP_ICON_KEYS["content_browser"], compact=True))
-        layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
-        layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
-        layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment", compact=True))
-        layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
-        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, MAIN_COMMAND_STRIP_ICON_KEYS["animation_browser"], compact=True))
-        layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["nodes"], compact=True))
-        layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
-        layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
-        layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["module_meshes"], compact=True))
-        layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action, "mesh_tools", compact=True))
-        layout.addWidget(self._tool_button("Sprite Materials", self.sprite_materials_panel_action, "sprite_materials", compact=True))
-        layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action, "viewport_gimbal", compact=True))
-        layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["twoda_browser"], compact=True))
-        layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["resource_browser"], compact=True))
-        layout.addWidget(self._tool_button("Log", self.output_log_panel_action, "output_log", compact=True))
-        layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action, "python_terminal", compact=True))
-        layout.addWidget(self._tool_button("Diagnostics  Ctrl+Shift+D", self.diag_action, "diag", compact=True))
+        layout.addWidget(
+            self._tool_button(
+                "Getting Started",
+                self.getting_started_action,
+                MAIN_ACTION_ICON_KEYS["tutorials"],
+                compact=True,
+            )
+        )
+        layout.addWidget(
+            self._tool_button(
+                "Settings",
+                self.settings_action,
+                "settings",
+                compact=True,
+            )
+        )
 
         self.visual_profile_combo = QtWidgets.QComboBox()
         self.visual_profile_combo.setObjectName("VisualProfileCombo")
-        self.visual_profile_combo.setToolTip("Apply a saved visual profile layout.")
-        self.visual_profile_combo.setMinimumWidth(170)
+        self.visual_profile_combo.setAccessibleName("Screen layout")
+        self.visual_profile_combo.setToolTip(
+            "Screen layout: apply a saved arrangement and density profile."
+        )
+        self.visual_profile_combo.setMinimumContentsLength(12)
+        self.visual_profile_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
         self._populate_visual_profile_combo()
         self.visual_profile_combo.currentIndexChanged.connect(self._on_visual_profile_selected)
         bar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
         self.workspace_switcher = WorkspaceSwitcher(self, current=load_saved_workspace_preset())
+        self.workspace_switcher.setAccessibleName("Authoring workspace")
+        self.workspace_switcher.setToolTip(
+            "Workspace: choose the dock-panel arrangement for your current task."
+        )
         self.workspace_switcher.presetSelected.connect(self.apply_workspace)
-        host_layout.addWidget(self.workspace_switcher, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         host_layout.addWidget(bar, 1)
+        host_layout.addWidget(self.workspace_switcher, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         host_layout.addWidget(self.visual_profile_combo, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self._responsive_command_buttons = [
+            new_button,
+            open_button,
+            save_button,
+            create_button,
+            panels_button,
+        ]
+        self._command_bar_full_width_hint = host.sizeHint().width()
+        QtCore.QTimer.singleShot(0, self._update_command_bar_responsiveness)
         return host
+
+    def _update_command_bar_responsiveness(self) -> None:
+        host = getattr(self, "command_bar_host", None)
+        buttons = getattr(self, "_responsive_command_buttons", ())
+        if host is None or not buttons:
+            return
+        full_width = int(getattr(self, "_command_bar_full_width_hint", 0) or 0)
+        narrow = full_width > 0 and host.width() < full_width
+        mode = self._main_command_button_mode()
+        for button in buttons:
+            self._set_responsive_command_button_mode(
+                button,
+                "iconOnly" if narrow else mode,
+                forced_compact=narrow,
+            )
+
+    def _main_command_button_mode(self) -> str:
+        manager = getattr(self, "layout_manager", None)
+        if manager is None:
+            return "textBesideIcon"
+        override = str(getattr(manager.settings, "button_mode_override", "") or "")
+        if override:
+            return override
+        try:
+            layout = manager.current_layout or manager.get_layout()
+            return str(layout.toolbar("main").button_mode or "textBesideIcon")
+        except Exception:
+            return "textBesideIcon"
+
+    @staticmethod
+    def _set_responsive_command_button_mode(
+        button: QtWidgets.QToolButton,
+        mode: str,
+        *,
+        forced_compact: bool,
+    ) -> None:
+        full_text = str(button.property("_gr_full_text") or button.text() or "")
+        styles = {
+            "iconOnly": QtCore.Qt.ToolButtonIconOnly,
+            "textOnly": QtCore.Qt.ToolButtonTextOnly,
+            "textUnderIcon": QtCore.Qt.ToolButtonTextUnderIcon,
+            "textBesideIcon": QtCore.Qt.ToolButtonTextBesideIcon,
+        }
+        resolved_mode = mode if mode in styles else "textBesideIcon"
+        button.setProperty("_gr_ignore_layout_button_mode", forced_compact)
+        button.setText("" if resolved_mode == "iconOnly" else full_text)
+        button.setToolButtonStyle(styles[resolved_mode])
+        if forced_compact:
+            target_size = max(32, button.fontMetrics().lineSpacing() + 12)
+            button.setMinimumWidth(target_size)
+        else:
+            button.setMinimumWidth(0)
 
     def _populate_visual_profile_combo(self) -> None:
         combo = getattr(self, "visual_profile_combo", None)
@@ -1102,26 +1424,36 @@ class WindowChromeMixin:
         button = QtWidgets.QToolButton()
         button.setObjectName("CommandStripButton")
         display_text = self._command_button_label(text, action)
-        button.setText("")
         button.setProperty("_gr_full_text", display_text)
-        button.setProperty("_gr_ignore_layout_button_mode", True)
+        button.setProperty("_gr_ignore_layout_button_mode", compact)
+        button.setDefaultAction(action)
+        button.setText("" if compact else display_text)
         if icon_name:
             button.setIcon(self._icon(icon_name, 18))
-        button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        button.setToolButtonStyle(
+            QtCore.Qt.ToolButtonIconOnly
+            if compact
+            else QtCore.Qt.ToolButtonTextBesideIcon
+        )
         button.setIconSize(QtCore.QSize(18, 18))
-        button.setFixedSize(30, 22)
-        button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        target_size = max(32, button.fontMetrics().lineSpacing() + 12)
+        button.setMinimumHeight(target_size)
+        if compact:
+            button.setMinimumWidth(target_size)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         button.setProperty("accent", accent)
         button.setProperty("compact", compact)
-        if action.isCheckable():
-            button.setCheckable(True)
-            button.setChecked(action.isChecked())
-            action.toggled.connect(button.setChecked)
-        button.clicked.connect(action.trigger)
+        button.setAccessibleName(str(action.text()).replace("&", ""))
+        description = str(action.statusTip() or action.toolTip() or "")
+        if description:
+            button.setAccessibleDescription(description)
         if action.shortcut():
-            button.setToolTip(f"{action.text()} ({action.shortcut().toString()})")
+            tooltip = f"{action.text()} ({action.shortcut().toString()})"
         else:
-            button.setToolTip(action.text())
+            tooltip = str(action.text())
+        if description and description != action.text():
+            tooltip = f"{tooltip}\n{description}"
+        button.setToolTip(tooltip)
         return button
 
     @staticmethod
@@ -1139,20 +1471,31 @@ class WindowChromeMixin:
         text: str,
         icon_name: str,
         actions: list[Optional[QtGui.QAction]],
+        *,
+        compact: bool = False,
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
         button.setObjectName("CommandStripMenuButton")
-        button.setText("")
+        button.setText("" if compact else text)
         button.setProperty("_gr_full_text", text)
-        button.setProperty("_gr_ignore_layout_button_mode", True)
+        button.setProperty("_gr_ignore_layout_button_mode", compact)
         button.setIcon(self._icon(icon_name, 18))
-        button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        button.setToolButtonStyle(
+            QtCore.Qt.ToolButtonIconOnly
+            if compact
+            else QtCore.Qt.ToolButtonTextBesideIcon
+        )
         button.setIconSize(QtCore.QSize(18, 18))
-        button.setFixedSize(34, 22)
-        button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        target_size = max(32, button.fontMetrics().lineSpacing() + 12)
+        button.setMinimumHeight(target_size)
+        if compact:
+            button.setMinimumWidth(target_size)
+        button.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
-        button.setToolTip(text)
+        button.setAccessibleName(f"{text} menu")
+        button.setToolTip(f"Open the {text.lower()} commands")
         menu = QtWidgets.QMenu(button)
+        menu.setAccessibleName(f"{text} commands")
         for action in actions:
             self._add_menu_action(menu, action)
         button.setMenu(menu)

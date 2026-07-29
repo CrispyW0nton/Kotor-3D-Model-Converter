@@ -1733,7 +1733,9 @@ def test_main_window_exposes_visual_profile_dropdown() -> None:
     assert "_populate_visual_profile_combo" in command_bar_source
     assert 'layout.id == "default"' in combo_source
     assert "continue" in combo_source
-    assert "_on_visual_profile_selected" in inspect.getsource(QtGhostRiggerMainWindow)
+    assert "_on_visual_profile_selected" in inspect.getsource(
+        QtGhostRiggerMainWindow._on_visual_profile_selected
+    )
 
 
 def test_startup_splash_uses_themed_embedded_progress() -> None:

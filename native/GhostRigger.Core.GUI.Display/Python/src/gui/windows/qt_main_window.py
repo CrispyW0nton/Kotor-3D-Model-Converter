@@ -409,19 +409,20 @@ class QtGhostRiggerMainWindow(
             QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)
 
     def _apply_startup_ui_defaults(self) -> None:
-        self.settings_data["viewport_navigation_profile"] = "3dsmax"
+        self.settings_data.setdefault(
+            "viewport_navigation_profile",
+            DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
+        )
         theme_layout = self.settings_data.setdefault("theme_layout", {})
         if isinstance(theme_layout, dict):
-            theme_layout["selected_layout"] = "default"
-            overrides = theme_layout.get("layout_overrides")
-            if isinstance(overrides, dict):
-                overrides.pop("default", None)
-        self.settings_data["show_adjust_pivot_toolbox"] = False
+            theme_layout.setdefault("selected_layout", "default")
+        self.settings_data.setdefault("show_adjust_pivot_toolbox", False)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._progress_toast is not None and self._progress_toast.isVisible():
             self._progress_toast._reposition()
+        self._update_command_bar_responsiveness()
         self._sync_reserved_top_rows()
 
     def _start_ipc_server(self) -> None:

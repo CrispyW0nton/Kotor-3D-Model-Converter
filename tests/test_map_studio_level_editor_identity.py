@@ -63,8 +63,11 @@ def test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries() -
     assert "self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)" in chrome_source
     assert 'QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["module_editor"]), "Open Module Editor (Stock MOD/RIM Patcher)", self)' in chrome_source
     assert "self.stock_module_editor_action.triggered.connect(self._open_stock_module_editor_window)" in chrome_source
-    assert '"CommandStripMapStudioButton"' in chrome_source
-    assert '"CommandStripModuleEditorButton"' in chrome_source
+    assert "def _command_launcher_groups" in chrome_source
+    assert "self.modules_action," in chrome_source
+    assert "self.stock_module_editor_action," in chrome_source
+    assert '"CommandStripMapStudioButton"' not in chrome_source
+    assert '"CommandStripModuleEditorButton"' not in chrome_source
     assert "Patch textures, walkmeshes, and objects in existing stock" in chrome_source
     main_toolbar_band_source = chrome_source.split("def _make_viewport_toolbar_band", 1)[1].split(
         "def _make_viewport_modeling_tabs",
@@ -3523,9 +3526,10 @@ def test_t2600_modeling_tabs_exist_only_after_the_main_window_opens_map_studio()
         ]
         assert blank_controls == []
 
-        command_icon = window.findChild(QtWidgets.QToolButton, "CommandStripMapStudioButton")
+        command_icon = window.findChild(QtWidgets.QToolButton, "CommandLauncherButton")
         assert command_icon is not None
-        assert command_icon.toolTip() == "Open Map Studio (KMAP Area Authoring)"
+        assert command_icon.text() == "Studios and Tools"
+        assert command_icon.accessibleName() == "Open Studios and Tools"
         assert window.findChild(QtWidgets.QToolButton, "ViewportToolbarMapStudioModelingButton") is None
         top_toolbar = window.findChild(QtWidgets.QToolBar, "ReservedTopToolbar")
         assert top_toolbar is not None
@@ -3540,6 +3544,13 @@ def test_t2600_modeling_tabs_exist_only_after_the_main_window_opens_map_studio()
         assert top_toolbar.maximumHeight() >= toolbar_band.height()
 
         command_icon.click()
+        app.processEvents()
+        command_dialog = getattr(window, "_command_launcher_dialog", None)
+        assert command_dialog is not None
+        command_dialog.search_edit.setText("Map Studio")
+        app.processEvents()
+        assert command_dialog.command_tree.currentItem().text(0).startswith("Open Map Studio")
+        command_dialog._activate_current()
         app.processEvents()
 
         module_window = getattr(window, "module_editor_window", None)
@@ -3802,9 +3813,15 @@ def test_t2600_map_studio_viewport_mode_buttons_route_owning_workspaces_runtime(
             QtWidgets.QToolButton,
             "ViewportToolbarMapStudioModeButton_object",
         ) is None
-        command = window.findChild(QtWidgets.QToolButton, "CommandStripMapStudioButton")
+        command = window.findChild(QtWidgets.QToolButton, "CommandLauncherButton")
         assert command is not None
         command.click()
+        app.processEvents()
+        command_dialog = getattr(window, "_command_launcher_dialog", None)
+        assert command_dialog is not None
+        command_dialog.search_edit.setText("Map Studio")
+        app.processEvents()
+        command_dialog._activate_current()
         app.processEvents()
         module_window = getattr(window, "module_editor_window", None)
         assert module_window is not None

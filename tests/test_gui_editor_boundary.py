@@ -183,7 +183,8 @@ def test_main_shell_registers_a_distinct_gui_editor_action_and_icon() -> None:
 
     assert '"gui_editor": "gui_editor"' in chrome
     assert 'self.gui_editor_action.triggered.connect(self._open_gui_editor_window)' in chrome
-    assert 'gui_editor_button.setObjectName("CommandStripGuiEditorButton")' in chrome
+    assert "def _command_launcher_groups" in chrome
+    assert "self.gui_editor_action," in chrome
     assert "GuiEditorWorkflowMixin" in main_window
     assert '"gui_editor": self._open_gui_editor_window' in main_window
     assert "map_studio" not in editor.casefold()

@@ -324,7 +324,20 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
         advanced_page = QtWidgets.QWidget()
         advanced_root = QtWidgets.QVBoxLayout(advanced_page)
+        advanced_guidance = QtWidgets.QLabel(
+            "These options expose development and diagnostics features that are not needed for normal authoring."
+        )
+        advanced_guidance.setWordWrap(True)
+        advanced_root.addWidget(advanced_guidance)
+        self.developer_mode_check = QtWidgets.QCheckBox("Enable Developer Mode")
+        self.developer_mode_check.setToolTip(
+            "Show the Developer menu with IPC server and integration diagnostics."
+        )
+        advanced_root.addWidget(self.developer_mode_check)
         self.hot_reload_check = QtWidgets.QCheckBox("Hot reload theme and layout XML during development")
+        self.hot_reload_check.setToolTip(
+            "Reload edited theme and layout XML while GhostStudio is running."
+        )
         advanced_root.addWidget(self.hot_reload_check)
         advanced_root.addStretch(1)
         tabs.addTab(advanced_page, "Advanced")
@@ -418,6 +431,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self._set_combo_data(self.layout_combo, self.theme_layout_settings.selected_layout)
         self._set_combo_data(self.button_mode_combo, self.theme_layout_settings.button_mode_override)
         self.icon_size_spin.setValue(int(self.theme_layout_settings.icon_size_override or 0))
+        self.developer_mode_check.setChecked(bool(self.settings.get("developer_mode", False)))
         self.hot_reload_check.setChecked(bool(self.theme_layout_settings.hot_reload_enabled))
         measurement = MeasurementSettings.from_dict(self.settings.get("measurement", {}))
         for combo, unit in (
@@ -521,6 +535,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "mdlops_path": self.mdlops_path.text().strip(),
             "viewport_navigation_profile": self.viewport_navigation_profile.currentData(),
             "autoscan": self.autoscan_check.isChecked(),
+            "developer_mode": self.developer_mode_check.isChecked(),
             "renderer": {
                 "backend": self.renderer_backend_combo.currentData(),
                 "preferred_windows_backend": RendererBackend.WGPU_D3D12.value,

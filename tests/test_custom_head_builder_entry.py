@@ -826,7 +826,8 @@ def test_main_shell_tutorial_and_external_aliases_have_direct_head_routes() -> N
     assert '"Custom KOTOR Head Builder..."' in chrome_source
     assert '"Ctrl+Shift+H"' in chrome_source
     assert "tools_menu.addAction(self.head_builder_action)" in chrome_source
-    assert '"CommandStripHeadBuilderButton"' in chrome_source
+    assert "def _command_launcher_groups" in chrome_source
+    assert "self.head_builder_action," in chrome_source
     assert (
         'self._open_qt_character_builder_window("native_kotor_head")'
         in lifecycle_source

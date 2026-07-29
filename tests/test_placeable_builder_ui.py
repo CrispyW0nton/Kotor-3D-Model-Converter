@@ -270,7 +270,8 @@ def test_main_shell_has_lazy_placeable_builder_route_and_dedicated_icon() -> Non
     assert 'self._icon(MAIN_ACTION_ICON_KEYS["placeable_builder"]), "Open Placeable Builder...", self' in chrome
     assert "self.placeable_builder_action.triggered.connect(self._open_placeable_builder_window)" in chrome
     assert "tools_menu.addAction(self.placeable_builder_action)" in chrome
-    assert '"CommandStripPlaceableBuilderButton"' in chrome
+    assert "def _command_launcher_groups" in chrome
+    assert "self.placeable_builder_action," in chrome
     assert "def _open_placeable_builder_window(self):" in routing
     assert "from src.gui.qt_lib.windows.qt_placeable_builder import QtPlaceableBuilderWindow" in routing
     assert '"qt_placeable_builder"' in facade
