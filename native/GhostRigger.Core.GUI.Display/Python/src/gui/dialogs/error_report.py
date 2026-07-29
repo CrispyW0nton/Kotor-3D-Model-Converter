@@ -38,6 +38,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 __all__ = [
     "ErrorReport",
+    "QtErrorReportDialog",
     "report_from_exception",
     "show_error_report",
     "show_exception",
@@ -56,6 +57,13 @@ _CATEGORY_TITLES: dict[str, str] = {
     "timeout_error": "Operation Timed Out",
     "io_error": "I/O Error",
     "unknown_error": "Something Went Wrong",
+}
+
+_RECOVERY_GUIDANCE: dict[str, str] = {
+    "refresh_resources": "Scan the resource catalog again.",
+    "browse_resources": "Open the Resource Browser and inspect available templates.",
+    "choose_another": "Choose another resource or template.",
+    "enter_resource_identity": "Enter the resource name and type explicitly.",
 }
 
 
@@ -115,10 +123,32 @@ class ErrorReport:
     user_message: str
     detail: str = ""
     recovery_actions: list[tuple[str, Callable[[], None]]] = field(default_factory=list)
+    subject: str = ""
+    reason: str = ""
+    searched_scopes: tuple[str, ...] = ()
+    recovery_guidance: tuple[str, ...] = ()
+    preservation_message: str = ""
 
     def __post_init__(self) -> None:
         # Defensive copy so callers cannot mutate the stored action list.
         self.recovery_actions = list(self.recovery_actions or [])
+        self.subject = str(self.subject or "").strip()
+        self.reason = str(self.reason or "").strip()
+        self.searched_scopes = tuple(
+            dict.fromkeys(
+                str(scope).strip()
+                for scope in self.searched_scopes
+                if str(scope).strip()
+            )
+        )
+        self.recovery_guidance = tuple(
+            dict.fromkeys(
+                str(guidance).strip()
+                for guidance in self.recovery_guidance
+                if str(guidance).strip()
+            )
+        )
+        self.preservation_message = str(self.preservation_message or "").strip()
 
     @property
     def title(self) -> str:
@@ -142,7 +172,9 @@ def report_from_exception(
     exception type. The full formatted traceback is placed in ``detail``.
     """
 
-    message = user_message or _friendly_message_for(exc)
+    failure = getattr(exc, "failure", None)
+    failure_message = getattr(failure, "user_message", "") if failure is not None else ""
+    message = user_message or failure_message or _friendly_message_for(exc)
     if context:
         message = f"{context}: {message}"
     # Preserve the original category the caller asked for (it may be more
@@ -157,98 +189,160 @@ def report_from_exception(
         user_message=message,
         detail=detail_text,
         recovery_actions=list(recovery_actions or []),
+        subject=getattr(failure, "subject", "") if failure is not None else "",
+        reason=getattr(failure, "reason", "") if failure is not None else "",
+        searched_scopes=tuple(getattr(failure, "searched_scopes", ()) or ()),
+        recovery_guidance=tuple(
+            _RECOVERY_GUIDANCE[key]
+            for key in tuple(getattr(failure, "recovery_options", ()) or ())
+            if key in _RECOVERY_GUIDANCE
+        ),
+        preservation_message=(
+            "No project or source data was changed." if failure is not None else ""
+        ),
     )
 
 
-def show_error_report(parent: QtWidgets.QWidget, report: ErrorReport) -> None:
-    """Present ``report`` in a well-structured, window-modal dialog.
+class QtErrorReportDialog(QtWidgets.QDialog):
+    """Accessible error dialog with evidence, recovery, and preserved-state details."""
 
-    Layout: prominent user message -> "Show Details" expander (collapsible,
-    holding the raw traceback) -> recovery action buttons -> "Copy to
-    Clipboard" + "Close" standard buttons. Recovery callbacks are guarded so a
-    faulty recovery handler cannot crash the dialog.
-    """
+    def __init__(
+        self,
+        report: ErrorReport,
+        parent: Optional[QtWidgets.QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self.report = report
+        self.setObjectName("ErrorReportDialog")
+        self.setWindowTitle(report.title)
+        self.setWindowModality(QtCore.Qt.WindowModal)
+        self.setMinimumWidth(500)
+        self.setAccessibleName(report.title)
+        self.setAccessibleDescription(self._accessible_description())
 
-    dialog = QtWidgets.QDialog(parent)
-    dialog.setObjectName("ErrorReportDialog")
-    dialog.setWindowTitle(report.title)
-    dialog.setWindowModality(QtCore.Qt.WindowModal)
-    dialog.setMinimumWidth(460)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(12)
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(12)
+        icon_label = QtWidgets.QLabel()
+        icon_label.setPixmap(
+            self.style().standardIcon(QtWidgets.QStyle.SP_MessageBoxCritical).pixmap(32, 32)
+        )
+        icon_label.setFixedSize(32, 32)
+        header.addWidget(icon_label, 0, QtCore.Qt.AlignTop)
+        self.message_label = QtWidgets.QLabel(report.user_message)
+        self.message_label.setTextFormat(QtCore.Qt.PlainText)
+        self.message_label.setWordWrap(True)
+        self.message_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        header.addWidget(self.message_label, 1)
+        layout.addLayout(header)
 
-    layout = QtWidgets.QVBoxLayout(dialog)
-    layout.setContentsMargins(20, 18, 20, 16)
-    layout.setSpacing(12)
+        evidence_rows: list[str] = []
+        if report.subject:
+            evidence_rows.append(f"Item: {report.subject}")
+        if report.reason:
+            evidence_rows.append(f"Reason: {report.reason}")
+        if report.searched_scopes:
+            evidence_rows.append(f"Searched: {'; '.join(report.searched_scopes)}")
+        if evidence_rows:
+            self.evidence_label = QtWidgets.QLabel("\n".join(evidence_rows))
+            self.evidence_label.setObjectName("ErrorReportEvidence")
+            self.evidence_label.setTextFormat(QtCore.Qt.PlainText)
+            self.evidence_label.setWordWrap(True)
+            self.evidence_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+            layout.addWidget(self.evidence_label)
 
-    # Header row: severity icon + user message.
-    header = QtWidgets.QHBoxLayout()
-    header.setSpacing(12)
-    icon_label = QtWidgets.QLabel()
-    style = getattr(dialog, "style", None)
-    icon = QtWidgets.QStyle.SP_MessageBoxCritical
-    if style is not None:
-        icon_label.setPixmap(dialog.style().standardIcon(icon).pixmap(32, 32))
-    icon_label.setFixedSize(32, 32)
-    header.addWidget(icon_label, 0, QtCore.Qt.AlignTop)
+        if report.recovery_guidance:
+            recovery_label = QtWidgets.QLabel(
+                "What you can do:\n"
+                + "\n".join(f"• {guidance}" for guidance in report.recovery_guidance)
+            )
+            recovery_label.setObjectName("ErrorReportRecovery")
+            recovery_label.setTextFormat(QtCore.Qt.PlainText)
+            recovery_label.setWordWrap(True)
+            layout.addWidget(recovery_label)
+        if report.preservation_message:
+            preservation_label = QtWidgets.QLabel(report.preservation_message)
+            preservation_label.setObjectName("ErrorReportPreservation")
+            preservation_label.setTextFormat(QtCore.Qt.PlainText)
+            preservation_label.setWordWrap(True)
+            layout.addWidget(preservation_label)
 
-    message_label = QtWidgets.QLabel(report.user_message)
-    message_label.setWordWrap(True)
-    message_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-    header.addWidget(message_label, 1)
-    layout.addLayout(header)
+        self.detail_button = QtWidgets.QPushButton("Show Details")
+        self.detail_button.setCheckable(True)
+        self.detail_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Maximum,
+            QtWidgets.QSizePolicy.Fixed,
+        )
+        self.detail_edit = QtWidgets.QPlainTextEdit()
+        self.detail_edit.setReadOnly(True)
+        self.detail_edit.setPlainText(report.detail or "(no details available)")
+        self.detail_edit.setMinimumHeight(140)
+        self.detail_edit.setVisible(False)
+        self.detail_edit.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self.detail_button.toggled.connect(self._toggle_details)
+        layout.addWidget(self.detail_button, 0, QtCore.Qt.AlignLeft)
+        layout.addWidget(self.detail_edit)
 
-    # Collapsible detail expander.
-    detail_button = QtWidgets.QPushButton("Show Details")
-    detail_button.setCheckable(True)
-    detail_button.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Fixed)
-    detail_edit = QtWidgets.QPlainTextEdit()
-    detail_edit.setReadOnly(True)
-    detail_edit.setPlainText(report.detail or "(no details available)")
-    detail_edit.setMinimumHeight(140)
-    detail_edit.setVisible(False)
-    detail_edit.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        button_row = QtWidgets.QHBoxLayout()
+        for label, callback in report.recovery_actions:
+            action_button = QtWidgets.QPushButton(label)
+            action_button.clicked.connect(
+                lambda _checked=False, cb=callback: self._invoke_recovery(cb)
+            )
+            button_row.addWidget(action_button)
+        button_row.addStretch(1)
+        copy_button = QtWidgets.QPushButton("Copy to Clipboard")
+        close_button = QtWidgets.QPushButton("Close")
+        close_button.setDefault(True)
+        copy_button.clicked.connect(self._copy_to_clipboard)
+        close_button.clicked.connect(self.accept)
+        button_row.addWidget(copy_button)
+        button_row.addWidget(close_button)
+        layout.addLayout(button_row)
 
-    def _toggle_details(checked: bool) -> None:
-        detail_edit.setVisible(checked)
-        detail_button.setText("Hide Details" if checked else "Show Details")
-        dialog.adjustSize()
+    def _accessible_description(self) -> str:
+        report = self.report
+        rows = [report.user_message]
+        if report.subject:
+            rows.append(f"Item: {report.subject}")
+        if report.reason:
+            rows.append(f"Reason: {report.reason}")
+        if report.searched_scopes:
+            rows.append(f"Searched: {'; '.join(report.searched_scopes)}")
+        rows.extend(report.recovery_guidance)
+        if report.preservation_message:
+            rows.append(report.preservation_message)
+        return " ".join(rows)
 
-    detail_button.toggled.connect(_toggle_details)
-    layout.addWidget(detail_button, 0, QtCore.Qt.AlignLeft)
-    layout.addWidget(detail_edit)
+    def _toggle_details(self, checked: bool) -> None:
+        self.detail_edit.setVisible(checked)
+        self.detail_button.setText("Hide Details" if checked else "Show Details")
+        self.adjustSize()
 
-    # Recovery actions + standard buttons.
-    button_row = QtWidgets.QHBoxLayout()
-    for label, callback in report.recovery_actions:
-        action_button = QtWidgets.QPushButton(label)
+    def _invoke_recovery(self, callback: Callable[[], None]) -> None:
+        try:
+            callback()
+        except Exception:  # pragma: no cover - recovery must not crash the dialog
+            traceback.print_exc()
+        self.accept()
 
-        def _invoke(checked: bool = False, cb: Callable[[], None] = callback) -> None:
-            try:
-                cb()
-            except Exception:  # pragma: no cover - defensive: recovery must not crash UI
-                traceback.print_exc()
-            dialog.accept()
-
-        action_button.clicked.connect(_invoke)
-        button_row.addWidget(action_button)
-
-    button_row.addStretch(1)
-
-    copy_button = QtWidgets.QPushButton("Copy to Clipboard")
-    close_button = QtWidgets.QPushButton("Close")
-    close_button.setDefault(True)
-
-    def _copy_to_clipboard() -> None:
-        payload = f"{report.title}\n\n{report.user_message}\n\n{report.detail}"
+    def _copy_to_clipboard(self) -> None:
+        report = self.report
+        payload = (
+            f"{report.title}\n\n{report.user_message}\n\n"
+            f"{self._accessible_description()}\n\n{report.detail}"
+        )
         clip = QtWidgets.QApplication.clipboard()
         if clip is not None:
             clip.setText(payload)
 
-    copy_button.clicked.connect(_copy_to_clipboard)
-    close_button.clicked.connect(dialog.accept)
-    button_row.addWidget(copy_button)
-    button_row.addWidget(close_button)
-    layout.addLayout(button_row)
 
+def show_error_report(parent: QtWidgets.QWidget, report: ErrorReport) -> None:
+    """Present ``report`` in a structured, window-modal dialog."""
+
+    dialog = QtErrorReportDialog(report, parent)
     dialog.exec()
 
 

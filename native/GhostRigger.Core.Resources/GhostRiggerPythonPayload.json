@@ -87,7 +87,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_GAME_RESOURCE_PROVIDER",
             "source_path": "src/core/resources/game_resource_provider.py",
             "packaged_path": "Python/src/core/resources/game_resource_provider.py",
-            "sha256": "b02b90ff851d70042f893ea753a9195828e8907719db979554e093be125d7ba2"
+            "sha256": "4597ccae1fe41800f88a460cfa38e355aced293023dc2dfe38dd1a04974b83ec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_HEAD_DONOR_CATALOG",

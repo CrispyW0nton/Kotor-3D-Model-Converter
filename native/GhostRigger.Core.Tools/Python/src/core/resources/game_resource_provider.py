@@ -14,7 +14,6 @@ from typing import Any, Iterable, Protocol
 
 from src.core.project.resource_address import ResourceAddress
 
-
 _RESTYPE_TO_EXT: dict[str, str] = {
     "MDL": "mdl",
     "MDX": "mdx",
@@ -58,10 +57,6 @@ _LAYER_PRIORITY = {
 }
 
 
-class GameResourceNotFoundError(FileNotFoundError):
-    """Raised when a provider cannot resolve a requested resource."""
-
-
 @dataclass(frozen=True)
 class GameResourceQuery:
     """Normalized read-only resource lookup request."""
@@ -92,6 +87,89 @@ class GameResourceQuery:
             layer=self.layer,
             path=self.path,
         )
+
+
+@dataclass(frozen=True)
+class GameResourceLookupFailure:
+    """Structured evidence for a failed resource lookup.
+
+    Resource services own the identity and search evidence. Presentation
+    layers can turn this value into a dialog, inline state, log entry, or IPC
+    response without parsing an exception string.
+    """
+
+    query: GameResourceQuery
+    reason: str = "No matching resource was available."
+    searched_scopes: tuple[str, ...] = ()
+    recovery_options: tuple[str, ...] = (
+        "refresh_resources",
+        "browse_resources",
+        "choose_another",
+    )
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "query", coerce_resource_query(self.query))
+        object.__setattr__(self, "reason", str(self.reason or "No matching resource was available.").strip())
+        object.__setattr__(
+            self,
+            "searched_scopes",
+            tuple(dict.fromkeys(str(scope).strip() for scope in self.searched_scopes if str(scope).strip())),
+        )
+        object.__setattr__(
+            self,
+            "recovery_options",
+            tuple(dict.fromkeys(str(option).strip() for option in self.recovery_options if str(option).strip())),
+        )
+
+    @property
+    def subject(self) -> str:
+        if self.query.path:
+            return self.query.path
+        suffix = f".{self.query.restype.lower()}" if self.query.restype else ""
+        return f"{self.query.resref or 'resource'}{suffix}"
+
+    @property
+    def target_game(self) -> str:
+        return str(self.query.game or "").upper()
+
+    @property
+    def user_message(self) -> str:
+        game = f" for {self.target_game}" if self.target_game else ""
+        message = f"{self.subject} was not found{game}. {self.reason}"
+        if self.searched_scopes:
+            message += f" Searched {_human_join(self.searched_scopes)}."
+        return message
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "subject": self.subject,
+            "target_game": self.target_game,
+            "reason": self.reason,
+            "searched_scopes": list(self.searched_scopes),
+            "recovery_options": list(self.recovery_options),
+            "query": {
+                "game": self.query.game,
+                "module_id": self.query.module_id,
+                "resref": self.query.resref,
+                "restype": self.query.restype,
+                "layer": self.query.layer,
+                "path": self.query.path,
+            },
+            "user_message": self.user_message,
+        }
+
+
+class GameResourceNotFoundError(FileNotFoundError):
+    """Raised with typed evidence when a provider cannot resolve a resource."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        failure: GameResourceLookupFailure | None = None,
+    ) -> None:
+        self.failure = failure
+        super().__init__(str(message or (failure.user_message if failure else "Resource not found.")))
 
 
 @dataclass(frozen=True)
@@ -189,8 +267,14 @@ def coerce_resource_query(value: GameResourceQuery | ResourceAddress | dict[str,
 class InMemoryGameResourceProvider:
     """Simple provider for tests, project layers, and generated candidates."""
 
-    def __init__(self, resources: Iterable[tuple[GameResourceRecord, bytes] | GameResourceResult] = ()) -> None:
+    def __init__(
+        self,
+        resources: Iterable[tuple[GameResourceRecord, bytes] | GameResourceResult] = (),
+        *,
+        scope_label: str = "project and generated resources",
+    ) -> None:
         self._entries: list[GameResourceResult] = []
+        self.scope_label = str(scope_label or "project and generated resources").strip()
         for item in resources:
             if isinstance(item, GameResourceResult):
                 self.add(item.record, item.data)
@@ -213,7 +297,7 @@ class InMemoryGameResourceProvider:
         q = coerce_resource_query(query)
         matches = [entry for entry in self._entries if _record_matches(entry.record, q)]
         if not matches:
-            raise GameResourceNotFoundError(_missing_message(q))
+            raise _missing_error(q, (self.scope_label,))
         matches.sort(key=lambda entry: (-entry.record.priority, entry.record.source, entry.record.address.stable_key()))
         selected = matches[0]
         shadowed = [entry.record for entry in matches[1:]]
@@ -264,10 +348,20 @@ class LocalFileResourceProvider:
     def resolve(self, query: GameResourceQuery | ResourceAddress) -> GameResourceResult:
         q = coerce_resource_query(query)
         if not q.path:
-            raise GameResourceNotFoundError("Local file resource requires a path.")
+            raise _missing_error(
+                q,
+                ("the selected local file",),
+                reason="A local file path is required.",
+                recovery_options=("browse_resources", "choose_another"),
+            )
         path = Path(q.path)
         if not path.exists() or not path.is_file():
-            raise GameResourceNotFoundError(f"Local file resource not found: {path}")
+            raise _missing_error(
+                q,
+                (f"local path {path}",),
+                reason="The selected file no longer exists or is not a file.",
+                recovery_options=("browse_resources", "choose_another"),
+            )
         data = path.read_bytes()
         return GameResourceResult(record=self._record_for_path(path, q, size=len(data)), data=data)
 
@@ -318,13 +412,19 @@ class CompositeGameResourceProvider:
     def resolve(self, query: GameResourceQuery | ResourceAddress) -> GameResourceResult:
         q = coerce_resource_query(query)
         matches: list[GameResourceResult] = []
+        searched_scopes: list[str] = []
         for provider in self.providers:
             try:
                 matches.append(provider.resolve(q))
-            except GameResourceNotFoundError:
+            except GameResourceNotFoundError as exc:
+                failure = getattr(exc, "failure", None)
+                if failure is not None:
+                    searched_scopes.extend(failure.searched_scopes)
+                else:
+                    searched_scopes.append(type(provider).__name__)
                 continue
         if not matches:
-            raise GameResourceNotFoundError(_missing_message(q))
+            raise _missing_error(q, searched_scopes or _default_resource_scopes(q))
         matches.sort(key=lambda result: (-result.record.priority, result.record.source, result.record.address.stable_key()))
         selected = matches[0]
         shadowed = [*selected.shadowed_records, *(result.record for result in matches[1:])]
@@ -381,20 +481,30 @@ class ResourceManagerGameResourceProvider:
     def resolve(self, query: GameResourceQuery | ResourceAddress) -> GameResourceResult:
         q = coerce_resource_query(query)
         if not q.resref or not q.restype:
-            raise GameResourceNotFoundError("Game resource lookup requires resref and restype.")
+            raise _missing_error(
+                q,
+                _resource_manager_search_scopes(q),
+                reason="Both a resource name and resource type are required.",
+                recovery_options=("enter_resource_identity", "browse_resources"),
+            )
         restype_id = _resource_manager_type_id(q.restype)
         if restype_id is None:
-            raise GameResourceNotFoundError(f"Unsupported resource type: {q.restype}")
+            raise _missing_error(
+                q,
+                _resource_manager_search_scopes(q),
+                reason=f"{q.restype} is not a supported resource type.",
+                recovery_options=("choose_another", "browse_resources"),
+            )
         game = _manager_game_name(q.game)
         candidates = self.list_resources(q)
         getter = getattr(self.manager, "get_strict", None) if q.game else None
         read_manager = getter if callable(getter) else self.manager.get
         if not candidates:
             if q.module_id or q.layer or q.path:
-                raise GameResourceNotFoundError(_missing_message(q))
+                raise _missing_error(q, _resource_manager_search_scopes(q))
             data = read_manager(q.resref, restype_id, game)
             if data is None:
-                raise GameResourceNotFoundError(_missing_message(q))
+                raise _missing_error(q, _resource_manager_search_scopes(q))
             address = q.to_address(scheme="game_resource")
             candidates = [
                 GameResourceRecord(
@@ -409,10 +519,10 @@ class ResourceManagerGameResourceProvider:
         data = _read_selected_install_record(inst, selected, q.resref, restype_id)
         if data is None:
             if q.module_id or q.layer or q.path:
-                raise GameResourceNotFoundError(_missing_message(q))
+                raise _missing_error(q, _resource_manager_search_scopes(q))
             data = read_manager(q.resref, restype_id, game)
         if data is None:
-            raise GameResourceNotFoundError(_missing_message(q))
+            raise _missing_error(q, _resource_manager_search_scopes(q))
         if selected.size == 0:
             selected = replace(selected, size=len(data))
         shadowed = candidates[1:]
@@ -687,10 +797,59 @@ def _shadow_warnings(selected: GameResourceRecord, shadowed: list[GameResourceRe
     ]
 
 
-def _missing_message(query: GameResourceQuery) -> str:
+def _missing_error(
+    query: GameResourceQuery,
+    searched_scopes: Iterable[str],
+    *,
+    reason: str = "No matching resource was available.",
+    recovery_options: Iterable[str] = (
+        "refresh_resources",
+        "browse_resources",
+        "choose_another",
+    ),
+) -> GameResourceNotFoundError:
+    failure = GameResourceLookupFailure(
+        query=query,
+        reason=reason,
+        searched_scopes=tuple(searched_scopes),
+        recovery_options=tuple(recovery_options),
+    )
+    return GameResourceNotFoundError(failure.user_message, failure=failure)
+
+
+def _default_resource_scopes(query: GameResourceQuery) -> tuple[str, ...]:
     if query.path:
-        return f"Resource not found at local path: {query.path}"
-    return f"Resource not found: {query.resref or '?'}{'.' + query.restype.lower() if query.restype else ''}"
+        return (f"local path {query.path}",)
+    return _resource_manager_search_scopes(query)
+
+
+def _resource_manager_search_scopes(query: GameResourceQuery) -> tuple[str, ...]:
+    game = str(query.game or "selected game").upper()
+    if query.path:
+        return (f"local path {query.path}",)
+    if query.layer:
+        label = f"{game} {query.layer}"
+        if query.module_id:
+            label += f" module {query.module_id}"
+        return (label,)
+    if query.module_id:
+        return (f"{game} module {query.module_id}",)
+    scopes = [f"{game} Override", f"{game} loaded modules"]
+    if query.restype in {"TPC", "TGA", "TXI"}:
+        scopes.append(f"{game} texture packs")
+    scopes.append(f"{game} base game files")
+    return tuple(scopes)
+
+
+def _human_join(values: Iterable[str]) -> str:
+    rows = [str(value).strip() for value in values if str(value).strip()]
+    if not rows:
+        return ""
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) == 2:
+        return f"{rows[0]} and {rows[1]}"
+    return f"{', '.join(rows[:-1])}, and {rows[-1]}"
 
 
 def _safe_path_size(path: str | Path | None) -> int:

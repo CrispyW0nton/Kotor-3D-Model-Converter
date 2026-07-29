@@ -11,8 +11,16 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
-from src.gui.qt_lib.windows.progress_toast import QtProgressToast
-from src.gui.windows.application_core.application_core_lib.shared.workers import AutoDetectWorker, LibraryBatchExportWorker
+from src.gui.qt_lib.windows.progress_toast import (
+    FeedbackAction,
+    OperationFeedback,
+    OperationPhase,
+    QtProgressToast,
+)
+from src.gui.windows.application_core.application_core_lib.shared.workers import (
+    AutoDetectWorker,
+    LibraryBatchExportWorker,
+)
 
 
 class StartupLibraryMixin:
@@ -40,25 +48,36 @@ class StartupLibraryMixin:
         self._log("Game directories updated. Run Scan to refresh the library.", "success")
 
     def _show_progress_toast(self, title: str, detail: str):
-        if self._progress_toast is None:
-            self._progress_toast = QtProgressToast(self)
-            self.theme_manager.register_theme_aware_widget(self._progress_toast)
-        self._apply_progress_toast_theme()
-        self._progress_toast.show_busy(title, detail)
+        self._show_operation_feedback(
+            OperationFeedback(OperationPhase.BUSY, title, detail)
+        )
 
     def _update_progress_toast(self, title: str, detail: str, value: int, total: int):
-        if self._progress_toast is None:
-            self._progress_toast = QtProgressToast(self)
-            self.theme_manager.register_theme_aware_widget(self._progress_toast)
-        self._apply_progress_toast_theme()
-        self._progress_toast.update_progress(title, detail, value, total)
+        toast = self._ensure_progress_toast()
+        toast.update_progress(title, detail, value, total)
 
     def _finish_progress_toast(self, title: str, detail: str):
+        self._show_operation_feedback(
+            OperationFeedback(OperationPhase.SUCCEEDED, title, detail),
+            delay_ms=2200,
+        )
+
+    def _show_operation_feedback(
+        self,
+        feedback: OperationFeedback,
+        *,
+        callbacks=None,
+        delay_ms: int | None = None,
+    ) -> None:
+        toast = self._ensure_progress_toast()
+        toast.present(feedback, callbacks=callbacks, delay_ms=delay_ms)
+
+    def _ensure_progress_toast(self) -> QtProgressToast:
         if self._progress_toast is None:
             self._progress_toast = QtProgressToast(self)
             self.theme_manager.register_theme_aware_widget(self._progress_toast)
         self._apply_progress_toast_theme()
-        self._progress_toast.finish(title, detail)
+        return self._progress_toast
 
     def _apply_progress_toast_theme(self) -> None:
         toast = getattr(self, "_progress_toast", None)
@@ -95,7 +114,23 @@ class StartupLibraryMixin:
     def _on_theme_apply_failed(self, detail: str) -> None:
         if getattr(self, "_suppress_theme_progress_toast", False):
             return
-        self._finish_progress_toast("Theme apply failed", detail[:180])
+        self._show_operation_feedback(
+            OperationFeedback(
+                phase=OperationPhase.FAILED,
+                title="Theme could not be applied",
+                detail="The previous appearance remains active.",
+                reason=detail[:180],
+                actions=(
+                    FeedbackAction(
+                        "open_settings",
+                        "Open Settings",
+                        "Review appearance and renderer settings.",
+                    ),
+                ),
+                preserves_work=True,
+            ),
+            callbacks={"open_settings": self._open_settings_dialog},
+        )
 
     @QtCore.Slot(str, int, int)
     def _on_model_load_progress(self, detail: str, value: int, total: int):
@@ -151,16 +186,66 @@ class StartupLibraryMixin:
     @QtCore.Slot(str, str, str)
     def _on_auto_detect_finished(self, k1_dir: str, k2_dir: str, error: str):
         if error:
-            self._finish_progress_toast("Auto-detect failed", "Check the output log for details.")
+            error_lines = error.strip().splitlines()
+            self._show_operation_feedback(
+                OperationFeedback(
+                    phase=OperationPhase.FAILED,
+                    title="Game install detection failed",
+                    detail="Review the settings or retry the search.",
+                    reason=(error_lines[-1] if error_lines else "Unknown detection error.")[:180],
+                    actions=self._install_detection_actions(),
+                    preserves_work=True,
+                ),
+                callbacks=self._install_detection_callbacks(),
+            )
             self._log(f"Auto-detect failed:\n{error}", "error")
             return
         if not (k1_dir or k2_dir):
-            self._finish_progress_toast("No installs found", "Set game directories manually to scan the library.")
+            self._show_operation_feedback(
+                OperationFeedback(
+                    phase=OperationPhase.BLOCKED,
+                    title="No KotOR installs were found",
+                    detail="Set the game directories manually, or retry after installing or moving the games.",
+                    reason="None of the detected folders contained a valid KotOR installation.",
+                    searched_scopes=(
+                        "saved GhostStudio game paths",
+                        "KOTOR1_DIR and KOTOR2_DIR environment variables",
+                        "Steam libraries",
+                        "GOG install locations",
+                        "platform default install folders",
+                        "project-local game_data folders",
+                    ),
+                    actions=self._install_detection_actions(),
+                    preserves_work=True,
+                ),
+                callbacks=self._install_detection_callbacks(),
+            )
             self.library_panel.set_status("No KotOR directories found")
             self._log("No KotOR installation found automatically.", "warning")
             return
         self._on_library_dirs_changed(k1_dir or self.k1_dir_edit.text().strip(), k2_dir or self.k2_dir_edit.text().strip())
         self._scan_library()
+
+    @staticmethod
+    def _install_detection_actions() -> tuple[FeedbackAction, ...]:
+        return (
+            FeedbackAction(
+                "open_settings",
+                "Open Settings",
+                "Choose the KotOR game folders manually.",
+            ),
+            FeedbackAction(
+                "retry_detection",
+                "Retry Detection",
+                "Search the known install locations again.",
+            ),
+        )
+
+    def _install_detection_callbacks(self):
+        return {
+            "open_settings": self._open_settings_dialog,
+            "retry_detection": self._auto_detect_dirs,
+        }
 
     def _auto_detect_dirs_on_startup(self):
         if self._auto_detect_worker_is_running() or self._scan_worker_is_running():

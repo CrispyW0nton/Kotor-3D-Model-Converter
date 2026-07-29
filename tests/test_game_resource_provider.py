@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
+from src.core.project.placeable_asset import PlaceableAsset, save_placeable_asset
 from src.core.project.resource_address import ResourceAddress
 from src.core.resources.game_resource_provider import (
     CompositeGameResourceProvider,
@@ -18,7 +18,6 @@ from src.core.resources.game_resource_provider import (
     ResourceManagerGameResourceProvider,
 )
 from src.core.resources.placeable_library import discover_placeable_library_rows
-from src.core.project.placeable_asset import PlaceableAsset, save_placeable_asset
 
 
 def _record(
@@ -300,8 +299,40 @@ def test_composite_provider_selects_highest_priority_across_providers() -> None:
 def test_missing_resource_fails_clearly() -> None:
     provider = InMemoryGameResourceProvider()
 
-    with pytest.raises(GameResourceNotFoundError, match="missing.utc"):
+    with pytest.raises(GameResourceNotFoundError, match="missing.utc") as caught:
         provider.resolve(GameResourceQuery(game="k1", resref="missing", restype="utc"))
+
+    failure = caught.value.failure
+    assert failure is not None
+    assert failure.subject == "missing.utc"
+    assert failure.target_game == "K1"
+    assert failure.reason == "No matching resource was available."
+    assert failure.searched_scopes == ("project and generated resources",)
+    assert failure.recovery_options == (
+        "refresh_resources",
+        "browse_resources",
+        "choose_another",
+    )
+    assert "Searched project and generated resources." in failure.user_message
+
+
+def test_composite_missing_resource_combines_provider_search_evidence() -> None:
+    provider = CompositeGameResourceProvider(
+        [
+            InMemoryGameResourceProvider(scope_label="project resources"),
+            InMemoryGameResourceProvider(scope_label="generated resources"),
+        ]
+    )
+
+    with pytest.raises(GameResourceNotFoundError) as caught:
+        provider.resolve(GameResourceQuery(game="k2", resref="c_gizka", restype="utc"))
+
+    failure = caught.value.failure
+    assert failure is not None
+    assert failure.subject == "c_gizka.utc"
+    assert failure.target_game == "K2"
+    assert failure.searched_scopes == ("project resources", "generated resources")
+    assert "Searched project resources and generated resources." in failure.user_message
 
 
 def test_resource_manager_adapter_reads_public_manager_and_reports_record() -> None:

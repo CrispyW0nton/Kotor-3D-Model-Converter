@@ -11,6 +11,71 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make resource and operation failures explainable and recoverable
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core GUI Display shared operation feedback and Resource Browser;
+Core Resources game-resource lookup evidence; native Python payload manifests.
+
+Intersects: `codex/map-studio-ux-overhaul` and its planned Map Studio UTC
+placement recovery. The branches remain separate and were not merged.
+
+Shared operation feedback now distinguishes ready, blocked, busy, failed,
+completed, stale, and cancelled states with icons and explicit text instead of
+color alone. It can show partial progress, cancellation, the affected item,
+the reason, searched locations, preserved-work confirmation, and adjacent
+recovery actions. Resource Browser uses this contract for its initial, empty,
+filtered, scanning, failed, and ready states, so an unsuccessful Gizka-style
+UTC search no longer presents a blank result with no next step.
+
+Resource lookup failures now carry typed search evidence and recovery options.
+The structured error dialog presents that evidence in plain language while
+keeping technical details collapsible and preserving existing recovery
+callbacks. Shell theme and game-install detection failures now use truthful
+failed/blocked states with Settings and retry actions rather than the previous
+success-style completion toast.
+
+`GameResourceProvider` remains package-local source owned by
+`GhostRigger.Core.Resources`; the `GhostRigger.Core.Tools` and
+`GhostRigger.Runtime.Shared` payload copies are byte-identical mirrors because
+no root canonical source exists.
+
+Affected:
+
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/progress_toast.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_resource_panel.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/error_report.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py`
+- package-local `src/core/resources/game_resource_provider.py` copies in Core
+  Resources, Core Tools, and Runtime Shared
+- focused resource-provider, feedback, shell-progress, and payload tests
+- regenerated GUI Display, Core Resources, Core Tools, and Runtime Shared
+  payload manifests
+
+Verification:
+
+- Python compilation, Ruff checks for changed production/feedback files, and
+  diff whitespace checks passed. Project mypy was unavailable; six Ruff
+  findings in older lambda-based provider fixtures were pre-existing.
+- Twenty-five focused provider, feedback, progress, theme-token, and shell
+  tests passed; twenty-two focused provider/feedback/payload tests and two
+  native payload identity/manifest checks also passed after regeneration.
+- Visual Studio Community built the four owning DLL projects and the native
+  host in `Debug|x64` with zero errors, then rebuilt GUI Display and the host
+  after the manual Light-theme correction with zero errors.
+- In the real Debug application, Resource Browser indexed 42,178 resources.
+  Filtering for `definitely_missing_gizka` produced a textual **Blocked**
+  state naming the item, reason, searched scope, preserved work, **Clear
+  Filters**, and **Scan Again**. Clear Filters restored the ready state and all
+  indexed results.
+- The blocked and recovery states remained readable with visible actions in
+  Default, Matrix, Droid, Dark, Light, and Classic themes. A manual Light-theme
+  pass exposed and corrected clipped recovery buttons. Classic at 1366x768
+  remained unclipped and responsive; the process used about 478 MB.
+
 ### [2026-07-28] make the main shell scannable and preserve user presentation choices
 
 Owner: LordVaderCW

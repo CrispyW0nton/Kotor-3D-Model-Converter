@@ -1749,7 +1749,7 @@ def test_startup_splash_uses_themed_embedded_progress() -> None:
 
     assert isinstance(splash.progress_panel, QtProgressPanel)
     assert splash.logo_label.pixmap() is not None
-    assert "GhostRigger (C) 2026 Shaolin (CrispyWonton)" in splash.copyright_label.text()
+    assert "GhostStudio (C) 2026 Shaolin (CrispyWonton)" in splash.copyright_label.text()
     assert "LordVaderCW" in splash.copyright_label.text()
 
     class Parent(QtWidgets.QWidget):
@@ -1892,10 +1892,10 @@ def test_progress_toast_reapplies_active_theme_on_show() -> None:
     changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_theme_changed)
     apply_source = inspect.getsource(QtGhostRiggerMainWindow._apply_progress_toast_theme)
 
-    assert "_apply_progress_toast_theme()" in show_source
-    assert "_apply_progress_toast_theme()" in update_source
-    assert "_apply_progress_toast_theme()" in finish_source
-    assert "self._apply_progress_toast_theme()" in changed_source
+    assert "_show_operation_feedback" in show_source
+    assert "_ensure_progress_toast()" in update_source
+    assert "_show_operation_feedback" in finish_source
+    assert "self._apply_progress_toast_theme" in changed_source
     assert "current_theme" in apply_source
     assert "get_theme()" in apply_source
     assert hasattr(QtProgressToast, "apply_native_theme")
@@ -1914,7 +1914,7 @@ def test_progress_toast_is_compact_and_anchored_to_viewport_canvas() -> None:
     assert main_window_module.QtProgressToast is progress_toast_module.QtProgressToast
     assert "from src.gui.qt_lib.windows.progress_toast import QtProgressPanel, QtProgressToast" in main_source
     assert "class QtProgressToast" not in main_source
-    assert "setFixedWidth(280)" in toast_source
+    assert "setFixedWidth(360)" in toast_source
     assert "QtProgressPanel(self, compact=True)" in toast_source
     assert 'getattr(parent, "viewport", None)' in toast_source
     assert 'getattr(viewport, "canvas", None)' in toast_source
