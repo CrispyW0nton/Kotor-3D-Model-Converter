@@ -11,6 +11,49 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] turn tester onboarding into a six-step Ghost-Studio installation guide
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: User onboarding documentation and GitHub branch hygiene.
+
+The README now gives non-technical Windows users one numbered installation
+path based on the successful SAO support session. It uses the tested Git,
+Visual Studio Community 2022, and Python 3.13.14 download links; names the
+required C++ workload, v143 tools, and Windows SDK; explains the exact
+PowerShell clone command; shows how to load all 19 solution projects; keeps the
+native executable beside its runtime files; covers first launch, updates, and
+the support session's common failure modes.
+
+The public GitHub About description and topics now identify Ghost-Studio as a
+Windows KOTOR 1/2 modding suite for model editing, character rigging,
+animation retargeting, module editing, map authoring, validation, and
+game-ready export. The obsolete Borhek, Character Builder polish,
+Unity/Unreal FBX, Genspark, legacy duplicate, and `main` branches named for
+removal were deleted from the public remote. The active `ghost-studio` default
+branch and the separately distributed Rhen Var optional-kit branch were
+preserved.
+
+Affected:
+
+- `README.md`
+- GitHub About metadata and branch list for `CrispyW0nton/Ghost-Studio`
+
+Verification: the 3,344-message SAO conversation export was parsed to recover
+the successful installation sequence; the README contains exactly six ordered
+step headings with no unresolved reference links; all documented local files,
+the 19-project solution count, `Debug|x64`, and the native output path were
+checked against the checkout; all prerequisite URLs were resolved; Markdown
+diff whitespace checks passed; and the post-deletion GitHub branch listing
+confirmed `ghost-studio` remains the default branch. The refreshed public
+description and 15 repository topics were read back from GitHub.
+Focused correctness and project-standards review found and corrected the custom
+Python-location failure path and added the applicable T3204 roadmap reference;
+an independent validation pass confirmed both findings against the native
+project and repository policy.
+
 ### [2026-07-28] make application menus content-safe and expand Map Studio's viewport
 
 Owner: LordVaderCW

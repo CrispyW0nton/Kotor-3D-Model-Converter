@@ -117,123 +117,236 @@ Near-term priorities:
    flow; bring the remaining Retarget Studio lanes up to the
    preview/export/readback discipline of Unreal/Mixamo-to-KOTOR.
 
-## Requirements
-
-Recommended Windows development/runtime:
-
-- Windows 10 or newer.
-- Native application builds require a complete 64-bit CPython 3.13 install.
-  The C++ host links to `python313.lib` and requires `Include\Python.h`,
-  `libs\python313.lib`, and `python313.dll`. Python 3.14 may be installed
-  alongside 3.13, but it cannot replace 3.13 for the current native host.
-- Source-run development supports Python 3.13 or 3.14; Python 3.12 remains
-  usable for the Qt source-run path.
-- Visual Studio 2022 or the VS 2022 Build Tools (MSBuild) for the native
-  Debug application build.
-- A legal local installation of KOTOR (K1) and/or KOTOR II: The Sith Lords
-  (K2). Game assets are read in place and never bundled or modified without
-  an explicit export.
-- Blender 4.2 LTS for the production Blender FBX backend.
-- Optional Autodesk FBX SDK installed manually for SDK-backed FBX workflows.
-
 ## Installation
 
-### Option A: Native application (recommended)
+### Six-step Windows installation
 
-The primary product is the payload-backed native application. It embeds the
-Python packages into 18 native DLLs and is what all visible testing runs
-against. Install Python 3.13 even when Python 3.14 is already present; the two
-versions can coexist.
+Ghost-Studio does not yet have a one-click public installer. The first setup
+builds a copy of the program on your PC. **You do not need programming
+experience:** follow these six steps in order and do not skip the named
+installer options.
+
+### Download these prerequisites first
+
+Download all three installers before beginning Step 1. These are the exact
+links used for the successful tester setup:
+
+| Required download | Direct link | Important choice during installation |
+|-------------------|-------------|--------------------------------------|
+| Git for Windows | **[Download Git for Windows][git-windows]** | Keep the default installer choices. |
+| Visual Studio Community 2022 | **[Download Visual Studio Community 2022][vs2022-community]** | Select **Desktop development with C++**, the **MSVC v143 x64/x86 build tools**, and a Windows SDK. |
+| Python 3.13.14 (64-bit) | **[Download Python 3.13.14 for Windows][python313-installer]** | Select **Add python.exe to PATH**, then **Install Now**. |
+
+Also confirm:
+
+- Use a 64-bit Windows 10 or Windows 11 PC with a stable internet connection.
+- Make sure several gigabytes of disk space are free. Visual Studio and its C++
+  tools are the largest downloads.
+- Have a legal local installation of [KOTOR 1][kotor1-steam] and/or
+  [KOTOR 2][kotor2-steam]. Ghost-Studio reads the game files from your
+  installation; it does not include them.
+- Do **not** download the Ghost-Studio repository as a ZIP. Cloning it with Git
+  makes later updates much easier.
+
+#### Step 1 — Install Git for Windows
+
+1. Run the [Git for Windows installer][git-windows] downloaded above.
+2. Keep the default installer choices.
+3. Close and reopen PowerShell after installation.
+4. Type the following and press Enter:
+
+   ```powershell
+   git --version
+   ```
+
+   If a version number appears, Git is ready.
+
+#### Step 2 — Install Visual Studio Community 2022 and the C++ tools
+
+1. Run the [Visual Studio Community 2022 installer][vs2022-community]
+   downloaded above. This link is specifically for Visual Studio **2022**,
+   which Ghost-Studio requires.
+2. On the **Workloads** tab, select **Desktop development with C++**.
+   **Game development with C++** may also be selected, but it does not replace
+   the desktop C++ workload needed by this solution.
+3. On the **Individual components** tab, confirm these are selected:
+
+   - **MSVC v143 - VS 2022 C++ x64/x86 build tools**
+   - A Windows 10 or Windows 11 SDK
+
+4. Select **Install** or **Modify** and let the installer finish.
+5. Close the installer. When the guide later says “Visual Studio,” open the
+   purple **Visual Studio Community 2022** application—not Visual Studio 2019
+   and not the Visual Studio Installer.
+
+If Visual Studio was already installed without these options, use
+[Microsoft's Modify Visual Studio guide][modify-visual-studio] and add them
+now.
+
+#### Step 3 — Install 64-bit Python 3.13
+
+1. Run the exact tested
+   [Python 3.13.14 Windows 64-bit installer][python313-installer] downloaded
+   above. On its first screen, select **Add python.exe to PATH**, then choose
+   **Install Now**. Keep the standard per-user installation location; the
+   native Ghost-Studio project expects Python in that default folder.
+2. Close and reopen PowerShell, then check the installation:
+
+   ```powershell
+   py -3.13 --version
+   ```
+
+   It should print `Python 3.13.14`.
+
+Python 3.14 can be installed beside 3.13, but it cannot replace 3.13 for the
+native Ghost-Studio build. Do not use **Customize installation**, an all-users
+location, the Microsoft Store package, or Python's embeddable ZIP for this
+beginner setup.
+
+#### Step 4 — Clone Ghost-Studio
+
+1. Open the Start menu, search for **PowerShell**, and open it. Administrator
+   mode is not required.
+2. Copy this entire command, paste it into PowerShell, and press Enter:
+
+   ```powershell
+   git clone --branch ghost-studio --single-branch https://github.com/CrispyW0nton/Ghost-Studio.git "$env:USERPROFILE\Documents\Ghost-Studio"
+   ```
+
+3. After the download finishes, copy and run:
+
+   ```powershell
+   Set-Location "$env:USERPROFILE\Documents\Ghost-Studio"
+   git branch --show-current
+   ```
+
+   The last command should print `ghost-studio`.
+
+This guide calls `C:\Users\YOUR-NAME\Documents\Ghost-Studio` the
+**Ghost-Studio folder**. It is the folder containing `build.bat`,
+`GhostRigger.sln`, and `README.md`.
+
+#### Step 5 — Prepare the program
+
+1. Open the Ghost-Studio folder in File Explorer.
+2. Double-click `build.bat`.
+3. A black window will install the required Python packages and build the
+   application bundle. This can take a while; leave the window open.
+4. Wait for **BUILD COMPLETE**. If it reports an error, open `build_log.txt`
+   in the Ghost-Studio folder and use the troubleshooting section below.
+
+This step creates a source bundle at `GhostStudio.exe`. Continue through
+Step 6 to build the recommended native application used for Ghost-Studio's
+visible testing.
+
+#### Step 6 — Build and launch Ghost-Studio
+
+1. Open **Visual Studio Community 2022** from the Windows Start menu.
+2. On the opening screen, select **Open a project or solution**. Do not select
+   **Open a local folder**.
+3. Choose `GhostRigger.sln` from the Ghost-Studio folder.
+4. Press `Ctrl+Alt+L` to show **Solution Explorer**.
+5. Confirm its heading says `Solution 'GhostRigger' (19 of 19 projects)`.
+   If it says `0 of 19`, select all unloaded projects, right-click them, and
+   select **Reload Project**.
+6. In the top toolbar, select **Debug** and **x64**.
+7. In Solution Explorer, right-click `GhostRigger.Native.Core.Host` and select
+   **Set as Startup Project**.
+8. Select **Build → Build Solution**, or press `Ctrl+Shift+B`.
+9. Wait for Visual Studio to report that the build succeeded.
+10. In File Explorer, open:
+
+    ```text
+    Ghost-Studio\build\vs\x64\Debug
+    ```
+
+11. Double-click `GhostStudio.exe`.
+
+Keep `GhostStudio.exe` in that `Debug` folder with its DLLs and runtime files.
+**Do not move only the EXE to the main Ghost-Studio folder.** To put it on the
+desktop, right-click it and choose **Send to → Desktop (create shortcut)**.
+
+### First launch and first use
+
+1. Open **Settings → Game Paths**.
+2. Set the KOTOR 1 and/or KOTOR 2 installation folder. Common Steam locations
+   are:
+
+   ```text
+   C:\Program Files (x86)\Steam\steamapps\common\swkotor
+   C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II
+   ```
+
+   If Steam is installed elsewhere, right-click the game in Steam and choose
+   **Manage → Browse local files**. Use the folder that opens.
+3. Select the option to scan or refresh the game library and wait for it to
+   finish.
+4. Open **Content Browser** to find and load an existing KOTOR model. Open
+   **Character Studio** for custom characters, **Retarget Studio** for
+   animation transfer, **Module Studio** to edit an existing module, or
+   **Map Studio** to build a new area.
+5. Save main-editor scenes as `.kmax` files and Map Studio projects as `.kmap`
+   files. These project files store references and editor changes; they do not
+   copy the game's large proprietary assets into the project.
+
+Ghost-Studio does not silently overwrite the original KOTOR installation.
+Writing or installing mod output requires an explicit export/install action.
+
+### Updating Ghost-Studio later
+
+You do not need to reinstall Git, Visual Studio, or Python for each update.
+Open PowerShell and run:
 
 ```powershell
-git clone https://github.com/CrispyW0nton/Ghost-Studio.git
-cd Ghost-Studio
+Set-Location "$env:USERPROFILE\Documents\Ghost-Studio"
 git switch ghost-studio
-
-$pythonVersion = "3.13.14"
-$installer = "$env:TEMP\python-$pythonVersion-amd64.exe"
-$installerUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-amd64.exe"
-$installerSha256 = "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
-$pythonHome = "$env:LOCALAPPDATA\Programs\Python\Python313"
-
-Invoke-WebRequest -Uri $installerUrl -OutFile $installer
-if ((Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $installerSha256) {
-    throw "Python installer checksum verification failed."
-}
-
-$installArgs = @(
-    "/quiet"
-    "InstallAllUsers=0"
-    "TargetDir=$pythonHome"
-    "PrependPath=1"
-    "Include_launcher=1"
-    "Include_pip=1"
-    "Include_dev=1"
-    "Include_test=0"
-)
-$install = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
-if ($install.ExitCode -notin @(0, 3010)) {
-    throw "Python 3.13 installer failed with exit code $($install.ExitCode)."
-}
-
-$required = @(
-    "$pythonHome\Include\Python.h"
-    "$pythonHome\libs\python313.lib"
-    "$pythonHome\python313.dll"
-)
-$missing = @($required | Where-Object { -not (Test-Path $_) })
-if ($missing) { throw "Incomplete Python 3.13 install: $($missing -join ', ')" }
-
-$env:GhostRiggerPythonHome = $pythonHome
-$env:GHOSTRIGGER_PYTHON = "$pythonHome\python.exe"
-[Environment]::SetEnvironmentVariable("GhostRiggerPythonHome", $pythonHome, "User")
-[Environment]::SetEnvironmentVariable("GHOSTRIGGER_PYTHON", $env:GHOSTRIGGER_PYTHON, "User")
-& $env:GHOSTRIGGER_PYTHON -m pip install -r requirements.txt
-
-$msbuild = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild GhostRigger.sln /m /t:Build /p:Configuration=Debug /p:Platform=x64 "/p:GhostRiggerPythonHome=$pythonHome" /v:minimal
+git pull --ff-only origin ghost-studio
 ```
 
-(Adjust the MSBuild path for your VS 2022 edition, or build `GhostRigger.sln`
-as `Debug|x64` from Visual Studio. Restart Visual Studio after running the
-PowerShell setup so MSBuild receives the saved Python 3.13 environment.)
+Then run `build.bat` again and repeat Step 6's **Build Solution** action. If
+Git says local changes would be overwritten, stop and ask for help instead of
+deleting files.
 
-Run the result:
+### Installation troubleshooting
 
-```bat
-build\vs\x64\Debug\GhostStudio.exe
-```
+| What you see | What it means and how to fix it |
+|--------------|---------------------------------|
+| `git` is not recognized | Git was not installed or PowerShell was left open during installation. Install it from [Step 1][git-windows], then close and reopen PowerShell. |
+| `py -3.13` is not found | Re-run the [Python 3.13.14 installer][python313-installer], select **Add python.exe to PATH**, and keep the Python launcher enabled. |
+| Visual Studio opens its Installer, or there is no **Build** menu | The C++ workload is missing, or the repository was opened as a folder. Install **Desktop development with C++**, then launch Visual Studio 2022 and use **Open a project or solution** to open `GhostRigger.sln`. |
+| Solution Explorer says `0 of 19 projects` | Select all unloaded projects, right-click, and choose **Reload Project**. The heading must say `19 of 19` before building. |
+| Error `MSB8020` says the `v143` tools cannot be found | Open **Visual Studio Installer → Modify → Individual components** and install the MSVC v143 x64/x86 tools. If the error path mentions `Visual Studio\2019`, close it and deliberately launch **Visual Studio Community 2022** from the Start menu. |
+| `Debug` or `x64` is missing | The solution is not fully loaded. Open Solution Explorer with `Ctrl+Alt+L`, reload unloaded projects, and make sure you opened the `.sln` rather than the folder. |
+| The build cannot find `Python.h`, `python313.lib`, or `python313.dll` | Reinstall the full 64-bit Python 3.13 package from Step 3. Do not use the Microsoft Store package or embeddable ZIP for the native build. |
+| `build.bat` fails | Open `build_log.txt` in the Ghost-Studio folder. The final error normally identifies the missing package or file. |
+| The build succeeds but the program will not start after being moved | Put the EXE back in `build\vs\x64\Debug` with the files built beside it. Create a shortcut instead of moving the EXE. |
+| Ghost-Studio cannot find KOTOR | In Steam, right-click the game and choose **Manage → Browse local files**, then select that folder under **Settings → Game Paths**. |
 
-The build regenerates the embedded Python payloads automatically and stages
-all 18 payload DLLs next to the executable.
+### Optional tools and developer alternatives
 
-### Option B: Run from source
+- [Blender 4.2 LTS][blender42] is needed for the production Blender FBX
+  import/export backend, but not for opening Ghost-Studio or browsing KOTOR
+  resources.
+- The [Autodesk FBX SDK][autodesk-fbx-sdk] is optional and only needed for
+  SDK-backed FBX workflows. It is not bundled.
+- Developers may run from source after cloning:
 
-```powershell
-git clone https://github.com/CrispyW0nton/Ghost-Studio.git
-cd Ghost-Studio
-git switch ghost-studio
-py -3.14 -m pip install -r requirements.txt
-py -3.14 main.py
-```
+  ```powershell
+  Set-Location "$env:USERPROFILE\Documents\Ghost-Studio"
+  py -3.14 -m pip install -r requirements.txt
+  py -3.14 main.py
+  ```
 
-The source-run path may use Python 3.13 instead by replacing `-3.14` with
-`-3.13` in both commands.
+  Replace `-3.14` with `-3.13` to use Python 3.13.
 
-### First launch (either option)
-
-1. Open Settings / Game Paths.
-2. Configure K1 and/or K2 install paths (for Steam these are typically
-   `C:\Program Files (x86)\Steam\steamapps\common\swkotor` and
-   `...\Knights of the Old Republic II`).
-3. Scan or refresh the game library.
-4. Load a model from the Content Browser, or open Map Studio from the
-   Module Editor icon to author a map.
-5. Save multi-object editor scenes as `.kmax`; Map Studio projects save as
-   `.kmap`.
-
-Ghost-Studio scene files store references and lightweight editor state. They
-should not embed large proprietary KOTOR asset bytes.
+[git-windows]: https://git-scm.com/download/win
+[vs2022-community]: https://aka.ms/vs/17/release/vs_community.exe
+[modify-visual-studio]: https://learn.microsoft.com/en-us/visualstudio/install/modify-visual-studio?view=vs-2022
+[python313-installer]: https://www.python.org/ftp/python/3.13.14/python-3.13.14-amd64.exe
+[kotor1-steam]: https://store.steampowered.com/app/32370/STAR_WARS_Knights_of_the_Old_Republic/
+[kotor2-steam]: https://store.steampowered.com/app/208580/STAR_WARS_Knights_of_the_Old_Republic_II_The_Sith_Lords/
+[blender42]: https://www.blender.org/download/lts/4-2/
+[autodesk-fbx-sdk]: https://aps.autodesk.com/developer/overview/fbx-sdk
 
 ## Building
 
