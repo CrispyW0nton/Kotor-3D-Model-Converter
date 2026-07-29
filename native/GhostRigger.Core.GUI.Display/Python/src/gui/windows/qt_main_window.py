@@ -375,7 +375,10 @@ class QtGhostRiggerMainWindow(
         self.setWindowTitle(self.APP_TITLE)
         initial_layout = self.layout_manager.get_layout()
         self.resize(initial_layout.main_width, initial_layout.main_height)
-        self.setMinimumSize(1100, 700)
+        # Keep the shell usable on high-DPI laptop work areas. LayoutApplier
+        # progressively hides secondary docks when the logical work area is
+        # narrower than the selected layout's responsive threshold.
+        self.setMinimumSize(640, 360)
         self._place_on_primary_startup_screen()
         update_legacy_palette(self.theme_manager.get_theme())
         self._build_actions()

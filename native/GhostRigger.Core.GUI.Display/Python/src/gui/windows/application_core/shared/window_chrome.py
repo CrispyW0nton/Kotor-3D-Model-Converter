@@ -88,6 +88,10 @@ class _CommandLauncherDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setObjectName("CommandLauncherDialog")
         self.setWindowTitle("Open a Studio or Tool")
+        self.setAccessibleName("Open a Studio or Tool")
+        self.setAccessibleDescription(
+            "Search or browse task categories, then press Enter to open the selected GhostStudio workspace."
+        )
         self.setModal(False)
         self.setWindowModality(QtCore.Qt.NonModal)
         self._actions: list[QtGui.QAction] = []
@@ -111,6 +115,10 @@ class _CommandLauncherDialog(QtWidgets.QDialog):
         self.search_edit = QtWidgets.QLineEdit(self)
         self.search_edit.setObjectName("CommandLauncherSearch")
         self.search_edit.setAccessibleName("Search studios and tools")
+        self.search_edit.setAccessibleDescription(
+            "Type part of a task, studio, tool, browser, panel, or shortcut to filter the command list."
+        )
+        self.search_edit.setProperty("ghostPrimaryAction", True)
         self.search_edit.setPlaceholderText("Search studios, tools, browsers, and panels...")
         self.search_edit.setClearButtonEnabled(True)
         root.addWidget(self.search_edit)
@@ -118,6 +126,10 @@ class _CommandLauncherDialog(QtWidgets.QDialog):
         self.command_tree = QtWidgets.QTreeWidget(self)
         self.command_tree.setObjectName("CommandLauncherTree")
         self.command_tree.setAccessibleName("Available studios and tools")
+        self.command_tree.setAccessibleDescription(
+            "Task categories containing commands. Use the arrow keys to choose a command and Enter to open it."
+        )
+        self.command_tree.setProperty("ghostPrimaryAction", True)
         self.command_tree.setHeaderLabels(["Command", "Shortcut"])
         self.command_tree.setRootIsDecorated(True)
         self.command_tree.setUniformRowHeights(True)
@@ -152,13 +164,16 @@ class _CommandLauncherDialog(QtWidgets.QDialog):
         self.search_edit.returnPressed.connect(self._activate_current)
         self.command_tree.itemActivated.connect(self._activate_item)
 
-        close_button = QtWidgets.QPushButton("Close", self)
-        close_button.setAccessibleName("Close command launcher")
-        close_button.clicked.connect(self.close)
+        self.close_button = QtWidgets.QPushButton("Close", self)
+        self.close_button.setAccessibleName("Close command launcher")
+        self.close_button.setAccessibleDescription("Close this launcher without opening a workspace")
+        self.close_button.clicked.connect(self.close)
         button_row = QtWidgets.QHBoxLayout()
         button_row.addStretch(1)
-        button_row.addWidget(close_button)
+        button_row.addWidget(self.close_button)
         root.addLayout(button_row)
+        self.setTabOrder(self.search_edit, self.command_tree)
+        self.setTabOrder(self.command_tree, self.close_button)
 
         font_metrics = self.fontMetrics()
         em_width = max(1, font_metrics.horizontalAdvance("M"))
@@ -338,6 +353,11 @@ class WindowChromeMixin:
         self.diag_action = QtGui.QAction(self._icon("diag"), "Diagnostics...", self)
         self.diag_action.setShortcut("Ctrl+Shift+D")
         self._configure_dock_toggle_action(self.diag_action, "diagnostics", self._show_diagnostics_panel)
+        self.accessibility_audit_action = QtGui.QAction("Accessibility Audit...", self)
+        self.accessibility_audit_action.setStatusTip(
+            "Check the active GhostStudio shell for keyboard, naming, target-size, shortcut, and contrast issues"
+        )
+        self.accessibility_audit_action.triggered.connect(self._show_accessibility_audit)
         self.fbx_sdk_status_action = QtGui.QAction("FBX SDK Status", self)
         self.fbx_sdk_status_action.triggered.connect(self._show_fbx_sdk_status)
         self.fbx_sdk_setup_action = QtGui.QAction("Autodesk FBX SDK Setup...", self)
@@ -638,6 +658,15 @@ class WindowChromeMixin:
         dialog.search_edit.selectAll()
         dialog.search_edit.setFocus(QtCore.Qt.ShortcutFocusReason)
 
+    def _show_accessibility_audit(self) -> None:
+        """Run the shared GUI Display audit against the live shell."""
+
+        from src.gui.libtheme.accessibility_audit import show_accessibility_audit
+
+        manager = getattr(self, "theme_manager", None)
+        theme = manager.get_theme() if manager is not None else None
+        show_accessibility_audit(self, theme=theme)
+
     def _build_menu(self):
         # Menu structure follows the standard File/Edit/View/Tools/Window/Help
         # convention. The previous Customise/Model/Modules/MDLOps/Retarget/Create/
@@ -809,6 +838,7 @@ class WindowChromeMixin:
         help_menu.addAction(format_action)
         diagnostics_menu = help_menu.addMenu("Diagnostics")
         diagnostics_menu.addAction(self.fbx_sdk_status_action)
+        diagnostics_menu.addAction(self.accessibility_audit_action)
 
     def _sync_developer_actions_visibility(self) -> None:
         menu_action = getattr(self, "developer_menu_action", None)

@@ -119,7 +119,7 @@
         <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
         <metric name="toolbar.spacing" value="4"/>
-        <metric name="button.height" value="16"/>
+        <metric name="button.height" value="24"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
@@ -129,6 +129,6 @@
         <metric name="splash.width" value="960"/>
         <metric name="splash.height" value="540"/>
         <metric name="splash.logoSize" value="300"/>
-        <metric name="tab.height" value="14"/>
+        <metric name="tab.height" value="24"/>
     </metrics>
 </theme>

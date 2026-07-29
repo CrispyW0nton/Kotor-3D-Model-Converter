@@ -308,12 +308,12 @@ class QtStylesheetBuilder:
             border-color: {c('input.focusBorder', c('input.border'))};
         }}
         QToolButton#CollapsibleGroupToggle {{
-            min-width: 16px;
-            max-width: 16px;
-            min-height: 16px;
-            max-height: 16px;
-            width: 16px;
-            height: 16px;
+            min-width: 24px;
+            max-width: 24px;
+            min-height: 24px;
+            max-height: 24px;
+            width: 24px;
+            height: 24px;
             padding: 0px;
             margin: 0px;
             border-radius: {min(radius, 2)}px;

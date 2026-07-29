@@ -10,7 +10,10 @@ from xml.etree import ElementTree as ET
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .layout_applier import button_mode_to_toolbutton_style
+from .layout_applier import (
+    button_mode_to_toolbutton_style,
+    fit_top_level_window_to_available_screen,
+)
 from .layout_manager import LayoutManager
 from .layout_model import LayoutDefinition
 from .qt_stylesheet_builder import QtStylesheetBuilder
@@ -564,6 +567,13 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._load_layout(self._layout.id)
         self._refresh_preview()
 
+    def showEvent(self, event: QtGui.QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        QtCore.QTimer.singleShot(0, self._fit_frame_to_available_screen)
+
+    def _fit_frame_to_available_screen(self) -> None:
+        fit_top_level_window_to_available_screen(self)
+
     def _build(self) -> None:
         toolbar = QtWidgets.QToolBar("Theme Editor Actions", self)
         toolbar.setMovable(False)
@@ -586,16 +596,35 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(splitter)
         editor_tabs = QtWidgets.QTabWidget()
         splitter.addWidget(editor_tabs)
-        splitter.addWidget(self._build_preview_area())
+        splitter.addWidget(self._scrollable(self._build_preview_area(), "ThemeEditorPreviewScroll"))
         splitter.setSizes([520, 660])
 
-        editor_tabs.addTab(self._build_theme_page(), "Theme")
-        editor_tabs.addTab(self._build_matrix_bar_page(), "Matrix Bar")
-        editor_tabs.addTab(self._build_splash_page(), "Splash")
-        editor_tabs.addTab(self._build_color_page(), "Colours")
-        editor_tabs.addTab(self._build_font_page(), "Fonts")
-        editor_tabs.addTab(self._build_metric_page(), "Metrics")
-        editor_tabs.addTab(self._build_layout_page(), "Layout")
+        for label, page in (
+            ("Theme", self._build_theme_page()),
+            ("Matrix Bar", self._build_matrix_bar_page()),
+            ("Splash", self._build_splash_page()),
+            ("Colours", self._build_color_page()),
+            ("Fonts", self._build_font_page()),
+            ("Metrics", self._build_metric_page()),
+            ("Layout", self._build_layout_page()),
+        ):
+            editor_tabs.addTab(
+                self._scrollable(page, f"ThemeEditor{label.replace(' ', '')}Scroll"),
+                label,
+            )
+
+    @staticmethod
+    def _scrollable(widget: QtWidgets.QWidget, object_name: str) -> QtWidgets.QScrollArea:
+        """Keep dense editor pages usable without forcing the window off-screen."""
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setObjectName(object_name)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        scroll.setWidget(widget)
+        return scroll
 
     def _build_theme_page(self) -> QtWidgets.QWidget:
         page = QtWidgets.QWidget()

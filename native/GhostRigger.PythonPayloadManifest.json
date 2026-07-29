@@ -53,7 +53,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 326,
+        "python_file_count": 327,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -101,6 +101,7 @@
             "src\\gui\\integration\\editor_services.py",
             "src\\gui\\integration\\tool_integration_registry.py",
             "src\\gui\\libtheme\\__init__.py",
+            "src\\gui\\libtheme\\accessibility_audit.py",
             "src\\gui\\libtheme\\collapsible_group.py",
             "src\\gui\\libtheme\\font_manager.py",
             "src\\gui\\libtheme\\icon_manager.py",

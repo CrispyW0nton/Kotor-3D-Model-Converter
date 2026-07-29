@@ -11,6 +11,74 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make shared controls keyboard, contrast, and screen-scale safe
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core GUI Display accessibility diagnostics, XML theme/layout
+contracts, main-shell and viewport controls, Theme Editor, and native Python
+payload manifests.
+
+Intersects: `codex/map-studio-ux-overhaul`; this shared foundation is intended
+for Map Studio and every other product surface, but the branches remain
+separate and were not merged.
+
+Applied the program-wide usability rules derived from *Laws of UX*, *The
+Elements of User Experience*, *The Design of Everyday Things*, and *Don't Make
+Me Think* to shared GUI foundations: controls now expose their purpose instead
+of relying on icon recall, frequent viewport actions have larger logical hit
+targets, keyboard focus order is deliberate, state is never conveyed by color
+alone, and dense content progressively scrolls or collapses instead of pushing
+important controls off-screen.
+
+Packaged themes now validate semantic WCAG contrast pairs after inheritance,
+and packaged layouts validate minimum input, tab, table, tree, toolbar, and
+responsive-collapse metrics. A new copyable **Help > Diagnostics >
+Accessibility Audit** reports missing names/tooltips, small targets, skipped
+keyboard controls, duplicate shortcuts, status descriptions, and theme
+contrast with direct remediation. It is intentionally usable as a continuing
+program-wide audit rather than presenting the current application as already
+issue-free.
+
+The layout runtime now clamps the complete native window frame to the logical
+screen work area, including Windows decorations at high DPI; compact screens
+start secondary docks collapsed while preserving recovery through the Window
+menu. Theme Editor pages and its preview use responsive scroll containers.
+Viewport toolbar, transform, snap-view, selection, navigation, axis, and canvas
+controls expose accessible names/descriptions and shared 32-pixel frequent
+action targets. Collapsible section toggles use a reachable 24-pixel target.
+
+Affected:
+
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/libtheme/`
+- shared main-shell command launcher and Accessibility Audit action
+- shared viewport construction, snap-view, axis-mode, and transform controls
+- all packaged theme and layout XML files and theme/layout documentation
+- GUI Display and root native Python payload manifests/project resources
+- focused accessibility, shell, theme/layout, viewport, and payload tests
+
+Verification:
+
+- Python compilation, targeted Ruff checks, and diff whitespace checks passed.
+- Sixty focused accessibility, main-shell, and theme/layout tests passed; seven
+  focused viewport tests and four native payload identity/manifest/project
+  checks also passed.
+- Visual Studio Community rebuilt Core GUI Display and Native Core Host in
+  `Debug|x64` with zero errors after payload regeneration.
+- In the actual Debug application, the 1366x768 shell and Ctrl+K launcher
+  remained unclipped. Search, command tree, and Close followed the intended
+  keyboard order; late-created controls inherited 24-pixel logical targets.
+- The live audit scanned 539 shell controls and produced a copyable baseline of
+  77 blocking and 103 warning findings. Those findings identify the remaining
+  studio-specific work for subsequent T3204 slices.
+- Default/native, Classic, Dark, Droid, Light, and Matrix themes were applied
+  through the real Theme Editor and remained readable with visible feedback.
+- Actual Visual Studio launches at 125%, 150%, and 200% scaling kept the full
+  frame above the taskbar. At 200%, secondary chrome reflowed while the
+  viewport, transform fields, status, and Theme Editor remained reachable.
+
 ### [2026-07-28] make resource and operation failures explainable and recoverable
 
 Owner: LordVaderCW

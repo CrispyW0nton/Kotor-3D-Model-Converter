@@ -105,7 +105,7 @@ class ThemeLoader:
                 styles[name] = value
 
         high_contrast_text = (root.findtext("./metadata/highContrast") or root.get("highContrast") or "false").lower()
-        return Theme(
+        theme = Theme(
             id=(root.get("id") or path.stem).strip(),
             name=(root.get("name") or path.stem).strip(),
             version=(root.get("version") or "1").strip(),
@@ -121,6 +121,8 @@ class ThemeLoader:
             source_path=str(path),
             warnings=warnings,
         )
+        theme.warnings = self.validator.validate_theme(theme)
+        return theme
 
     @staticmethod
     def _derive_missing_colors(colors: dict[str, str], explicit: set[str]) -> None:

@@ -18,7 +18,7 @@ def _qt_app():
 def test_command_launcher_is_searchable_categorized_and_keyboard_actionable() -> None:
     app = _qt_app()
 
-    from PySide6 import QtGui, QtWidgets
+    from PySide6 import QtCore, QtGui, QtTest, QtWidgets
     from src.gui.windows.application_core.shared.window_chrome import _CommandLauncherDialog
 
     parent = QtWidgets.QMainWindow()
@@ -35,7 +35,12 @@ def test_command_launcher_is_searchable_categorized_and_keyboard_actionable() ->
     )
     try:
         assert dialog.objectName() == "CommandLauncherDialog"
+        assert dialog.accessibleName() == "Open a Studio or Tool"
+        assert dialog.accessibleDescription()
         assert dialog.search_edit.accessibleName() == "Search studios and tools"
+        assert dialog.search_edit.accessibleDescription()
+        assert dialog.command_tree.accessibleDescription()
+        assert dialog.close_button.accessibleDescription()
         assert (
             dialog.command_tree.header().sectionResizeMode(0)
             == QtWidgets.QHeaderView.Stretch
@@ -57,6 +62,16 @@ def test_command_launcher_is_searchable_categorized_and_keyboard_actionable() ->
         current = dialog.command_tree.currentItem()
         assert current is not None
         assert current.text(0) == "Open Map Studio"
+
+        dialog.show()
+        dialog.search_edit.setFocus(QtCore.Qt.TabFocusReason)
+        app.processEvents()
+        QtTest.QTest.keyClick(dialog.search_edit, QtCore.Qt.Key_Tab)
+        app.processEvents()
+        assert app.focusWidget() in {
+            dialog.command_tree,
+            dialog.command_tree.viewport(),
+        }
 
         dialog._activate_item(current)
         assert triggered == ["map"]

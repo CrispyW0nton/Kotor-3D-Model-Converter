@@ -62,10 +62,18 @@ class LayoutValidator:
                 warnings.append(f"Layout is missing required attribute '{attr}'.")
         for toolbar in root.findall("./toolbars/toolbar"):
             mode = (toolbar.get("buttonMode") or "iconText").strip()
+            toolbar_id = (toolbar.get("id") or "").strip()
             if mode not in VALID_BUTTON_MODES:
-                warnings.append(f"Toolbar '{toolbar.get('id')}' uses unsupported buttonMode '{mode}'.")
+                warnings.append(f"Toolbar '{toolbar_id}' uses unsupported buttonMode '{mode}'.")
             self._check_int(warnings, "toolbar iconSize", toolbar.get("iconSize"), 8, 96)
-            self._check_int(warnings, "toolbar height", toolbar.get("height"), 20, 160)
+            minimum_height = 32 if toolbar_id == "viewport" else 24
+            self._check_int(
+                warnings,
+                f"{toolbar_id or 'unnamed'} toolbar height",
+                toolbar.get("height"),
+                minimum_height,
+                160,
+            )
         for panel in root.findall("./panels/panel"):
             panel_id = (panel.get("id") or "").strip()
             if panel_id and panel_id not in KNOWN_PANELS:
@@ -97,6 +105,30 @@ class LayoutValidator:
             mode = (viewport_toolbar.get("buttonMode") or "text").strip()
             if mode not in VALID_BUTTON_MODES:
                 warnings.append(f"Viewport toolbar uses unsupported buttonMode '{mode}'.")
+        minimum_spacing = {
+            "menuBarHeight": 24,
+            "inputHeight": 24,
+            "comboHeight": 24,
+            "spinboxHeight": 24,
+            "tabHeight": 24,
+            "tableRowHeight": 24,
+            "treeRowHeight": 24,
+            "panelHeaderHeight": 24,
+            "viewportToolbarHeight": 32,
+            "transformBarHeight": 32,
+        }
+        spacing = root.find("./spacing")
+        if spacing is not None:
+            for name, minimum in minimum_spacing.items():
+                entry = spacing.find(name)
+                if entry is not None:
+                    self._check_int(
+                        warnings,
+                        name,
+                        entry.get("value"),
+                        minimum,
+                        5000,
+                    )
         return warnings
 
     @staticmethod

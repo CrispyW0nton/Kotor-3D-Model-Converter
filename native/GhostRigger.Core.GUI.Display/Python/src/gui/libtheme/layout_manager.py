@@ -46,6 +46,13 @@ class LayoutManager(QtCore.QObject):
         for layout_id in user_layouts:
             if layout_id in layouts:
                 diagnostics.append(f"User layout '{layout_id}' overrides packaged layout.")
+                user_layout = user_layouts[layout_id]
+                packaged_layout = layouts[layout_id]
+                if not user_layout.dock_groups and packaged_layout.dock_groups:
+                    # Older saved layouts predate editable dock topology. Keep
+                    # the user's dimensions and visibility while inheriting the
+                    # product's hidden-by-default structural groups.
+                    user_layout.dock_groups = deepcopy(packaged_layout.dock_groups)
         layouts.update(user_layouts)
         for layout in layouts.values():
             diagnostics.extend(f"{layout.name}: {warning}" for warning in layout.warnings)

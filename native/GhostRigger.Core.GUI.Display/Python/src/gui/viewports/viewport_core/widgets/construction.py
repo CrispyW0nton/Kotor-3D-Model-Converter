@@ -18,8 +18,8 @@ class ViewportConstructionMixin:
         tb.setObjectName("ViewportToolbar")
         tb.setFrameShape(QtWidgets.QFrame.StyledPanel)
         tb.setLineWidth(1)
-        tb.setMinimumHeight(26)
-        tb.setFixedHeight(34)
+        tb.setMinimumHeight(36)
+        tb.setFixedHeight(38)
         self.viewport_toolbar = tb
         row = QtFlowLayout(
             tb,
@@ -28,7 +28,7 @@ class ViewportConstructionMixin:
             vspacing=2,
             horizontal_alignment=QtCore.Qt.AlignHCenter,
         )
-        row.setContentsMargins(4 if self._compact_controls else 5, 1, 4 if self._compact_controls else 5, 11)
+        row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
 
         self.renderer_button = self._icon_button(
             "GPU",
@@ -246,7 +246,12 @@ class ViewportConstructionMixin:
         self.selection_mode_button = QtWidgets.QToolButton()
         self.selection_mode_button.setObjectName("ViewportSelectionModeButton")
         self.selection_mode_button.setProperty("_gr_ignore_layout_button_mode", True)
-        self.selection_mode_button.setFixedSize(34, 22)
+        self.selection_mode_button.setProperty("ghostFrequentAction", True)
+        self.selection_mode_button.setAccessibleName("Choose viewport selection mode")
+        self.selection_mode_button.setAccessibleDescription(
+            "Open a menu to choose object, mesh, face, edge, or vertex selection."
+        )
+        self.selection_mode_button.setFixedSize(34, 32)
         self.selection_mode_button.setIconSize(QtCore.QSize(20, 18))
         self.selection_mode_button.setCursor(QtCore.Qt.PointingHandCursor)
         self.selection_mode_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
@@ -271,7 +276,12 @@ class ViewportConstructionMixin:
         self.navigation_button = QtWidgets.QToolButton()
         self.navigation_button.setObjectName("ViewportNavigationButton")
         self.navigation_button.setProperty("_gr_ignore_layout_button_mode", True)
-        self.navigation_button.setFixedSize(34, 22)
+        self.navigation_button.setProperty("ghostFrequentAction", True)
+        self.navigation_button.setAccessibleName("Choose viewport navigation profile")
+        self.navigation_button.setAccessibleDescription(
+            "Open a menu to choose the viewport mouse and keyboard navigation profile."
+        )
+        self.navigation_button.setFixedSize(34, 32)
         self.navigation_button.setIconSize(QtCore.QSize(22, 18))
         self.navigation_button.setCursor(QtCore.Qt.PointingHandCursor)
         self.navigation_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
@@ -294,6 +304,10 @@ class ViewportConstructionMixin:
 
         self.canvas = RendererSurfaceHost(self)
         self.canvas.setObjectName("ViewportCanvas")
+        self.canvas.setAccessibleName("3D scene viewport")
+        self.canvas.setAccessibleDescription(
+            "Interactive 3D scene canvas. Use the viewport navigation profile and keyboard shortcuts to move the camera."
+        )
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(120 if self._compact_controls else 180, 100 if self._compact_controls else 140)
         self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Ignored if self._compact_controls else QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -318,11 +332,11 @@ class ViewportConstructionMixin:
         toolbar_scroll = make_horizontal_overflow_area(
             tb,
             "ViewportToolbarScroll",
-            height=34,
+            height=38,
             parent=self,
             show_scrollbar=False,
         )
-        toolbar_scroll.setMinimumHeight(26)
+        toolbar_scroll.setMinimumHeight(36)
         toolbar_scroll.setMinimumWidth(0)
         self.viewport_toolbar_scroll = toolbar_scroll
         self.viewport_map_studio_modeling_tabs = None
@@ -706,9 +720,10 @@ class ViewportConstructionMixin:
     ) -> QtWidgets.QPushButton:
         button = QtWidgets.QPushButton(text)
         button.setProperty("_gr_full_text", text)
+        button.setProperty("ghostFrequentAction", True)
         button.setCheckable(checkable)
         button.setChecked(active if checkable else False)
-        button.setFixedHeight(22)
+        button.setFixedHeight(32)
         if self._compact_controls:
             width = max(24, min(58, button.fontMetrics().horizontalAdvance(text) + 16))
             button.setFixedWidth(width)
@@ -716,6 +731,10 @@ class ViewportConstructionMixin:
         button.setCursor(QtCore.Qt.PointingHandCursor)
         if tooltip:
             button.setToolTip(tooltip)
+        accessible_name = str(tooltip or text or "").strip()
+        if accessible_name:
+            button.setAccessibleName(accessible_name)
+            button.setAccessibleDescription(accessible_name)
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
 
@@ -783,9 +802,11 @@ class ViewportConstructionMixin:
         button.setProperty("_gr_ignore_layout_button_mode", True)
         button.setIcon(_icon(icon_name))
         button.setIconSize(QtCore.QSize(18, 18))
-        button.setFixedWidth(30)
-        button.setMinimumWidth(30)
-        button.setMaximumWidth(30)
+        button.setFixedWidth(34)
+        button.setMinimumWidth(34)
+        button.setMaximumWidth(34)
+        button.setAccessibleName(str(tooltip or text).strip())
+        button.setAccessibleDescription(str(tooltip or text).strip())
         button.setToolTip(tooltip or text)
         return button
 
@@ -810,7 +831,7 @@ class ViewportConstructionMixin:
         if toolbar is not None:
             toolbar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
             radius = min(3, int(getattr(theme, "metric", lambda *_args: 2)("border.radius", 2)))
-            button_height = 22
+            button_height = 32
             toolbar.setStyleSheet(
                 f"#ViewportToolbar {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; "
                 f"border:1px solid {theme.color('viewportToolbar.border', theme.color('toolbar.border'))}; }}"
@@ -818,7 +839,7 @@ class ViewportConstructionMixin:
                 f"background:{theme.color('button.background')}; "
                 f"color:{theme.color('button.text', theme.color('text.primary'))}; "
                 f"border:1px solid {theme.color('viewportToolbar.border', theme.color('panel.border'))}; "
-                f"border-radius:{radius}px; padding:3px 0px 0px 0px; margin:0px; "
+                f"border-radius:{radius}px; padding:0px; margin:0px; "
                 f"min-height:{button_height}px; max-height:{button_height}px; }}"
                 f"#ViewportToolbar QPushButton:hover, #ViewportToolbar QToolButton:hover {{ "
                 f"background:{theme.color('button.hover')}; color:{theme.color('accent.primary')}; "
@@ -912,21 +933,21 @@ class ViewportConstructionMixin:
     def apply_ghost_layout(self, layout) -> None:
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         toolbar_layout = layout.toolbar("viewport")
-        toolbar_height = max(26, toolbar_layout.height)
+        toolbar_height = max(36, toolbar_layout.height)
         if toolbar is not None:
             toolbar.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
-            toolbar.setMinimumHeight(26)
+            toolbar.setMinimumHeight(36)
             toolbar.setFixedHeight(toolbar_height)
             toolbar_row = toolbar.layout()
             if toolbar_row is not None:
                 side_margin = 4 if self._compact_controls else 5
-                top_margin = max(0, (toolbar_layout.height - 22) // 2 - 5)
-                bottom_margin = max(0, toolbar_layout.height - 22 - top_margin)
+                top_margin = max(0, (toolbar_height - 32) // 2)
+                bottom_margin = max(0, toolbar_height - 32 - top_margin)
                 toolbar_row.setContentsMargins(side_margin, top_margin, side_margin, bottom_margin)
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
-            toolbar_scroll.setMinimumHeight(26)
+            toolbar_scroll.setMinimumHeight(36)
             if hasattr(toolbar_scroll, "set_base_fixed_height"):
                 toolbar_scroll.set_base_fixed_height(toolbar_height)
             else:

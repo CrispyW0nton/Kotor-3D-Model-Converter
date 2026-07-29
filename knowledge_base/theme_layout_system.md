@@ -163,6 +163,28 @@ shortcut, and submenu columns aligned without fixed per-window menu widths.
 Text-bearing toolbar buttons likewise size to their full label; compact
 workspaces should provide horizontal overflow rather than clipping text.
 
+Responsive layout behavior is also layout-owned. `responsiveCollapseWidth`
+sets the logical-pixel width below which secondary docks start hidden, and
+`windowScreenMargin` can reserve work-area padding. `LayoutApplier` clamps the
+requested main-window size to the active screen's logical work area before it
+applies docks, so 125%, 150%, and 200% Windows scaling do not recreate a
+desktop-sized window outside the visible laptop work area.
+
+Shared accessibility contracts are:
+
+- ordinary interactive targets are at least 24x24 logical pixels;
+- frequent viewport controls are at least 32x32 logical pixels;
+- icon-only controls have both a stable accessible name and a tooltip;
+- primary workflows are reachable in a deliberate Tab order with visible
+  native/theme focus state;
+- normal text reaches 4.5:1 contrast and focus/UI boundaries reach 3:1.
+
+The GUI Display `AccessibilityAuditor` checks these contracts, changing-state
+descriptions, and duplicate shortcuts against a live widget tree. The main
+shell exposes the report under **Help > Diagnostics > Accessibility Audit**.
+Theme validation also checks the semantic foreground/background pairs after
+legacy tokens have been derived.
+
 Map Studio's left and right authoring rails are collapsible splitter children.
 Its reversible **Maximize Viewport** action hides the rails and nonessential
 authoring chrome, then restores the recorded splitter and dock state. Layout

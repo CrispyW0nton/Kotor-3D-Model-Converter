@@ -12,7 +12,7 @@ from ..shared.dependencies import Optional, QtCore, QtWidgets
 # orientation is preserved as the user navigates.
 SNAP_VIEW_INTERP_MS    = 200    # smooth tween duration per roadmap T404
 SNAP_VIEW_INTERP_HZ    = 60     # tween tick frequency
-SNAP_VIEW_BAR_HEIGHT   = 28
+SNAP_VIEW_BAR_HEIGHT   = 40
 SNAP_VIEW_BAR_MARGIN   = 8
 
 # Azimuth / elevation per preset (degrees).  Matches `_set_camera_view`.
@@ -53,23 +53,11 @@ class _FloatingSnapViewWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         self.setCursor(QtCore.Qt.ArrowCursor)
-        self.setStyleSheet(
-            "QWidget#snapBar {"
-            "  background:rgba(20,22,27,200);"
-            "  border:1px solid #3a3f47;"
-            "  border-radius:5px;"
-            "}"
-            "QPushButton {"
-            "  background:#2b2e33; color:#d7dde6; border:1px solid #464b53;"
-            "  padding:1px 6px; min-width:18px; font-size:10pt;"
-            "}"
-            "QPushButton:hover { background:#363a40; border-color:#6d747f; }"
-            "QPushButton:pressed { background:#1f2227; }"
-            "QPushButton:checked {"
-            "  background:#35506f; color:#ffffff; border-color:#6ea0d8;"
-            "}"
-        )
         self.setObjectName("snapBar")
+        self.setAccessibleName("Viewport view presets")
+        self.setAccessibleDescription(
+            "Choose a standard camera direction or switch between perspective and orthographic projection."
+        )
 
         row = QtWidgets.QHBoxLayout(self)
         row.setContentsMargins(6, 3, 6, 3)
@@ -78,7 +66,10 @@ class _FloatingSnapViewWidget(QtWidgets.QWidget):
         for label, key, tip in self._VIEW_BUTTONS:
             btn = QtWidgets.QPushButton(label)
             btn.setToolTip(tip)
-            btn.setFixedHeight(20)
+            btn.setAccessibleName(tip)
+            btn.setAccessibleDescription(f"Rotate the viewport camera to the {key} view")
+            btn.setProperty("ghostFrequentAction", True)
+            btn.setMinimumSize(32, 32)
             btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.clicked.connect(lambda _checked=False, k=key: self.viewSelected.emit(k))
             row.addWidget(btn)
@@ -93,7 +84,12 @@ class _FloatingSnapViewWidget(QtWidgets.QWidget):
         self._ortho_button.setCheckable(True)
         self._ortho_button.setChecked(False)
         self._ortho_button.setToolTip("Toggle perspective / orthographic projection")
-        self._ortho_button.setFixedHeight(20)
+        self._ortho_button.setAccessibleName("Toggle perspective or orthographic projection")
+        self._ortho_button.setAccessibleDescription(
+            "Switch the viewport projection between perspective and orthographic."
+        )
+        self._ortho_button.setProperty("ghostFrequentAction", True)
+        self._ortho_button.setMinimumHeight(32)
         self._ortho_button.setCursor(QtCore.Qt.PointingHandCursor)
         self._ortho_button.toggled.connect(self._on_ortho_toggled)
         row.addWidget(self._ortho_button)
@@ -112,7 +108,7 @@ class _FloatingSnapViewWidget(QtWidgets.QWidget):
             f"  background:{theme.color('button.background')};"
             f"  color:{theme.color('button.text')};"
             f"  border:1px solid {theme.color('panel.border')};"
-            "  padding:1px 6px; min-width:18px; font-size:10pt;"
+            "  padding:1px 6px; min-width:32px; min-height:32px; font-size:10pt;"
             "}"
             "QPushButton:hover {"
             f"  background:{theme.color('button.hover')};"

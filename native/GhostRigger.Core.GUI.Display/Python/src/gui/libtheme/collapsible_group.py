@@ -8,7 +8,8 @@ from PySide6 import QtCore, QtWidgets
 class CollapsibleGroupBox(QtWidgets.QGroupBox):
     """QGroupBox with a top-right +/- expander."""
 
-    TOGGLE_SIZE = 16
+    TOGGLE_SIZE = 24
+    HEADER_HEIGHT = 30
 
     def __init__(self, title: str, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(title, parent)
@@ -21,15 +22,19 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
         self._toggle.setProperty("collapsibleToggle", True)
         self._toggle.setText("-")
         self._toggle.setToolTip("Collapse section")
+        self._toggle.setAccessibleName("Collapse section")
+        self._toggle.setAccessibleDescription(f"Collapse the {title} section.")
         self._toggle.setAutoRaise(True)
         self._toggle.setCursor(QtCore.Qt.PointingHandCursor)
         self._toggle.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         self._toggle.clicked.connect(self.toggle_collapsed)
         self._enforce_toggle_size()
+        size = self.TOGGLE_SIZE
         self._toggle.setStyleSheet(
             "QToolButton#CollapsibleGroupToggle {"
-            "min-width: 16px; max-width: 16px; min-height: 16px; max-height: 16px;"
-            "width: 16px; height: 16px;"
+            f"min-width: {size}px; max-width: {size}px; "
+            f"min-height: {size}px; max-height: {size}px;"
+            f"width: {size}px; height: {size}px;"
             "padding: 0px; margin: 0px;"
             "}"
         )
@@ -49,7 +54,7 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
 
     def _reserve_header_space(self, layout: QtWidgets.QLayout) -> None:
         left, top, right, bottom = layout.getContentsMargins()
-        layout.setContentsMargins(left, max(top, 18), right, bottom)
+        layout.setContentsMargins(left, max(top, self.HEADER_HEIGHT), right, bottom)
 
     def setCollapsed(self, collapsed: bool) -> None:  # noqa: N802
         if not self._collapsed:
@@ -67,7 +72,10 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
                 if child_layout is not None:
                     self._set_layout_visible(child_layout, not self._collapsed)
         self._toggle.setText("+" if self._collapsed else "-")
-        self._toggle.setToolTip("Expand section" if self._collapsed else "Collapse section")
+        action = "Expand" if self._collapsed else "Collapse"
+        self._toggle.setToolTip(f"{action} section")
+        self._toggle.setAccessibleName(f"{action} section")
+        self._toggle.setAccessibleDescription(f"{action} the {self.title()} section.")
         header_height = self.collapsed_height()
         self.setMinimumHeight(header_height if self._collapsed else self._expanded_min_height)
         self.setMaximumHeight(header_height if self._collapsed else self._expanded_max_height)
@@ -78,7 +86,7 @@ class CollapsibleGroupBox(QtWidgets.QGroupBox):
         self.setCollapsed(not self._collapsed)
 
     def collapsed_height(self) -> int:
-        return 24
+        return self.HEADER_HEIGHT
 
     def _enforce_toggle_size(self) -> None:
         size = self.TOGGLE_SIZE

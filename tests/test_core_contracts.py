@@ -10676,19 +10676,21 @@ def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     viewport_source = inspect.getsource(QtViewportWidget._build)
+    viewport_layout_source = inspect.getsource(QtViewportWidget.apply_ghost_layout)
     builder_source = inspect.getsource(QtCharacterBuilderWindow._build_toolbars)
     bottom_source = inspect.getsource(QtCharacterBuilderWindow._build_bottom_strip)
 
     assert "make_horizontal_overflow_area(" in viewport_source
     assert '"ViewportToolbarScroll"' in viewport_source
-    assert "height=34" in viewport_source
+    assert "height=38" in viewport_source
     assert "show_scrollbar=False" in viewport_source
     assert "toolbar_layout.height + 14" not in viewport_source
-    assert "top_margin = max(0, (toolbar_layout.height - 22) // 2 - 5)" in viewport_source
-    assert "bottom_margin = max(0, toolbar_layout.height - 22 - top_margin)" in viewport_source
+    assert "top_margin = max(0, (toolbar_height - 32) // 2)" in viewport_layout_source
+    assert "bottom_margin = max(0, toolbar_height - 32 - top_margin)" in viewport_layout_source
     assert "make_horizontal_overflow_area(" in builder_source
     assert '"CharacterBuilderToolbarScroll"' in builder_source
-    assert "make_scrollable_panel(self.bottom_strip" in bottom_source
+    assert "make_scrollable_panel(" in bottom_source
+    assert '"CharacterBuilderBottomDockScroll"' in bottom_source
 
 
 def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
@@ -11069,9 +11071,9 @@ def test_viewport_toolbar_keeps_minimum_visible_height() -> None:
     viewport_source = inspect.getsource(QtViewportWidget._build)
     layout_source = inspect.getsource(QtViewportWidget.apply_ghost_layout)
 
-    assert "tb.setMinimumHeight(26)" in viewport_source
-    assert "toolbar_scroll.setMinimumHeight(26)" in viewport_source
-    assert "toolbar_height = max(26, toolbar_layout.height)" in layout_source
+    assert "tb.setMinimumHeight(36)" in viewport_source
+    assert "toolbar_scroll.setMinimumHeight(36)" in viewport_source
+    assert "toolbar_height = max(36, toolbar_layout.height)" in layout_source
     assert "toolbar_scroll.set_base_fixed_height(toolbar_height)" in layout_source
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtWidgets
 
+from .accessibility_audit import install_accessibility_defaults
 from .icon_manager import ThemeIconManager
 from .os_theme_detector import OSThemeDetector
 from .theme_applier import ThemeApplier
@@ -41,6 +42,7 @@ class ThemeManager(QtCore.QObject):
         self.current_theme: Theme | None = None
         self.diagnostics: list[str] = []
         self.applier.themeChanged.connect(self.themeChanged.emit)
+        install_accessibility_defaults()
         self.reload()
 
     def _packaged_icon_dir(self) -> Path:

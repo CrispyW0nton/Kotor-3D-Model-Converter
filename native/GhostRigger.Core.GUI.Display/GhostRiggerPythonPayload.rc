@@ -46,6 +46,7 @@ PYTHON_PAYLOAD_GUI_INTEGRATION_INIT RCDATA "Python/src/gui/integration/__init__.
 PYTHON_PAYLOAD_GUI_INTEGRATION_EDITOR_SERVICES RCDATA "Python/src/gui/integration/editor_services.py"
 PYTHON_PAYLOAD_GUI_INTEGRATION_TOOL_INTEGRATION_REGISTRY RCDATA "Python/src/gui/integration/tool_integration_registry.py"
 PYTHON_PAYLOAD_GUI_LIBTHEME_INIT RCDATA "Python/src/gui/libtheme/__init__.py"
+PYTHON_PAYLOAD_GUI_LIBTHEME_ACCESSIBILITY_AUDIT RCDATA "Python/src/gui/libtheme/accessibility_audit.py"
 PYTHON_PAYLOAD_GUI_LIBTHEME_COLLAPSIBLE_GROUP RCDATA "Python/src/gui/libtheme/collapsible_group.py"
 PYTHON_PAYLOAD_GUI_LIBTHEME_FONT_MANAGER RCDATA "Python/src/gui/libtheme/font_manager.py"
 PYTHON_PAYLOAD_GUI_LIBTHEME_ICON_MANAGER RCDATA "Python/src/gui/libtheme/icon_manager.py"

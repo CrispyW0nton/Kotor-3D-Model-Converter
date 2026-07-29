@@ -25,6 +25,75 @@ def button_mode_to_toolbutton_style(mode: str) -> QtCore.Qt.ToolButtonStyle:
     return _BUTTON_STYLES.get(mode, QtCore.Qt.ToolButtonTextBesideIcon)
 
 
+def fit_window_size_to_available_screen(
+    requested: QtCore.QSize,
+    available: QtCore.QSize,
+    minimum: QtCore.QSize,
+    *,
+    margin: int = 0,
+) -> QtCore.QSize:
+    """Clamp a layout request to the screen's logical-pixel work area."""
+
+    usable_width = max(1, int(available.width()) - (max(0, int(margin)) * 2))
+    usable_height = max(1, int(available.height()) - (max(0, int(margin)) * 2))
+    minimum_width = min(max(1, int(minimum.width())), usable_width)
+    minimum_height = min(max(1, int(minimum.height())), usable_height)
+    return QtCore.QSize(
+        min(max(int(requested.width()), minimum_width), usable_width),
+        min(max(int(requested.height()), minimum_height), usable_height),
+    )
+
+
+def fit_window_geometry_to_available_screen(
+    requested: QtCore.QRect,
+    available: QtCore.QRect,
+    *,
+    margin: int = 0,
+) -> QtCore.QRect:
+    """Keep a top-level frame fully reachable inside one logical screen."""
+
+    inset = max(0, int(margin))
+    usable = available.adjusted(inset, inset, -inset, -inset)
+    if usable.width() < 1 or usable.height() < 1:
+        usable = QtCore.QRect(available)
+    width = min(max(1, requested.width()), usable.width())
+    height = min(max(1, requested.height()), usable.height())
+    maximum_x = usable.right() - width + 1
+    maximum_y = usable.bottom() - height + 1
+    x = min(max(requested.left(), usable.left()), maximum_x)
+    y = min(max(requested.top(), usable.top()), maximum_y)
+    return QtCore.QRect(x, y, width, height)
+
+
+def fit_top_level_window_to_available_screen(
+    window: QtWidgets.QWidget,
+    *,
+    margin: int = 0,
+) -> None:
+    """Resize and reposition a normal window using its complete native frame."""
+
+    if window.isMaximized() or window.isFullScreen():
+        return
+    screen = window.screen() or QtGui.QGuiApplication.primaryScreen()
+    if screen is None:
+        return
+    frame = window.frameGeometry()
+    fitted = fit_window_geometry_to_available_screen(
+        frame,
+        screen.availableGeometry(),
+        margin=margin,
+    )
+    if fitted.size() != frame.size():
+        decoration = frame.size() - window.geometry().size()
+        window.resize(
+            max(1, fitted.width() - decoration.width()),
+            max(1, fitted.height() - decoration.height()),
+        )
+    if fitted.topLeft() != frame.topLeft():
+        # QWidget.move() positions a top-level window by its frame, not its client origin.
+        window.move(fitted.topLeft())
+
+
 def _effective_toolbar_icon_size(mode: str, requested: int) -> int:
     requested = int(requested or 16)
     if mode == "iconOnly":
@@ -161,10 +230,45 @@ class LayoutApplier(QtCore.QObject):
         window.setUpdatesEnabled(False)
         setattr(window, "_applying_ghost_layout", True)
         try:
+            screen = window.screen() or QtGui.QGuiApplication.primaryScreen()
+            available = (
+                screen.availableGeometry().size()
+                if screen is not None
+                else QtCore.QSize(layout.main_width, layout.main_height)
+            )
+            fitted = fit_window_size_to_available_screen(
+                QtCore.QSize(layout.main_width, layout.main_height),
+                available,
+                window.minimumSize(),
+                margin=layout.spacing_value("windowScreenMargin", 0),
+            )
             if not window.isMaximized():
-                window.resize(layout.main_width, layout.main_height)
+                window.resize(fitted)
+            effective_width = available.width() if window.isMaximized() or layout.maximized else fitted.width()
+            collapse_width = layout.spacing_value("responsiveCollapseWidth", 900)
+            responsive = bool(collapse_width and effective_width < collapse_width)
+            previous_responsive = bool(getattr(window, "_ghost_responsive_compact", False))
+            setattr(window, "_ghost_responsive_compact", responsive)
+            if responsive and not previous_responsive:
+                announce = getattr(window, "_log", None)
+                if callable(announce):
+                    announce(
+                        "Compact screen mode: side and bottom panels start hidden; reopen them from Window.",
+                        "info",
+                    )
             if layout.maximized:
                 window.showMaximized()
+            else:
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda target=window, screen_margin=layout.spacing_value(
+                        "windowScreenMargin",
+                        0,
+                    ): fit_top_level_window_to_available_screen(
+                        target,
+                        margin=screen_margin,
+                    ),
+                )
             self._apply_splitters(layout, window)
             self._apply_panels(layout, window)
             self._apply_density_metrics(layout, window)
@@ -223,8 +327,12 @@ class LayoutApplier(QtCore.QObject):
                 text_width = button.fontMetrics().horizontalAdvance(str(full_text))
                 button.setMinimumWidth(max(icon_size + 20, text_width + icon_size + 24))
             if toolbar.height > 0:
-                button.setMinimumHeight(max(16, min(toolbar.height - 8, 24)))
-                button.setMaximumHeight(max(16, min(toolbar.height - 4, 28)))
+                target_minimum = 32 if toolbar.id == "viewport" else 24
+                minimum_height = max(target_minimum, min(toolbar.height - 6, target_minimum + 4))
+                maximum_height = max(minimum_height, toolbar.height - 2)
+                button.setMinimumHeight(minimum_height)
+                button.setMaximumHeight(maximum_height)
+            button.setProperty("ghostFrequentAction", toolbar.id == "viewport")
             if mode == "iconOnly":
                 button.setMinimumWidth(max(button.minimumWidth(), icon_size + 14))
 
@@ -277,7 +385,7 @@ class LayoutApplier(QtCore.QObject):
             if widget is None:
                 continue
             panel = layout.panel(panel_id)
-            widget.setVisible(panel.visible)
+            widget.setVisible(panel.visible and not bool(getattr(window, "_ghost_responsive_compact", False)))
             if isinstance(widget, QtWidgets.QDockWidget):
                 widget.setMaximumWidth(16777215)
             user_resizable_width = panel_id == "contentBrowser"
@@ -319,7 +427,10 @@ class LayoutApplier(QtCore.QObject):
                         dock.setVisible(False)
                         continue
                     dock.setMaximumWidth(16777215)
-                    dock.setVisible(panel.visible)
+                    dock.setVisible(
+                        panel.visible
+                        and not bool(getattr(window, "_ghost_responsive_compact", False))
+                    )
                     dock.resize(panel.preferred_width, max(520, panel.preferred_height))
         self._apply_dock_groups(layout, window)
 
@@ -356,7 +467,10 @@ class LayoutApplier(QtCore.QObject):
                         continue
                 try:
                     window.addDockWidget(area, dock)
-                    dock.setVisible(bool(group.visible))
+                    dock.setVisible(
+                        bool(group.visible)
+                        and not bool(getattr(window, "_ghost_responsive_compact", False))
+                    )
                 except RuntimeError:
                     continue
             if group.mode == "tabbed":
@@ -382,15 +496,15 @@ class LayoutApplier(QtCore.QObject):
     def _apply_density_metrics(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         margin = layout.spacing_value("margin", 4)
         spacing = layout.spacing_value("panelSpacing", 4)
-        input_height = layout.spacing_value("inputHeight", 0)
-        tab_height = layout.spacing_value("tabHeight", 0)
+        input_height = max(24, layout.spacing_value("inputHeight", 0))
+        tab_height = max(24, layout.spacing_value("tabHeight", 0))
         tab_width = layout.spacing_value("tabWidth", 0)
         tab_padding_x = layout.spacing_value("tabPaddingX", layout.spacing_value("tabPadding", 0))
         tab_padding_y = layout.spacing_value("tabPaddingY", layout.spacing_value("tabPadding", 0))
         tab_margin_x = layout.spacing_value("tabMarginX", layout.spacing_value("tabMargin", 0))
         tab_margin_y = layout.spacing_value("tabMarginY", layout.spacing_value("tabMargin", 0))
-        table_row = layout.spacing_value("tableRowHeight", 0)
-        tree_row = layout.spacing_value("treeRowHeight", table_row)
+        table_row = max(24, layout.spacing_value("tableRowHeight", 0))
+        tree_row = max(24, layout.spacing_value("treeRowHeight", table_row))
         group_margin = layout.spacing_value("groupboxMargin", margin + 4)
         group_spacing = layout.spacing_value("groupboxSpacing", spacing)
         for child in window.findChildren(QtWidgets.QWidget):

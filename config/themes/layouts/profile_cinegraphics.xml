@@ -2,7 +2,7 @@
     <mainWindow width="1760" height="980" maximized="false"/>
     <toolbars>
         <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
-        <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="34"/>
+        <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="38"/>
     </toolbars>
     <panels>
         <panel id="contentBrowser" region="left" visible="false" minWidth="260" preferredWidth="340" minHeight="260" preferredHeight="420"/>
@@ -53,7 +53,7 @@
         <inputHeight value="26"/>
         <comboHeight value="26"/>
         <spinboxHeight value="26"/>
-        <tabHeight value="14"/>
+        <tabHeight value="24"/>
         <tabWidth value="90"/>
         <tabPadding value="8"/>
         <tabPaddingX value="12"/>
@@ -61,12 +61,13 @@
         <tabMargin value="0"/>
         <tabMarginX value="0"/>
         <tabMarginY value="0"/>
-        <tableRowHeight value="23"/>
-        <treeRowHeight value="23"/>
+        <tableRowHeight value="24"/>
+        <treeRowHeight value="24"/>
         <groupboxMargin value="8"/>
         <groupboxSpacing value="5"/>
         <panelHeaderHeight value="28"/>
-        <viewportToolbarHeight value="34"/>
-        <transformBarHeight value="30"/>
+        <viewportToolbarHeight value="38"/>
+        <transformBarHeight value="38"/>
+        <responsiveCollapseWidth value="900"/>
     </spacing>
 </layout>

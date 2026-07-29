@@ -147,7 +147,11 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
         super().__init__(parent)
         self._suppress = False
         self.setObjectName("TransformTypeInBar")
-        self.setFixedHeight(32)
+        self.setFixedHeight(38)
+        self.setAccessibleName("Transform and snapping controls")
+        self.setAccessibleDescription(
+            "Edit object transforms and grid spacing, or configure position, angle, and percent snapping."
+        )
         self.setStyleSheet(transform_bar_stylesheet())
         self._build()
 
@@ -156,14 +160,14 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
 
     def apply_ghost_layout(self, layout) -> None:
         height = layout.spacing_value("transformBarHeight", layout.spacing_value("inputHeight", 24) + 8)
-        self.setFixedHeight(max(24, height))
+        self.setFixedHeight(max(38, height))
         spacing = layout.spacing_value("toolbarSpacing", 4)
         if self.layout() is not None:
             self.layout().setContentsMargins(spacing + 1, 3, spacing + 1, 3)
             self.layout().setSpacing(max(1, spacing))
-        control_h = max(18, layout.spacing_value("inputHeight", 24))
+        control_h = max(32, layout.spacing_value("inputHeight", 24))
         for button in self.findChildren(QtWidgets.QToolButton):
-            button.setFixedSize(max(22, control_h), control_h)
+            button.setFixedSize(control_h, control_h)
         for combo in self.findChildren(QtWidgets.QComboBox):
             combo.setFixedHeight(control_h)
         for edit in self.findChildren(QtWidgets.QLineEdit):
@@ -190,6 +194,10 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
             edit.setFixedWidth(72)
             edit.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
             edit.setToolTip(f"{axis} transform type-in")
+            edit.setAccessibleName(f"{axis} transform value")
+            edit.setAccessibleDescription(
+                f"Enter the {axis} component of the active transform in the current reference coordinate system."
+            )
             edit.editingFinished.connect(lambda axis_name=axis, field=edit: self._emit_axis(axis_name, field))
             self.axis_edits[axis] = edit
             row.addWidget(edit)
@@ -201,6 +209,10 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
         self.grid_edit.setFixedWidth(84)
         self.grid_edit.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.grid_edit.setToolTip("Grid spacing. Accepts values like 10 cm, 1 m, 2 ft.")
+        self.grid_edit.setAccessibleName("Grid spacing")
+        self.grid_edit.setAccessibleDescription(
+            "Enter viewport grid spacing with an optional unit, such as 10 cm, 1 m, or 2 ft."
+        )
         self.grid_edit.editingFinished.connect(self._emit_grid)
         row.addWidget(self.grid_edit)
 
@@ -228,8 +240,11 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
         button = QtWidgets.QToolButton()
         button.setText(text)
         button.setCheckable(True)
-        button.setFixedSize(24, 24)
+        button.setFixedSize(32, 32)
         button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
+        button.setAccessibleDescription(tooltip)
+        button.setProperty("ghostFrequentAction", True)
         button.setCursor(QtCore.Qt.PointingHandCursor)
         return button
 
@@ -237,8 +252,11 @@ class QtTransformTypeInBar(QtWidgets.QFrame):
         combo = QtWidgets.QComboBox()
         combo.setEditable(True)
         combo.addItems(values)
-        combo.setFixedSize(58, 24)
+        combo.setFixedSize(68, 32)
         combo.setToolTip(tooltip)
+        combo.setAccessibleName(tooltip)
+        combo.setAccessibleDescription(f"Choose or type the {tooltip.lower()}.")
+        combo.setProperty("ghostFrequentAction", True)
         return combo
 
     def set_transform_enabled(self, enabled: bool) -> None:

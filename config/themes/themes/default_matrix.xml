@@ -77,13 +77,13 @@
         <metric name="toolbar.height" value="34"/>
         <metric name="toolbar.iconSize" value="18"/>
         <metric name="toolbar.spacing" value="4"/>
-        <metric name="button.height" value="16"/>
+        <metric name="button.height" value="24"/>
         <metric name="button.minWidth" value="64"/>
         <metric name="button.paddingH" value="6"/>
         <metric name="button.paddingV" value="1"/>
         <metric name="panel.margin" value="4"/>
         <metric name="panel.spacing" value="4"/>
         <metric name="splitter.handleWidth" value="6"/>
-        <metric name="tab.height" value="14"/>
+        <metric name="tab.height" value="24"/>
     </metrics>
 </theme>

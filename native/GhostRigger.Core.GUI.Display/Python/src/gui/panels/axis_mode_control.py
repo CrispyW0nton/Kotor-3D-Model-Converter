@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6 import QtCore, QtWidgets
-
 from src.core.scene.axis_mode import AxisMode
 
 
@@ -11,7 +10,7 @@ class AxisModeControl(QtWidgets.QWidget):
     """Small toolbar widget for choosing the active transform axis mode."""
 
     axisModeChanged = QtCore.Signal(object)
-    TOOLBAR_HEIGHT = 22
+    TOOLBAR_HEIGHT = 32
     TOOLBAR_VERTICAL_NUDGE = 0
 
     def __init__(self, parent: QtWidgets.QWidget | None = None, *, compact: bool = False) -> None:
@@ -32,6 +31,11 @@ class AxisModeControl(QtWidgets.QWidget):
         self.combo = QtWidgets.QComboBox()
         self.combo.setObjectName("AxisModeComboBox")
         self.combo.setToolTip("Choose the transform reference coordinate system.")
+        self.combo.setAccessibleName("Transform reference coordinate system")
+        self.combo.setAccessibleDescription(
+            "Choose whether transforms use world, local, parent, view, screen, or a picked reference."
+        )
+        self.combo.setProperty("ghostFrequentAction", True)
         self.combo.setFixedHeight(self.TOOLBAR_HEIGHT)
         self.combo.setMinimumWidth(72 if self._compact else 112)
         self.combo.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
@@ -74,7 +78,8 @@ class AxisModeControl(QtWidgets.QWidget):
             f"QComboBox#AxisModeComboBox {{ background:{theme.color('input.background')}; "
             f"color:{theme.color('input.text')}; "
             f"border:1px solid {theme.color('viewportToolbar.border', theme.color('input.border'))}; "
-            "border-radius:2px; min-height:22px; max-height:22px; padding:1px 18px 1px 7px; }"
+            f"border-radius:2px; min-height:{self.TOOLBAR_HEIGHT}px; "
+            f"max-height:{self.TOOLBAR_HEIGHT}px; padding:1px 18px 1px 7px; }}"
             f"QComboBox#AxisModeComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
             "QComboBox#AxisModeComboBox::drop-down { border:0; width:16px; }"
             f"QComboBox#AxisModeComboBox QAbstractItemView {{ background:{theme.color('panel.background')}; "
@@ -83,7 +88,7 @@ class AxisModeControl(QtWidgets.QWidget):
 
     def apply_ghost_layout(self, layout) -> None:
         toolbar = layout.toolbar("viewport")
-        combo_height = max(20, min(toolbar.height - 10, self.TOOLBAR_HEIGHT))
+        combo_height = max(32, min(toolbar.height - 4, self.TOOLBAR_HEIGHT))
         self.combo.setFixedHeight(combo_height)
         self.setFixedHeight(combo_height)
         if self.layout() is not None:

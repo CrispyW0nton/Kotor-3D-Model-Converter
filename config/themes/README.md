@@ -104,6 +104,19 @@ Layout `<spacing>` may tune menus with `menuBarHeight`,
 `menuIndicatorWidth`, and `menuSubmenuArrowWidth`. GhostStudio combines these
 with the active font metrics so long action labels, check/icon columns,
 shortcuts, and submenu arrows remain fully visible instead of being clipped.
+`responsiveCollapseWidth` sets the logical-pixel width below which secondary
+side and bottom docks start hidden; users can reopen them from **Window**.
+`windowScreenMargin` optionally reserves logical pixels around an unmaximized
+window. Runtime layout application always clamps the requested window size to
+the current screen work area, which keeps saved desktop layouts usable on
+high-DPI laptops.
+
+Packaged layouts keep ordinary interactive targets at least 24x24 logical
+pixels and frequent viewport targets at least 32x32. Theme text pairs must meet
+WCAG contrast (4.5:1 for normal text and 3:1 for focus boundaries). Run
+**Help > Diagnostics > Accessibility Audit** to inspect the live shell for
+missing assistive names, missing icon tooltips, keyboard focus gaps, undersized
+targets, duplicate shortcuts, and contrast failures.
 
 Viewport command bars use `viewportToolbar.background` and
 `viewportToolbar.border` so the Theme Editor can style their framed surface

@@ -5,7 +5,13 @@ from __future__ import annotations
 import re
 from xml.etree import ElementTree as ET
 
-from .style_tokens import FALLBACK_COLORS, FALLBACK_METRICS, VALID_BUTTON_MODES, VALID_TAB_STYLE_MODES
+from .accessibility_audit import audit_theme_contrast
+from .style_tokens import (
+    FALLBACK_COLORS,
+    FALLBACK_METRICS,
+    VALID_BUTTON_MODES,
+    VALID_TAB_STYLE_MODES,
+)
 from .theme_model import Theme
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$")
@@ -67,4 +73,8 @@ class ThemeValidator:
         tab_mode = theme.styles.get("tab.mode", "")
         if tab_mode and tab_mode not in VALID_TAB_STYLE_MODES:
             warnings.append(f"Tab style mode '{tab_mode}' is not supported.")
-        return warnings
+        warnings.extend(
+            f"Accessibility contrast: {issue.message}"
+            for issue in audit_theme_contrast(theme)
+        )
+        return list(dict.fromkeys(warnings))

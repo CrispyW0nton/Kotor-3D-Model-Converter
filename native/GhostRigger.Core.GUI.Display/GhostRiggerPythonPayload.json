@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Display",
-    "file_count": 326,
+    "file_count": 327,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -279,13 +279,19 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_INIT",
             "source_path": "src/gui/libtheme/__init__.py",
             "packaged_path": "Python/src/gui/libtheme/__init__.py",
-            "sha256": "5c257302b18173cd841f5b430195fa914ddc6b08153b3238c2fcfdcc844753ec"
+            "sha256": "0e57ac4ead4e72efa8d30e80a93a7a1fc0c817e5458447504619be79fc11b0d4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_ACCESSIBILITY_AUDIT",
+            "source_path": "src/gui/libtheme/accessibility_audit.py",
+            "packaged_path": "Python/src/gui/libtheme/accessibility_audit.py",
+            "sha256": "ab7047ddbfed6c88ae8f812b779e3ab15bd19b78316c43425604c88cb928a2f2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_COLLAPSIBLE_GROUP",
             "source_path": "src/gui/libtheme/collapsible_group.py",
             "packaged_path": "Python/src/gui/libtheme/collapsible_group.py",
-            "sha256": "a1895f8ca8607359e5ebf920599977c4511470a17a7966a507e02340c4915f8d"
+            "sha256": "a6b65211916f502c36581a296e6cb399a708caadafba85ce0cd23c7546c11682"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_FONT_MANAGER",
@@ -303,7 +309,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_APPLIER",
             "source_path": "src/gui/libtheme/layout_applier.py",
             "packaged_path": "Python/src/gui/libtheme/layout_applier.py",
-            "sha256": "759cc5b266c06f205e1fe0085370da33b9f6ef99e2c31e944d4fb341896a6bd1"
+            "sha256": "f9fafbf17679f741596e9fd8b274f2824254354ff17fd448e0a49a86a3a7b406"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_LOADER",
@@ -315,7 +321,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_MANAGER",
             "source_path": "src/gui/libtheme/layout_manager.py",
             "packaged_path": "Python/src/gui/libtheme/layout_manager.py",
-            "sha256": "452647cfd375ff08679a4653f4efe785cf1e7a1803c412a31ad7aa7d35ced458"
+            "sha256": "57e263977ed3058d2786d5e4e64b0d2cea1d09f188cb62336f27ce8146fe2eff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_MODEL",
@@ -327,7 +333,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_VALIDATOR",
             "source_path": "src/gui/libtheme/layout_validator.py",
             "packaged_path": "Python/src/gui/libtheme/layout_validator.py",
-            "sha256": "3e82bb1c4a4a607f0b589bd4994c319777eb12507b3592889601efdf7b4135da"
+            "sha256": "59953b43e63ae11c79fefbfe9bdb2b7c4ca4b32fb6e3640f64525a01a7aaa447"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_OS_THEME_DETECTOR",
@@ -339,13 +345,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_QT_STYLESHEET_BUILDER",
             "source_path": "src/gui/libtheme/qt_stylesheet_builder.py",
             "packaged_path": "Python/src/gui/libtheme/qt_stylesheet_builder.py",
-            "sha256": "9c6cd35750a5375f21d7ab1d8b2f20757a4c4f14a035f6dc7cc27df0df45783f"
+            "sha256": "9048f332088df89cadf1f74fe760983e48b89a041aa54f581fe254da00d36034"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_STYLE_TOKENS",
             "source_path": "src/gui/libtheme/style_tokens.py",
             "packaged_path": "Python/src/gui/libtheme/style_tokens.py",
-            "sha256": "79702e4dd9ce048cd397513570d65de9f0d9be1ac7fccd08c7806303f2878414"
+            "sha256": "059eb6209553f6b60d44beb708cb5f1854805bcb06bf90935ba672a8a72acb1a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_APPLIER",
@@ -363,19 +369,19 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_EDITOR_WINDOW",
             "source_path": "src/gui/libtheme/theme_editor_window.py",
             "packaged_path": "Python/src/gui/libtheme/theme_editor_window.py",
-            "sha256": "1ba4aab07838c39853146c8be1cc813b58164c56f1fbcdba72fcbd2686275a9e"
+            "sha256": "fe3d35105e79535b3f137e4469a10e18d98e9456540bc857dc8bc67db144bdd8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_LOADER",
             "source_path": "src/gui/libtheme/theme_loader.py",
             "packaged_path": "Python/src/gui/libtheme/theme_loader.py",
-            "sha256": "f64318996fb1fb587bf3022800d50877c46485a0264a39117e431d0aa66a2b16"
+            "sha256": "e2437303bdcc794c0741c3bd87866b1219efd19912969f3224c324e3ec73c2da"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MANAGER",
             "source_path": "src/gui/libtheme/theme_manager.py",
             "packaged_path": "Python/src/gui/libtheme/theme_manager.py",
-            "sha256": "fd403bc8b95fc94f639fbd6c92c281a98420f6da4215b7102ebd7a19379719de"
+            "sha256": "da06bebe411217d61e61b003f8265598fa118f62d06b52b04badccf190d20e48"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MODEL",
@@ -399,7 +405,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_VALIDATOR",
             "source_path": "src/gui/libtheme/theme_validator.py",
             "packaged_path": "Python/src/gui/libtheme/theme_validator.py",
-            "sha256": "890995f81541242ff5bcd5ea1b6e08ca998d388bde1be2a8985e19499a435955"
+            "sha256": "e94b018ff159f0787d3a69c80dcec7cf462de523166073ec063da540de43239c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_WATCHER",
@@ -645,7 +651,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_AXIS_MODE_CONTROL",
             "source_path": "src/gui/panels/axis_mode_control.py",
             "packaged_path": "Python/src/gui/panels/axis_mode_control.py",
-            "sha256": "8c5d35b5d8266c3c1d44c48e4e00a2eab7816015e0e68329361369eff3441ce7"
+            "sha256": "27e350cc1eaf107c7a5e2bb152b92bf366e9953b2335a41c3308631ef011a28d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_INIT",
@@ -1419,7 +1425,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_TRANSFORM_TYPEIN_BAR",
             "source_path": "src/gui/viewports/qt_transform_typein_bar.py",
             "packaged_path": "Python/src/gui/viewports/qt_transform_typein_bar.py",
-            "sha256": "f6f12afd96b72240c678b4c948077029ab808d74ee369d239db418e51d308276"
+            "sha256": "008b687c041dab8d79986a31e7198176402cad02f7e917a56b02563e03d0c4b5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_UV_VIEWER",
@@ -1515,7 +1521,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CONSTRUCTION",
             "source_path": "src/gui/viewports/viewport_core/widgets/construction.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/construction.py",
-            "sha256": "bf604b0206084719690dc961364e1fe25e94e52162d8d27fa1676710c24f7bb1"
+            "sha256": "d86fab6b1c8b58607d326b750b5c5821731286cfef01472b393b819025f78fdf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DISPLAY_CONTROLS",
@@ -1593,7 +1599,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SNAP_VIEW_BAR",
             "source_path": "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
-            "sha256": "0120f6c272cecc494dc36cb30b15f19d057223a1d1764a952da72a7154e765c4"
+            "sha256": "24de4348ebab97a15c8dbb76387c151471bc673c073e5d385de221c6f0b754d7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_STATE_HELPERS",
@@ -1845,7 +1851,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
             "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
-            "sha256": "d7fb801e1f3a6dc64727eaf3ca52de38ee587b69f23e533a01cd96823a887778"
+            "sha256": "29ac062cd7267cb2dd5910291b41e64b7942323413e36c2dfcfd892b40ab7150"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
@@ -1911,7 +1917,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "7272773a056aace7eb17370232a9306de5e9f600ba1d800e46ede27467599bda"
+            "sha256": "fa92ea697d879a41d6addf283213d42205096b2a2bb536a07013776f2d8d3c21"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_SCRIPTING_BLUEPRINT_PAGE",
