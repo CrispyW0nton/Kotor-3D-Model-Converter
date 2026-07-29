@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "f315d584449cccb77df10db46d5ec3e2d09a17ecf2c02a260b3c26f034fd3091"
+            "sha256": "158993d95dce9274571ea71d386b3be7714743fd27b3475a6fca6f423a045ebc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_INIT",
@@ -2073,7 +2073,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_STOCK_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/stock_module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/stock_module_editor_window.py",
-            "sha256": "f6872bc35ea4a92c474f89d01b2ef05a47ed2d0fae9db9bbd9efaafc5fae52fc"
+            "sha256": "20be9d25e58b710bc3e9c61a625f2194eb90e42fdf228727405ccce1ba8f0a46"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_TRANSFORM_MATH",

@@ -6,7 +6,7 @@ from types import MethodType, SimpleNamespace
 import threading
 
 from src.core.assets import resource_manager as resource_manager_module
-from src.core.assets.resource_manager import RES_MDL, RES_MDX, RES_TGA, ResourceManager
+from src.core.assets.resource_manager import RES_MDL, RES_MDX, RES_TGA, RES_TPC, ResourceManager
 from src.core.game import kotor_loader
 
 
@@ -46,6 +46,23 @@ def test_resource_manager_revision_advances_only_after_successful_publication(tm
 
     manager.clear_module_overlay()
     assert manager.revision == 4
+
+
+def test_texture_listing_can_skip_installed_module_archives() -> None:
+    class FakeInstall:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, bool]] = []
+
+        def list_resrefs(self, resource_type: int, *, include_modules: bool = True) -> list[str]:
+            self.calls.append((resource_type, include_modules))
+            return ["base_texture"]
+
+    manager = ResourceManager()
+    install = FakeInstall()
+    manager._k2 = install
+
+    assert manager.list_textures("K2", include_modules=False) == [("base_texture", "K2")]
+    assert install.calls == [(RES_TPC, False)]
 
 
 def test_project_overlay_replaces_stale_authored_resources_and_revisions_texture_cache() -> None:

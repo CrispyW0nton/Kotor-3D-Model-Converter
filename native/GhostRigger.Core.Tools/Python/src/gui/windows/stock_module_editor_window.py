@@ -114,6 +114,8 @@ TEXTURE_TYPES = {"tga", "tpc", "txi", "txt"}
 GAMEPLAY_TYPES = {"utc", "utp", "utd", "utt", "uts", "ute", "utw", "utm", "uti"}
 ROOM_TYPES = {"mdl", "mdx", "wok", "lyt", "vis"}
 MODULE_TYPES = {"are", "git", "ifo"}
+INSTALLED_TEXTURE_QUERY_MINIMUM = 2
+INSTALLED_TEXTURE_RESULT_LIMIT = 200
 GIT_TEMPLATE_TYPES = {
     "creature": "utc",
     "door": "utd",
@@ -135,6 +137,35 @@ class ModuleAuditFilterTarget:
     value: str
 
 
+class _InstalledTextureDiscoveryWorker(QtCore.QObject):
+    """Enumerate optional installed textures without blocking the GUI thread."""
+
+    finished = QtCore.Signal(object)
+    failed = QtCore.Signal(str)
+
+    def __init__(
+        self,
+        game_library: object,
+        game: str,
+        texture_limit: int | None,
+        discover,
+    ) -> None:
+        super().__init__()
+        self._game_library = game_library
+        self._game = game
+        self._texture_limit = texture_limit
+        self._discover = discover
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            resources = self._discover(self._game_library, self._game, self._texture_limit)
+        except Exception as exc:
+            self.failed.emit(str(exc) or exc.__class__.__name__)
+            return
+        self.finished.emit(resources)
+
+
 class StockModuleEditorWindow(QtWidgets.QMainWindow):
     """Dedicated editor shell for existing KotOR .mod/.rim archives."""
 
@@ -151,6 +182,8 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self._game_library: object | None = None
         self._game_library_game = "K2"
         self._game_texture_resources: list[ModuleTextureLibraryResource] = []
+        self._game_texture_thread: QtCore.QThread | None = None
+        self._game_texture_worker: _InstalledTextureDiscoveryWorker | None = None
         self._imported_texture_resources: list[ModuleTextureFileResource | ModuleTextureMemoryResource] = []
         self._texture_preview_cache: dict[str, ModuleTexturePreview | None] = {}
         self._texture_icon_cache: dict[str, QtGui.QIcon] = {}
@@ -204,6 +237,13 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self.import_texture_action = QtGui.QAction("Import Replacement Texture...", self)
         self.import_texture_action.setObjectName("stockModuleEditorImportTextureAction")
         self.import_texture_action.triggered.connect(self._browse_import_texture)
+        self.load_game_textures_action = QtGui.QAction("Load Installed Textures", self)
+        self.load_game_textures_action.setObjectName("stockModuleEditorLoadInstalledTexturesAction")
+        self.load_game_textures_action.setToolTip(
+            "Index installed KotOR textures in the background. This is optional when editing a module."
+        )
+        self.load_game_textures_action.setEnabled(False)
+        self.load_game_textures_action.triggered.connect(self._load_game_library_textures)
         self.stage_edit_action = QtGui.QAction("Stage Previewed Edit", self)
         self.stage_edit_action.setObjectName("stockModuleEditorStageEditAction")
         self.stage_edit_action.setEnabled(False)
@@ -223,6 +263,7 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         toolbar.setMovable(False)
         toolbar.addAction(self.open_module_action)
         toolbar.addAction(self.import_texture_action)
+        toolbar.addAction(self.load_game_textures_action)
         toolbar.addAction(self.stage_edit_action)
         toolbar.addAction(self.stage_matching_textures_action)
         toolbar.addAction(self.clear_staged_edits_action)
@@ -275,16 +316,59 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         content_layout.addWidget(self.content_browser, 1)
         self.left_splitter.addWidget(content_frame)
 
-        center = QtWidgets.QWidget(self.main_splitter)
+        self.center_scroll = QtWidgets.QScrollArea(self.main_splitter)
+        self.center_scroll.setObjectName("stockModuleEditorCenterScroll")
+        self.center_scroll.setWidgetResizable(True)
+        self.center_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.center_scroll.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustIgnored)
+        self.center_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.center_scroll.setMinimumSize(0, 0)
+        center = QtWidgets.QWidget()
         center.setObjectName("stockModuleEditorPreviewColumn")
         center_layout = QtWidgets.QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(6)
+        self.center_scroll.setWidget(center)
+        self.main_splitter.addWidget(self.center_scroll)
+        self.onboarding_frame = QtWidgets.QFrame(center)
+        self.onboarding_frame.setObjectName("stockModuleEditorOnboarding")
+        onboarding_layout = QtWidgets.QVBoxLayout(self.onboarding_frame)
+        onboarding_layout.setContentsMargins(18, 18, 18, 18)
+        onboarding_layout.setSpacing(8)
+        onboarding_title = QtWidgets.QLabel("Edit an existing KotOR module safely", self.onboarding_frame)
+        onboarding_title.setObjectName("stockModuleEditorOnboardingTitle")
+        onboarding_title.setAlignment(QtCore.Qt.AlignCenter)
+        onboarding_layout.addWidget(onboarding_title)
+        onboarding_steps = QtWidgets.QLabel(
+            "1. Open a MOD, RIM, or packaged ZIP copy\n"
+            "2. Choose a resource and preview an edit\n"
+            "3. Stage the changes you want\n"
+            "4. Export an edited copy — the source archive is never overwritten",
+            self.onboarding_frame,
+        )
+        onboarding_steps.setObjectName("stockModuleEditorOnboardingSteps")
+        onboarding_steps.setAlignment(QtCore.Qt.AlignCenter)
+        onboarding_steps.setWordWrap(True)
+        onboarding_layout.addWidget(onboarding_steps)
+        self.onboarding_open_button = QtWidgets.QPushButton("Open Module…", self.onboarding_frame)
+        self.onboarding_open_button.setObjectName("stockModuleEditorOnboardingOpenButton")
+        self.onboarding_open_button.setDefault(True)
+        self.onboarding_open_button.clicked.connect(self._browse_open_module)
+        onboarding_layout.addWidget(self.onboarding_open_button, 0, QtCore.Qt.AlignCenter)
+        onboarding_note = QtWidgets.QLabel(
+            "Installed textures are optional and load only when you request them.",
+            self.onboarding_frame,
+        )
+        onboarding_note.setObjectName("stockModuleEditorOnboardingNote")
+        onboarding_note.setAlignment(QtCore.Qt.AlignCenter)
+        onboarding_note.setWordWrap(True)
+        onboarding_layout.addWidget(onboarding_note)
+        center_layout.addWidget(self.onboarding_frame)
         self.preview_label = QtWidgets.QLabel(center)
         self.preview_label.setObjectName("stockModuleEditorViewportPreview")
         self.preview_label.setAlignment(QtCore.Qt.AlignCenter)
         self.preview_label.setMinimumSize(500, 420)
-        self.preview_label.setText("Open a MOD or RIM archive")
+        self.preview_label.setText("No module loaded")
         self.preview_label.installEventFilter(self)
         center_layout.addWidget(self.preview_label, 1)
         self.material_board_nav = QtWidgets.QWidget(center)
@@ -589,8 +673,6 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self.edit_queue.setMaximumHeight(112)
         self.edit_queue.setToolTip("Staged edits that will be exported together into one copied module archive.")
         center_layout.addWidget(self.edit_queue)
-        self.main_splitter.addWidget(center)
-
         self.details = QtWidgets.QTableWidget(self.main_splitter)
         self.details.setObjectName("stockModuleEditorResourceDetails")
         self.details.setColumnCount(2)
@@ -662,6 +744,7 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self._pending_logic_field_edit = None
         self._staged_edits.clear()
         self._details_row_payloads.clear()
+        self.onboarding_frame.setVisible(False)
         self.setWindowTitle(f"Ghost-Studio Module Editor - {self._module_display_title(prepared)}")
         self._populate_outliner()
         self._populate_content_browser()
@@ -681,17 +764,77 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"Opened {self._module_display_title(prepared)}: {len(resources)} resources.")
 
     def set_game_library(self, game_library: object, *, game: str = "K2", texture_limit: int | None = None) -> None:
-        """Attach a scanned game library so its textures appear beside module resources."""
+        """Attach a game library without eagerly enumerating its texture catalog."""
 
         self._game_library = game_library
         self._game_library_game = str(game or "K2").upper()
-        self._game_texture_resources = self._discover_game_library_textures(game_library, self._game_library_game, texture_limit)
+        self._game_texture_limit = texture_limit
+        self.load_game_textures_action.setEnabled(not self._game_texture_load_is_running())
+        self.statusBar().showMessage(
+            f"{self._game_library_game} installed textures are available on request; module editing is ready."
+        )
+
+    def _game_texture_load_is_running(self) -> bool:
+        return self._game_texture_thread is not None and self._game_texture_thread.isRunning()
+
+    def _load_game_library_textures(self) -> None:
+        if self._game_library is None or self._game_texture_load_is_running():
+            return
+        self.load_game_textures_action.setEnabled(False)
+        self.load_game_textures_action.setText("Loading Installed Textures…")
+        self.statusBar().showMessage(
+            f"Indexing {self._game_library_game} installed textures in the background. "
+            "You can keep editing the module."
+        )
+        thread = QtCore.QThread(self)
+        worker = _InstalledTextureDiscoveryWorker(
+            self._game_library,
+            self._game_library_game,
+            getattr(self, "_game_texture_limit", None),
+            self._discover_game_library_textures,
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._apply_discovered_game_textures)
+        worker.failed.connect(self._handle_game_texture_discovery_failure)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._finish_game_texture_discovery)
+        self._game_texture_thread = thread
+        self._game_texture_worker = worker
+        thread.start()
+
+    @QtCore.Slot(object)
+    def _apply_discovered_game_textures(self, resources: object) -> None:
+        self._game_texture_resources = list(resources or [])
+        texture_count = len(self._game_texture_resources)
+        texture_word = "texture" if texture_count == 1 else "textures"
         self._texture_preview_cache.clear()
         self._texture_icon_cache.clear()
+        self.content_search.setPlaceholderText(
+            f"Search module resources or {texture_count:,} installed {texture_word}"
+        )
         self._populate_content_browser()
         self.statusBar().showMessage(
-            f"Loaded {len(self._game_texture_resources)} {self._game_library_game} game-library texture references."
+            f"Loaded {texture_count:,} {self._game_library_game} installed {texture_word}. "
+            f"Type at least {INSTALLED_TEXTURE_QUERY_MINIMUM} characters to search the catalog."
         )
+
+    @QtCore.Slot(str)
+    def _handle_game_texture_discovery_failure(self, message: str) -> None:
+        self.statusBar().showMessage(
+            f"Installed textures could not be indexed: {message}. Choose Load Installed Textures to retry."
+        )
+
+    @QtCore.Slot()
+    def _finish_game_texture_discovery(self) -> None:
+        self._game_texture_thread = None
+        self._game_texture_worker = None
+        self.load_game_textures_action.setText("Reload Installed Textures")
+        self.load_game_textures_action.setEnabled(self._game_library is not None)
 
     def _browse_open_module(self) -> None:
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
@@ -785,6 +928,8 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _populate_empty_state(self) -> None:
         self._clear_room_board_hits()
+        if hasattr(self, "onboarding_frame"):
+            self.onboarding_frame.setVisible(True)
         self.outliner.clear()
         root = QtWidgets.QTreeWidgetItem(["No module loaded", ""])
         self.outliner.addTopLevelItem(root)
@@ -871,6 +1016,22 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
             item.setToolTip("\n".join(tooltip_lines))
             item.setData(QtCore.Qt.UserRole, resource)
             self.content_browser.addItem(item)
+        if (
+            self._game_texture_resources
+            and category in {"All", "Textures"}
+            and len(query) < INSTALLED_TEXTURE_QUERY_MINIMUM
+        ):
+            texture_count = len(self._game_texture_resources)
+            texture_word = "texture" if texture_count == 1 else "textures"
+            hint = QtWidgets.QListWidgetItem(
+                f"Search {texture_count:,} installed {texture_word} "
+                f"({INSTALLED_TEXTURE_QUERY_MINIMUM}+ characters)"
+            )
+            hint.setFlags(QtCore.Qt.NoItemFlags)
+            hint.setToolTip(
+                "Installed textures stay out of the list until you search, keeping this editor responsive."
+            )
+            self.content_browser.addItem(hint)
 
     def _filtered_resources(self, query: str, category: str) -> list[BrowserResource]:
         category_types = {
@@ -893,10 +1054,15 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
                 if not self._resource_matches_query(resource, query, filter_directive):
                     continue
                 result.append(resource)
-            for resource in self._game_texture_resources:
-                if not self._resource_matches_query(resource, query, filter_directive):
-                    continue
-                result.append(resource)
+            if filter_directive is None and len(query) >= INSTALLED_TEXTURE_QUERY_MINIMUM:
+                installed_matches = 0
+                for resource in self._game_texture_resources:
+                    if not self._resource_matches_query(resource, query, filter_directive):
+                        continue
+                    result.append(resource)
+                    installed_matches += 1
+                    if installed_matches >= INSTALLED_TEXTURE_RESULT_LIMIT:
+                        break
         return result
 
     @staticmethod
@@ -941,7 +1107,7 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         return f"Click to preview replacing {target}: {current} -> {replacement}."
 
     def _resource_icon(self, resource: BrowserResource) -> QtGui.QIcon:
-        if resource.restype in {"tga", "tpc"}:
+        if resource.restype in {"tga", "tpc"} and not isinstance(resource, ModuleTextureLibraryResource):
             thumbnail = self._texture_icon(resource)
             if not thumbnail.isNull():
                 return thumbnail
@@ -3451,9 +3617,12 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         if not callable(list_textures) or not callable(texture_loader):
             return []
         try:
-            names = list(list_textures(game))
+            names = list(list_textures(game, include_modules=False))
         except TypeError:
-            names = list(list_textures())
+            try:
+                names = list(list_textures(game))
+            except TypeError:
+                names = list(list_textures())
         except Exception:
             return []
         if texture_limit is not None:

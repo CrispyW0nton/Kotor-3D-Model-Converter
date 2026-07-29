@@ -4,6 +4,7 @@ import json
 import math
 import os
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -214,9 +215,17 @@ def test_stock_module_editor_window_audits_mod_resources_with_content_browser() 
     )
 
     assert "class StockModuleEditorWindow(QtWidgets.QMainWindow)" in window_source
-    assert 'self.setWindowTitle("GhostRigger Module Editor")' in window_source
+    assert 'self.setWindowTitle("Ghost-Studio Module Editor")' in window_source
     assert "stockModuleEditorSceneOutliner" in window_source
     assert "stockModuleEditorContentBrowser" in window_source
+    assert "stockModuleEditorCenterScroll" in window_source
+    assert "QtWidgets.QAbstractScrollArea.AdjustIgnored" in window_source
+    assert "stockModuleEditorOnboarding" in window_source
+    assert "stockModuleEditorOnboardingOpenButton" in window_source
+    assert "the source archive is never overwritten" in window_source
+    assert "stockModuleEditorLoadInstalledTexturesAction" in window_source
+    assert "class _InstalledTextureDiscoveryWorker(QtCore.QObject)" in window_source
+    assert "self._game_texture_thread = thread" in window_source
     assert "stockModuleEditorMaterialPickPanel" in window_source
     assert "stockModuleEditorMaterialBoardNavigation" in window_source
     assert "stockModuleEditorMaterialBoardPrevButton" in window_source
@@ -2528,8 +2537,14 @@ def test_stock_module_editor_accepts_game_library_textures_runtime() -> None:
     from src.gui.windows.stock_module_editor_window import StockModuleEditorWindow
 
     class FakeGameLibrary:
-        def list_textures(self, game: str = "K2") -> list[tuple[str, str]]:
+        def list_textures(
+            self,
+            game: str = "K2",
+            *,
+            include_modules: bool = True,
+        ) -> list[tuple[str, str]]:
             assert game == "K2"
+            assert include_modules is False
             return [("snow_wall", "K2")]
 
         def get_texture(self, resref: str, game: str = "K2") -> bytes:
@@ -2540,6 +2555,15 @@ def test_stock_module_editor_accepts_game_library_textures_runtime() -> None:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     window = StockModuleEditorWindow(game_library=FakeGameLibrary())
     try:
+        assert window._game_texture_resources == []
+        window._load_game_library_textures()
+        deadline = time.monotonic() + 2.0
+        while window._game_texture_load_is_running() and time.monotonic() < deadline:
+            app.processEvents()
+        app.processEvents()
+        assert window.content_browser.count() == 1
+        assert "Search 1 installed texture" in window.content_browser.item(0).text()
+
         current_texture = ModuleTextureMemoryResource(
             resref="lko_wal02",
             restype="tga",
@@ -2656,6 +2680,7 @@ def test_stock_module_editor_accepts_game_library_textures_runtime() -> None:
         picked_board_pixmap = window.preview_label.pixmap()
         assert picked_board_pixmap is not None
         assert picked_board_pixmap.isNull() is False
+        window.content_search.setText("snow")
         replacement_item = next(
             window.content_browser.item(index)
             for index in range(window.content_browser.count())
@@ -3439,6 +3464,42 @@ def test_t2600_map_studio_workflow_selector_keeps_narrow_rail_reachable_runtime(
         assert window.workflow_selector.currentText() == "Environment"
     finally:
         window.controller.project.dirty = False
+        window.close()
+
+
+def test_stock_module_editor_attaches_installed_textures_without_eager_scan() -> None:
+    """Opening the editor must not enumerate the optional installed texture catalog."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtWidgets
+    from src.gui.windows.stock_module_editor_window import StockModuleEditorWindow
+
+    class SlowTextureLibrary:
+        def __init__(self) -> None:
+            self.list_calls = 0
+
+        def list_textures(self, _game: str = "K2") -> list[str]:
+            self.list_calls += 1
+            return ["test_texture"]
+
+        @staticmethod
+        def get_texture_data(_resref: str, _game: str = "K2") -> bytes:
+            return b""
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    library = SlowTextureLibrary()
+    window = StockModuleEditorWindow()
+    try:
+        window.set_game_library(library, game="K2")
+        app.processEvents()
+
+        assert library.list_calls == 0
+        assert window.load_game_textures_action.isEnabled()
+        assert not window.onboarding_frame.isHidden()
+        assert "available on request" in window.statusBar().currentMessage()
+    finally:
         window.close()
 
 

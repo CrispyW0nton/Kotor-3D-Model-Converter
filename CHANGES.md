@@ -11,6 +11,53 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make Stock Module Editor immediate and laptop-safe
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core Resources installed-texture indexing; Core Tools Stock Module
+Editor; Core GUI Display studio launch handoff; native Python payload manifests.
+
+Reworked the first-use and installed-texture paths uncovered during the
+program-wide UX audit. Stock Module Editor now opens before optional game
+content is requested and explains its safe workflow: open a copied archive,
+preview a resource edit, stage intended changes, and export a new copy without
+overwriting the source. Installed textures have a clearly named toolbar action
+instead of being silently scanned before the first frame.
+
+The optional catalog now excludes every installed module archive, runs its
+remaining discovery outside the GUI thread, and presents the resulting base
+game/Override textures through a two-character, 200-result search instead of
+constructing and decoding thousands of thumbnails. Installed texture bytes are
+decoded only when the user selects a result. The tall editing column is now a
+responsive scroll surface, so the complete editor fits a 1280x700 laptop-sized
+window instead of forcing a roughly 1530-pixel minimum height.
+
+Affected:
+
+- Core Resources, Core Tools, and Runtime Shared `resource_manager.py`
+  package copies
+- Core Tools `stock_module_editor_window.py`
+- Core GUI Display `resource_panels.py`
+- focused Stock Module Editor and ResourceManager tests
+- regenerated Core Resources, Core Tools, Runtime Shared, and Core GUI Display
+  payload manifests
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Four focused Stock Module Editor/resource-listing tests passed, including the
+  zero-eager-scan and module-archive exclusion contracts.
+- The isolated solution rebuilt in the active Visual Studio Community instance
+  as `Debug|x64` with zero failed projects.
+- In the actual Debug application, Stock Module Editor opened in approximately
+  0.36 seconds (previously unresponsive for more than 100 seconds), visibly fit
+  at 1280x700, and remained responsive while indexing 9,122 installed K2 base
+  textures. The ready state disclosed the two-character search rule, and a
+  real `wall` search completed without eager texture thumbnail decoding.
+
 ### [2026-07-28] make Map Studio teach complete level-authoring workflows
 
 Owner: LordVaderCW

@@ -2132,11 +2132,14 @@ class ResourcePanelsMixin:
                 window_class = _load_stock_module_editor_window_class()
                 window = window_class(parent=self)
                 self.stock_module_editor_window = window
-            self._configure_stock_module_editor_game_library(window)
             window.show()
             window.raise_()
             window.activateWindow()
-            self._log("Module Editor opened for stock MOD/RIM archives.", "success")
+            self._configure_stock_module_editor_game_library(window)
+            self._log(
+                "Module Editor opened for stock MOD/RIM archives; installed textures load only on request.",
+                "success",
+            )
         except Exception as exc:
             self._log(f"Module Editor could not open: {exc}", "error")
             QtWidgets.QMessageBox.warning(

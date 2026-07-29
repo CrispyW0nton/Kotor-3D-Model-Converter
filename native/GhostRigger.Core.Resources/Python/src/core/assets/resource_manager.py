@@ -644,14 +644,19 @@ class ResourceManager:
                 out.append((r, 'K2'))
         return out
 
-    def list_textures(self, game: str = 'all') -> List[Tuple[str, str]]:
-        """List all texture resrefs as (resref, game_tag) tuples."""
+    def list_textures(
+        self,
+        game: str = 'all',
+        *,
+        include_modules: bool = True,
+    ) -> List[Tuple[str, str]]:
+        """List texture resrefs, optionally excluding expensive module archives."""
         out: List[Tuple[str, str]] = []
         if game in ('K1', 'all') and self._k1:
-            for r in self._k1.list_resrefs(RES_TPC):
+            for r in self._k1.list_resrefs(RES_TPC, include_modules=include_modules):
                 out.append((r, 'K1'))
         if game in ('K2', 'all') and self._k2:
-            for r in self._k2.list_resrefs(RES_TPC):
+            for r in self._k2.list_resrefs(RES_TPC, include_modules=include_modules):
                 out.append((r, 'K2'))
         return out
 
@@ -1167,16 +1172,17 @@ class _GameInstall:
                 return True
         return k in self._key_map
 
-    def list_resrefs(self, res_type: int) -> List[str]:
+    def list_resrefs(self, res_type: int, *, include_modules: bool = True) -> List[str]:
         """List all known resource names of given type (sorted, deduped)."""
         out: Set[str] = set()
         suffix = f':{res_type}'
         for k in self._override:
             if k.endswith(suffix):
                 out.add(k[:-(len(suffix))])
-        for erf in self._mod_erfs:
-            for r in erf.list_type(res_type):
-                out.add(r)
+        if include_modules:
+            for erf in self._mod_erfs:
+                for r in erf.list_type(res_type):
+                    out.add(r)
         for erf in self._tex_erfs:
             for r in erf.list_type(res_type):
                 out.add(r)
