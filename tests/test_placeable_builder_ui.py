@@ -40,6 +40,10 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
         assert window.preview_viewport.viewport_role == "main"
         assert window.preview_viewport.map_studio_authoring_chrome_enabled is False
         assert window.preview_viewport.viewport_map_studio_modeling_tabs is None
+        guidance = window.findChild(QtWidgets.QLabel, "placeableBuilderWorkflowGuidance")
+        assert guidance is not None
+        assert "1 choose a stock UTP or New" in guidance.text()
+        assert "test the exported placeable in KOTOR" in guidance.text()
         assert window.inspector_tabs.tabBar().usesScrollButtons() is True
         assert window.inspector_tabs.tabBar().expanding() is False
         assert window.inspector_tabs.tabBar().elideMode() == QtCore.Qt.ElideNone

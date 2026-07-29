@@ -158,6 +158,17 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.toolbar = SequenceToolbar(self)
         outer.addWidget(self.toolbar)
 
+        guidance = QtWidgets.QLabel(
+            "Workflow: 1 add the selected scene object or camera • 2 add a track • "
+            "3 set keys or clips • 4 preview • 5 Save. Preview is reversible until "
+            "you choose Keep Current State or Apply at Current Frame.",
+            root,
+        )
+        guidance.setObjectName("sequenceWorkflowGuidance")
+        guidance.setWordWrap(True)
+        guidance.setAccessibleName("Sequence Editor workflow")
+        outer.addWidget(guidance)
+
         selector_row = QtWidgets.QHBoxLayout()
         selector_row.setContentsMargins(6, 4, 6, 4)
         self.sequence_combo = QtWidgets.QComboBox()
@@ -305,8 +316,16 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
 
     def _new_sequence(self, checked: bool = False, *, initial: bool = False) -> None:
         module_name = str(getattr(getattr(self.source_viewport, "model", None), "name", "") or "")
-        self.sequence = self.manager.new_sequence("intro_cutscene" if initial else "New Sequence", scene_module_name=module_name)
+        self.sequence = self.manager.new_sequence(
+            "Untitled Sequence" if initial else "New Sequence",
+            scene_module_name=module_name,
+        )
         self._set_sequence(self.sequence)
+        if initial:
+            self._set_status(
+                "Untitled Sequence — add the selected scene object or camera, add a track, "
+                "set keys, then preview and save."
+            )
 
     def _set_sequence(self, sequence: GhostRiggerLevelSequence) -> None:
         self.sequence = sequence

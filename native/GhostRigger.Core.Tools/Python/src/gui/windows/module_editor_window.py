@@ -15177,17 +15177,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._refresh_all(f"Added blueprint {blueprint.name}.")
             return
         if action in {"Open Blueprint", "Save Blueprint"}:
-            from src.gui.windows.qt_blueprint_editor import QtBlueprintEditorWindow
-
-            if self._blueprint_editor_window is None:
-                self._blueprint_editor_window = QtBlueprintEditorWindow(self)
-            self._blueprint_editor_window.show()
-            self._blueprint_editor_window.raise_()
-            self._blueprint_editor_window.activateWindow()
-            if action == "Open Blueprint":
-                self._blueprint_editor_window.open_blueprint()
-            else:
-                self._blueprint_editor_window.save_blueprint()
+            shell = self.parent()
+            while shell is not None and not hasattr(shell, "_open_scripting_dialogue_studio_window"):
+                shell = shell.parent()
+            open_suite = getattr(shell, "_open_scripting_dialogue_studio_window", None)
+            if not callable(open_suite):
+                self._log(
+                    "Typed Blueprint & GFF Editor is unavailable. "
+                    "Open Scripting Suite and choose Blueprint & GFF.",
+                    "error",
+                )
+                return
+            window = open_suite({"game": self._current_game})
+            show_page = getattr(window, "show_suite_page", None)
+            if callable(show_page):
+                show_page("blueprint")
+            suite_controller = getattr(shell, "scripting_dialogue_studio_controller", None)
+            blueprint_controller = getattr(suite_controller, "blueprint_controller", None)
+            if action == "Open Blueprint" and blueprint_controller is not None:
+                blueprint_controller.open()
+            elif action == "Save Blueprint" and blueprint_controller is not None:
+                blueprint_controller.save()
             return
         if action == "Add Camera":
             self.add_map_studio_camera()

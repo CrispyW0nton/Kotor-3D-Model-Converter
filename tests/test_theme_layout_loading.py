@@ -750,6 +750,14 @@ def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -
         )
         assert "Matrix Bar" in [editor_tabs.tabText(index) for index in range(editor_tabs.count())]
         assert "Splash" in [editor_tabs.tabText(index) for index in range(editor_tabs.count())]
+        guidance = editor.findChild(QtWidgets.QLabel, "themeEditorWorkflowGuidance")
+        assert guidance is not None
+        assert "Duplicate or Create" in guidance.text()
+        assert editor.dirty_state_label.text() == "No unsaved changes."
+        editor._mark_dirty()
+        assert editor.windowTitle() == "Theme Editor *"
+        assert "Unsaved preview changes" in editor.dirty_state_label.text()
+        editor._set_clean_state()
         assert editor.matrix_bar_style.currentData() == "gif"
         assert editor.matrix_bar_glyphs.text() == "ABC"
 

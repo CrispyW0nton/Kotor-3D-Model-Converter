@@ -565,6 +565,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._build()
         self._load_theme(self._theme.id)
         self._load_layout(self._layout.id)
+        self._set_clean_state()
         self._refresh_preview()
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:  # noqa: N802
@@ -592,8 +593,25 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             action.triggered.connect(slot)
             toolbar.addAction(action)
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
-        self.setCentralWidget(splitter)
+        central = QtWidgets.QWidget(self)
+        central_layout = QtWidgets.QVBoxLayout(central)
+        central_layout.setContentsMargins(6, 4, 6, 6)
+        central_layout.setSpacing(4)
+        guidance = QtWidgets.QLabel(
+            "Safe workflow: Duplicate or Create before changing a bundled theme. "
+            "Apply previews the current session; Save writes user XML. Validate before sharing.",
+            central,
+        )
+        guidance.setObjectName("themeEditorWorkflowGuidance")
+        guidance.setWordWrap(True)
+        central_layout.addWidget(guidance)
+        self.dirty_state_label = QtWidgets.QLabel("No unsaved changes.", central)
+        self.dirty_state_label.setObjectName("themeEditorDirtyState")
+        central_layout.addWidget(self.dirty_state_label)
+
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, central)
+        central_layout.addWidget(splitter, 1)
+        self.setCentralWidget(central)
         editor_tabs = QtWidgets.QTabWidget()
         splitter.addWidget(editor_tabs)
         splitter.addWidget(self._scrollable(self._build_preview_area(), "ThemeEditorPreviewScroll"))
@@ -1057,7 +1075,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._populate_matrix_bar_controls()
         self._populate_splash_controls()
         self._populate_style_controls()
-        self._dirty = False
+        self._set_clean_state()
         self._refresh_preview()
 
     def _load_layout(self, layout_id: str) -> None:
@@ -1771,6 +1789,16 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
 
     def _mark_dirty(self, *_args) -> None:
         self._dirty = True
+        self.setWindowTitle("Theme Editor *")
+        self.dirty_state_label.setText(
+            "Unsaved preview changes — Apply affects this session; Save writes user XML."
+        )
+
+    def _set_clean_state(self) -> None:
+        self._dirty = False
+        self.setWindowTitle("Theme Editor")
+        if hasattr(self, "dirty_state_label"):
+            self.dirty_state_label.setText("No unsaved changes.")
 
     def _apply_theme_to_app(self) -> None:
         self.theme_manager.themes[self._theme.id] = copy.deepcopy(self._theme)
@@ -1860,7 +1888,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
         self._theme_xml().write(path, encoding="utf-8", xml_declaration=True)
         self.theme_manager.reload()
-        self._dirty = False
+        self._set_clean_state()
 
     def _save_layout_to_path(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1868,7 +1896,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
         self._layout_xml().write(path, encoding="utf-8", xml_declaration=True)
         self.layout_manager.reload()
-        self._dirty = False
+        self._set_clean_state()
 
     def _theme_xml(self) -> ET.ElementTree:
         root = ET.Element("theme", {"id": self._theme.id, "name": self._theme.name, "version": self._theme.version})

@@ -491,7 +491,7 @@ class RetargetWindowWorkflowMixin:
             "Sequence Editor",
             editor,
             QtCore.Qt.BottomDockWidgetArea,
-            scroll=False,
+            scroll=True,
         )
         self.sequence_editor_docked_window = editor
         self.sequence_editor_dock = dock

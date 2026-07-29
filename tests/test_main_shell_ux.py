@@ -24,12 +24,14 @@ def test_command_launcher_is_searchable_categorized_and_keyboard_actionable() ->
     parent = QtWidgets.QMainWindow()
     map_action = QtGui.QAction("Open Map Studio", parent)
     texture_action = QtGui.QAction("Texture Tool", parent)
+    blueprint_action = QtGui.QAction("Blueprint && GFF Editor...", parent)
     triggered: list[str] = []
     map_action.triggered.connect(lambda: triggered.append("map"))
+    blueprint_action.triggered.connect(lambda: triggered.append("blueprint"))
     dialog = _CommandLauncherDialog(
         [
             ("Studios", [map_action]),
-            ("Asset Tools", [texture_action]),
+            ("Asset Tools", [texture_action, blueprint_action]),
         ],
         parent,
     )
@@ -62,6 +64,17 @@ def test_command_launcher_is_searchable_categorized_and_keyboard_actionable() ->
         current = dialog.command_tree.currentItem()
         assert current is not None
         assert current.text(0) == "Open Map Studio"
+
+        dialog.search_edit.setText("Blueprint & GFF Editor")
+        app.processEvents()
+        current = dialog.command_tree.currentItem()
+        assert current is not None
+        assert current.text(0) == "Blueprint & GFF Editor..."
+
+        dialog.search_edit.setText("map")
+        app.processEvents()
+        current = dialog.command_tree.currentItem()
+        assert current is not None
 
         dialog.show()
         dialog.search_edit.setFocus(QtCore.Qt.TabFocusReason)

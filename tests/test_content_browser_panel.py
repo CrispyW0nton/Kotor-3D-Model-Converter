@@ -1367,6 +1367,42 @@ def test_content_browser_stop_button_emits_animation_stop_without_selection() ->
     assert actions == ["Stop"]
 
 
+def test_content_browser_explains_an_empty_animation_library() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.select_asset_type("Animation")
+
+    placeholder = panel.asset_view.topLevelItem(0)
+    assert placeholder.text(0) == "No animations indexed yet"
+    assert "Scan Animations" in placeholder.toolTip(0)
+    assert panel.count_label.text() == "0 asset(s) shown"
+    assert panel.detail_title.text() == "No animations indexed yet"
+    assert "Load a model" in panel.detail_text.toPlainText()
+    assert panel.preview_button.isEnabled() is False
+    assert panel.stop_button.isEnabled() is True
+
+
+def test_content_browser_distinguishes_empty_filters_from_an_unindexed_library() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_animation_entries([
+        {"model": "pmbam", "animation": "walk", "frames": 30, "source": "Current model"},
+    ])
+    panel.select_asset_type("Animation")
+    panel.search_edit.setText("does-not-match")
+
+    placeholder = panel.asset_view.topLevelItem(0)
+    assert placeholder.text(0) == "No assets match these filters"
+    assert "broaden" in placeholder.toolTip(0)
+    assert panel.detail_title.text() == "No assets match these filters"
+
+
 def test_content_browser_keeps_scanned_animations_when_scene_selection_changes() -> None:
     _qapp()
 

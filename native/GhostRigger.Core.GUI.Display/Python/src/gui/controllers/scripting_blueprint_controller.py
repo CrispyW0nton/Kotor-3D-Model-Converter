@@ -164,6 +164,14 @@ class ScriptingBlueprintController(QtCore.QObject):
         self._status(f"Opened {self.resref}.{document.resource_type} from project resources.")
         return True
 
+    def report_unresolved_resource(self, *, game: str, resref: str, resource_type: str) -> bool:
+        """Present an actionable lookup failure for an external resource handoff."""
+
+        return self._fail(
+            f"Could not resolve {game}:{resref}.{resource_type}; "
+            "check the configured game installation or open a local file."
+        )
+
     @QtCore.Slot()
     def close(self) -> None:
         self.document = None

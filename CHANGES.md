@@ -11,6 +11,75 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-28
 
+### [2026-07-28] make remaining first-use workbenches honest and self-explanatory
+
+Owner: LordVaderCW
+
+Task: T3204
+
+Subsystem: Core GUI Display workbench presentation and shell routing; Core
+Tools Placeable Builder, Retarget Workbench, and Map Studio handoffs; typed GFF
+blueprint controller; native Python payload manifests.
+
+Completed the next program-wide first-use audit across Blueprint/GFF authoring,
+Animation Library, Rigging, Placeable Builder, Retarget Workbench, Sequence
+Editor, UV Viewer, and Theme Editor.
+
+Every Blueprint entry point now opens the Scripting Suite's typed,
+loss-preserving KOTOR GFF editor instead of the unrelated legacy JSON/KMAP
+window. The shell, IPC UTC/UTP/UTD handoff, and Map Studio Open/Save commands
+all converge on the same editor and expose a recovery message when installed
+resource bytes cannot be resolved. The command launcher now preserves literal
+ampersands, so the visible `Blueprint & GFF Editor` name is also searchable
+verbatim.
+
+Animation Library distinguishes “no animations indexed” from a search/filter
+with zero matches and explains how to load a model or run the optional scan.
+Rigging names the main-viewport model it will modify, disables all model
+actions until one exists, and explicitly labels workflows that are not
+implemented instead of presenting false affordances.
+
+Placeable Builder, Retarget Workbench, and Sequence Editor now expose compact,
+ordered first-use workflows. Retarget playback, preview, and export controls
+remain disabled until their source/target/animation prerequisites exist.
+Sequence Editor starts with an honest `Untitled Sequence`, keeps a reversible
+workflow explanation visible in its dock, and wraps its laptop-height dock in
+an overflow surface so transport and status controls remain reachable.
+
+UV Viewer now says that no mesh is loaded, identifies the main-viewport
+recovery step, and disables mesh-only controls. Theme Editor explains the safe
+duplicate/apply/save model and visibly distinguishes saved state from unsaved
+preview changes. Settings also tolerates an unavailable hardware-diagnostics
+snapshot while explaining the effective performance profile.
+
+Affected:
+
+- Core GUI Display Blueprint controller, command launcher, resource routing,
+  Content Browser, Rigging, Retarget panel, Sequence Editor, UV Viewer, Theme
+  Editor, Settings, and tool integration registry
+- Core Tools Retarget panel/window, Placeable Builder, and Map Studio blueprint
+  routing
+- canonical `src/gui/controllers/scripting_blueprint_controller.py`
+- focused shell, workbench, content, theme, and payload tests
+- regenerated Core GUI Display and Core Tools payload manifests
+
+Verification:
+
+- Python compilation and diff whitespace checks passed.
+- Fifteen focused UI/workflow and native payload contracts passed, including
+  disabled/enabled Retarget readiness, literal-ampersand launcher search,
+  honest empty states, typed GFF routing, and payload identity/manifest checks.
+- The isolated solution rebuilt twice in the active Visual Studio Community
+  instance as `Debug|x64` with zero failed projects after the final changes.
+- In the actual Debug application, the exact launcher query
+  `Blueprint & GFF Editor` selected the intended command and opened the typed
+  page. At laptop-sized 1280x700/900x700 layouts, Rigging visibly labeled
+  unavailable workflows, Retarget exposed its prerequisite order, Sequence
+  Editor showed its reversible workflow with working dock overflow, UV Viewer
+  showed the missing-model recovery, and Theme Editor showed safe-workflow and
+  saved-state guidance. Placeable Builder also kept its full ordered workflow
+  visible at 1280x700.
+
 ### [2026-07-28] make Stock Module Editor immediate and laptop-safe
 
 Owner: LordVaderCW

@@ -77,6 +77,13 @@ MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
 }
 
 
+def _plain_action_text(text: str) -> str:
+    """Remove Qt mnemonic markers while preserving escaped literal ampersands."""
+
+    literal_ampersand = "\0"
+    return str(text).replace("&&", literal_ampersand).replace("&", "").replace(literal_ampersand, "&")
+
+
 class _CommandLauncherDialog(QtWidgets.QDialog):
     """Searchable, categorized access to existing shell actions."""
 
@@ -151,7 +158,7 @@ class _CommandLauncherDialog(QtWidgets.QDialog):
                 action_index = len(self._actions)
                 self._actions.append(action)
                 shortcut = action.shortcut().toString(QtGui.QKeySequence.NativeText)
-                child = QtWidgets.QTreeWidgetItem([action.text().replace("&", ""), shortcut])
+                child = QtWidgets.QTreeWidgetItem([_plain_action_text(action.text()), shortcut])
                 child.setData(0, QtCore.Qt.UserRole, action_index)
                 child.setIcon(0, action.icon())
                 description = str(action.statusTip() or action.toolTip() or "")
@@ -458,7 +465,11 @@ class WindowChromeMixin:
         self.rig_window_action.triggered.connect(self._open_rig_window)
         self.texture_tool_action = QtGui.QAction(self._icon("texture"), "Texture Tool...", self)
         self.texture_tool_action.triggered.connect(self._open_texture_tool_window)
-        self.blueprint_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["blueprint_editor"]), "Blueprint Editor...", self)
+        self.blueprint_editor_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["blueprint_editor"]),
+            "Blueprint && GFF Editor...",
+            self,
+        )
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
         self.content_browser_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["content_browser"]), "Open Content Browser", self)
         self._configure_dock_toggle_action(

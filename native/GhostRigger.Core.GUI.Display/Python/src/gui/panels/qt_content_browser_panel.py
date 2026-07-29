@@ -1356,15 +1356,18 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         return not (needle and needle not in asset.searchable_text)
 
     def _replace_asset_items(self, assets: list[ContentAssetDescriptor], *, resize_columns: bool) -> None:
+        self._visible_asset_count = len(assets)
         self.asset_view.setSortingEnabled(False)
         self.asset_view.clear()
         for asset in assets:
             item = QtContentAssetItem(asset)
             item.setIcon(0, self._asset_icon(asset))
             self.asset_view.addTopLevelItem(item)
+        if not assets:
+            self._show_empty_asset_message()
         self.asset_view.setSortingEnabled(True)
         self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
-        self.count_label.setText(f"{self.asset_view.topLevelItemCount()} asset(s) shown")
+        self.count_label.setText(f"{len(assets)} asset(s) shown")
         if resize_columns:
             for column in range(self.asset_view.columnCount()):
                 self.asset_view.resizeColumnToContents(column)
@@ -1373,6 +1376,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _apply_filter_deferred(self, assets: list[ContentAssetDescriptor], batch_size: int = 300) -> None:
         self._deferred_filter_generation += 1
         generation = self._deferred_filter_generation
+        self._visible_asset_count = len(assets)
         self.asset_view.setSortingEnabled(False)
         self.asset_view.clear()
         self.count_label.setText(f"Showing 0/{len(assets)} asset(s)...")
@@ -1396,12 +1400,35 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             if index < total:
                 QtCore.QTimer.singleShot(0, add_next_batch)
                 return
+            if total == 0:
+                self._show_empty_asset_message()
             self.asset_view.setSortingEnabled(True)
             self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
             self.count_label.setText(f"{total} asset(s) shown")
             self._update_details()
 
         QtCore.QTimer.singleShot(0, add_next_batch)
+
+    def _show_empty_asset_message(self) -> None:
+        animation_view = (
+            self.type_filter.currentText() == "Animation"
+            or self._active_nav == ("type", "Animation")
+        )
+        has_indexed_animations = any(asset.asset_type == "Animation" for asset in self._assets)
+        if animation_view and not has_indexed_animations:
+            title = "No animations indexed yet"
+            message = (
+                "Load a model to see its embedded clips, or choose Scan Animations "
+                "to index installed game animations."
+            )
+        else:
+            title = "No assets match these filters"
+            message = "Clear the search or broaden Type, Game, Source, Tags, and Compatibility."
+        item = QtWidgets.QTreeWidgetItem([title, "", "", "", "", ""])
+        item.setFlags(QtCore.Qt.NoItemFlags)
+        item.setToolTip(0, message)
+        item.setFirstColumnSpanned(True)
+        self.asset_view.addTopLevelItem(item)
 
     def _matches_tag(self, asset: ContentAssetDescriptor, tag: str) -> bool:
         if " / " in tag:
@@ -1546,8 +1573,25 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _update_details(self) -> None:
         asset = self.selected_asset()
         if asset is None:
-            self.detail_title.setText("Select an asset")
-            self.detail_text.setPlainText("")
+            animation_view = (
+                self.type_filter.currentText() == "Animation"
+                or self._active_nav == ("type", "Animation")
+            )
+            if animation_view and not any(asset.asset_type == "Animation" for asset in self._assets):
+                self.detail_title.setText("No animations indexed yet")
+                self.detail_text.setPlainText(
+                    "Load a model to browse its animation clips.\n\n"
+                    "To search installed KOTOR content, choose Scan Animations. "
+                    "The scan runs separately from selecting or previewing an asset."
+                )
+            elif getattr(self, "_visible_asset_count", 0) == 0:
+                self.detail_title.setText("No assets match these filters")
+                self.detail_text.setPlainText(
+                    "Clear the search or broaden Type, Game, Source, Tags, and Compatibility."
+                )
+            else:
+                self.detail_title.setText("Select an asset")
+                self.detail_text.setPlainText("")
             self._set_action_state(None)
             return
         self.detail_title.setText(asset.display_name or asset.name)

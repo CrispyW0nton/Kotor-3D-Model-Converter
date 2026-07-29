@@ -1024,14 +1024,20 @@ class ViewportToolsMixin:
         window.raise_()
         window.activateWindow()
     def _open_blueprint_editor_window(self):
-        ensure_window = getattr(self, "_ensure_blueprint_window", None)
-        window = ensure_window() if callable(ensure_window) else getattr(self, "blueprint_window", None)
-        if window is None:
+        open_suite = getattr(self, "_open_scripting_dialogue_studio_window", None)
+        if not callable(open_suite):
             self._not_migrated("Blueprint Editor")
             return
-        window.show()
-        window.raise_()
-        window.activateWindow()
+        window = open_suite({"game": getattr(self, "_current_game", "K2")})
+        show_page = getattr(window, "show_suite_page", None)
+        if callable(show_page):
+            show_page("blueprint")
+        status_bar = getattr(window, "statusBar", None)
+        if callable(status_bar):
+            status_bar().showMessage(
+                "Blueprint Editor — open a UTC, UTP, UTD, or other KOTOR GFF resource.",
+                6000,
+            )
     def _open_placeable_builder_window(self):
         """Lazily open the dedicated reusable-placeable authoring workbench."""
 

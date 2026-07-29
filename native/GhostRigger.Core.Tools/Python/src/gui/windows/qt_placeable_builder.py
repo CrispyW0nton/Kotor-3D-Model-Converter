@@ -540,6 +540,22 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.addToolBar(QtCore.Qt.TopToolBarArea, toolbar)
 
     def _build_central(self) -> None:
+        central = QtWidgets.QWidget(self)
+        central.setObjectName("placeableBuilderCentral")
+        central_layout = QtWidgets.QVBoxLayout(central)
+        central_layout.setContentsMargins(6, 4, 6, 6)
+        central_layout.setSpacing(4)
+        guidance = QtWidgets.QLabel(
+            "Workflow: 1 choose a stock UTP or New • 2 set Identity, Visual, and "
+            "Interaction • 3 Validate • 4 Save to Library • 5 Export Game Bundle. "
+            "The preview is editor-only; test the exported placeable in KOTOR.",
+            central,
+        )
+        guidance.setObjectName("placeableBuilderWorkflowGuidance")
+        guidance.setWordWrap(True)
+        guidance.setAccessibleName("Placeable Builder workflow")
+        central_layout.addWidget(guidance)
+
         self.workspace_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
         self.workspace_splitter.setObjectName("placeableBuilderWorkspaceSplitter")
         self.workspace_splitter.setChildrenCollapsible(False)
@@ -552,7 +568,8 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.workspace_splitter.setStretchFactor(0, 0)
         self.workspace_splitter.setStretchFactor(1, 1)
         self.workspace_splitter.setStretchFactor(2, 0)
-        self.setCentralWidget(self.workspace_splitter)
+        central_layout.addWidget(self.workspace_splitter, 1)
+        self.setCentralWidget(central)
 
     def _build_library_panel(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget(self)

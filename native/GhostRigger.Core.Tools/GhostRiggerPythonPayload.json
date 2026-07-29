@@ -1863,7 +1863,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
             "source_path": "src/gui/panels/qt_animation_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_animation_panel.py",
-            "sha256": "353374c67b22f8fec727cfe75fb927bb7f812bce7602ec4d7bd15284c23cfbb0"
+            "sha256": "c6a67e4b88b7f70f9b988f3e2468b0ae632dac91807f5d7e15fbbc6bd5a44bcf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",
@@ -2007,7 +2007,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "2bac4b45aa405f8743ca5bf70e9a45e2568bd7d24b77562a24d90c8cc2aa4fee"
+            "sha256": "810d28f402863b8bc01a082dc40b9420f3cdd5bb2132e057ab8b98a1537ea4a5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",
@@ -2031,7 +2031,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER",
             "source_path": "src/gui/windows/qt_placeable_builder.py",
             "packaged_path": "Python/src/gui/windows/qt_placeable_builder.py",
-            "sha256": "a8c88bfd7eeb3d4005285f01991181890229976240fc5fe074f6e024888f79d9"
+            "sha256": "6691264d887c1a7c6bedf67db052692fafa85afbc7c3cb0ff00ad33cc6f93d55"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER_CONTROLLER",
@@ -2049,7 +2049,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_WINDOW",
             "source_path": "src/gui/windows/qt_retarget_window.py",
             "packaged_path": "Python/src/gui/windows/qt_retarget_window.py",
-            "sha256": "acf46a10f9de59fe0bd27d950f43c7c2d1b1e26b60686281bb1e05e980986e16"
+            "sha256": "85966869e15ced70bd2f3997c53ada768c47ab7f3222217cb4483fb30f60a8a7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_WORKBENCH_CONTROLLER",

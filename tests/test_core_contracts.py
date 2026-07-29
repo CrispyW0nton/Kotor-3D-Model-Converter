@@ -10404,6 +10404,31 @@ def test_main_window_moves_rig_panel_to_modules_window() -> None:
     assert QtRigWindow.__name__ == "QtRigWindow"
     assert hasattr(QtRigWindow, "rigActionRequested")
 
+    from PySide6 import QtWidgets
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = QtRigWindow()
+    try:
+        panel = window.panel
+        guidance = panel.findChild(QtWidgets.QLabel, "riggingWorkflowGuidance")
+        assert guidance is not None
+        assert "model currently loaded in the main viewport" in guidance.text()
+        buttons = {button.objectName(): button for button in panel.findChildren(QtWidgets.QPushButton)}
+        assert buttons["rigActionAutoRigModel"].isEnabled() is False
+        assert buttons["rigActionMapFbxBones"].isEnabled() is False
+        assert buttons["rigActionMapFbxBones"].text() == "Map FBX Bones (unavailable)"
+        assert all("(unavailable)" in panel.tabs.tabText(index) for index in range(1, panel.tabs.count()))
+        assert all(panel.tabs.isTabEnabled(index) is False for index in range(1, panel.tabs.count()))
+
+        panel.set_model_context(True, "PLC_bench")
+        assert panel.model_context_label.text() == "Editing: PLC_bench"
+        assert buttons["rigActionAutoRigModel"].isEnabled() is True
+        assert buttons["rigActionWeightStats"].isEnabled() is True
+        assert buttons["rigActionMapFbxBones"].isEnabled() is False
+        assert "not available" in buttons["rigActionMapFbxBones"].toolTip()
+    finally:
+        window.close()
+
 
 def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     import inspect
@@ -10745,11 +10770,16 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
 
     assert 'mdlops_menu = tools_menu.addMenu("MDLOps")' in menu_source
 
-    for method_name in ("_open_texture_tool_window", "_open_blueprint_editor_window"):
-        open_source = inspect.getsource(getattr(QtGhostRiggerMainWindow, method_name))
-        assert "ensure_window" in open_source
-        assert "window.show()" in open_source
-        assert "window.raise_()" in open_source
+    texture_open_source = inspect.getsource(QtGhostRiggerMainWindow._open_texture_tool_window)
+    assert "ensure_window" in texture_open_source
+    assert "window.show()" in texture_open_source
+    assert "window.raise_()" in texture_open_source
+
+    blueprint_open_source = inspect.getsource(QtGhostRiggerMainWindow._open_blueprint_editor_window)
+    assert "_open_scripting_dialogue_studio_window" in blueprint_open_source
+    assert 'show_page("blueprint")' in blueprint_open_source
+    assert "UTC, UTP, UTD, or other KOTOR GFF resource" in blueprint_open_source
+    assert "_ensure_blueprint_window" not in blueprint_open_source
 
     diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
     assert "panel.run_diagnostics(self._current_model)" in diagnostics_source
@@ -10759,6 +10789,60 @@ def test_main_window_moves_utility_tabs_to_tools_windows() -> None:
     assert QtDiagnosticsWindow.__name__ == "QtDiagnosticsWindow"
     assert QtTextureToolWindow.__name__ == "QtTextureToolWindow"
     assert QtBlueprintEditorWindow.__name__ == "QtBlueprintEditorWindow"
+
+
+def test_blueprint_commands_route_to_the_typed_gff_editor() -> None:
+    display_root = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui"
+    resource_routing = (
+        display_root / "windows/application_core/shared/resource_panels.py"
+    ).read_text(encoding="utf-8")
+    controller_source = (
+        ROOT / "src/gui/controllers/scripting_blueprint_controller.py"
+    ).read_text(encoding="utf-8")
+    module_editor_source = (
+        ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "blueprint.open_bytes(raw, resref=resref)" in resource_routing
+    assert "blueprint.report_unresolved_resource(" in resource_routing
+    assert "def report_unresolved_resource(" in controller_source
+    assert "_open_scripting_dialogue_studio_window" in module_editor_source
+    assert 'show_page("blueprint")' in module_editor_source
+    assert "blueprint_controller.open()" in module_editor_source
+    assert "blueprint_controller.save()" in module_editor_source
+    assert "from src.gui.windows.qt_blueprint_editor import QtBlueprintEditorWindow" not in module_editor_source
+
+
+def test_sequence_editor_starts_with_an_honest_unsaved_workflow() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/sequence_editor/sequence_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"Untitled Sequence" if initial else "New Sequence"' in source
+    assert "add the selected scene object or camera" in source
+    assert 'setObjectName("sequenceWorkflowGuidance")' in source
+    assert "Preview is reversible" in source
+    assert "intro_cutscene" not in source
+
+
+def test_uv_viewer_explains_and_disables_an_empty_model_state() -> None:
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = QtUVViewerWindow()
+    try:
+        assert window.node_combo.currentText() == "(no mesh nodes)"
+        assert window.node_combo.isEnabled() is False
+        assert window.fit_button.isEnabled() is False
+        assert window.texture_button.isEnabled() is False
+        assert window.grid_button.isEnabled() is True
+        assert "open or select a model with mesh UVs" in window.context_label.text()
+        assert window.canvas.accessibleName() == "UV layout preview"
+    finally:
+        window.close()
 
 
 def test_main_window_routes_library_and_animation_library_to_content_browser() -> None:
@@ -11118,6 +11202,7 @@ def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
     assert "def _ensure_sequence_editor_dock" in workflow_source
     assert "self.sequence_editor_dock = dock" in workflow_source
     assert '"sequence_editor",' in workflow_source
+    assert '"Sequence Editor",\n            editor,\n            QtCore.Qt.BottomDockWidgetArea,\n            scroll=True,' in workflow_source
     assert "self.diagnostics_dock = self._create_detachable_panel(" in layout_source
     assert '"diagnostics",' in layout_source
     assert 'self._show_workspace_dock("sequence_editor")' in workflow_source

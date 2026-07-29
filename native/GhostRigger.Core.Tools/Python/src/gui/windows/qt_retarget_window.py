@@ -224,7 +224,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         tools_menu.addAction(self.cloth_rigging_action)
 
     def _build_statusbar(self) -> None:
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage("Choose a source and target to begin.")
 
     def _build_central(self) -> None:
         central = QtWidgets.QWidget(self)
@@ -308,6 +308,17 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.retarget_workbench_status_label.setObjectName("retargetWorkbenchStatusLabel")
         top.addWidget(self.retarget_workbench_status_label, 4)
         outer.addLayout(top)
+
+        guidance = QtWidgets.QLabel(
+            "1 Load an animated source • 2 load the target skeleton • 3 select an "
+            "animation • 4 Preview • 5 Retarget/export. Preview is non-destructive; "
+            "output stays blocked until mapping and readiness checks pass.",
+            box,
+        )
+        guidance.setObjectName("retargetWorkflowGuidance")
+        guidance.setWordWrap(True)
+        guidance.setAccessibleName("Retarget Workbench workflow")
+        outer.addWidget(guidance)
 
         toggles = QtWidgets.QHBoxLayout()
         toggles.setContentsMargins(0, 0, 0, 0)

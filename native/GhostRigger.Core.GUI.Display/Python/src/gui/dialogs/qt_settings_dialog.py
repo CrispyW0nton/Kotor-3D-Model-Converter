@@ -657,7 +657,11 @@ class QtSettingsDialog(QtWidgets.QDialog):
         }
         effective = RendererSettings.from_settings(
             probe,
-            hardware=self._hardware_diagnostics.to_dict(),
+            hardware=(
+                self._hardware_diagnostics.to_dict()
+                if self._hardware_diagnostics is not None
+                else None
+            ),
         ).effective_performance_profile
         descriptions = {
             "low_power": "45 FPS cap, bloom disabled, smaller texture/upload budgets.",

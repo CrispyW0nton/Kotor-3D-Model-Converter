@@ -24,6 +24,7 @@ class QtUVViewerWindow(QtWidgets.QMainWindow):
         self.setWindowTitle("UV Viewer")
         self.resize(900, 700)
         self._build()
+        self.set_model(None)
 
     def _build(self) -> None:
         central = QtWidgets.QWidget()
@@ -33,12 +34,15 @@ class QtUVViewerWindow(QtWidgets.QMainWindow):
         row = QtWidgets.QHBoxLayout(toolbar)
         row.setContentsMargins(4, 4, 4, 4)
         self.node_combo = QtWidgets.QComboBox()
+        self.node_combo.setObjectName("uvViewerNodeCombo")
+        self.node_combo.setAccessibleName("Mesh node")
         self.node_combo.currentTextChanged.connect(self._select_node_name)
         row.addWidget(QtWidgets.QLabel("Node:"))
         row.addWidget(self.node_combo, 1)
-        fit_button = QtWidgets.QPushButton("Fit")
-        fit_button.clicked.connect(self.fit_view)
-        row.addWidget(fit_button)
+        self.fit_button = QtWidgets.QPushButton("Fit")
+        self.fit_button.setObjectName("uvViewerFitButton")
+        self.fit_button.clicked.connect(self.fit_view)
+        row.addWidget(self.fit_button)
         self.grid_button = QtWidgets.QPushButton("Grid")
         self.grid_button.setCheckable(True)
         self.grid_button.setChecked(True)
@@ -50,12 +54,17 @@ class QtUVViewerWindow(QtWidgets.QMainWindow):
         self.texture_button.clicked.connect(self._toggle_texture)
         row.addWidget(self.texture_button)
         row.addStretch(1)
+        self.context_label = QtWidgets.QLabel()
+        self.context_label.setObjectName("uvViewerContextLabel")
+        self.context_label.setWordWrap(True)
         self.canvas = QtWidgets.QLabel("UV viewport migration host")
+        self.canvas.setAccessibleName("UV layout preview")
         self.canvas.setAlignment(QtCore.Qt.AlignCenter)
         self.canvas.setMinimumSize(420, 320)
         self.canvas.setStyleSheet("background:#080812; color:#ccccff; border:1px solid #252550;")
         self.canvas.installEventFilter(self)
         root.addWidget(toolbar)
+        root.addWidget(self.context_label)
         root.addWidget(self.canvas, 1)
         self.setCentralWidget(central)
 
@@ -70,6 +79,19 @@ class QtUVViewerWindow(QtWidgets.QMainWindow):
             self._selected_node = self._mesh_nodes[0]
         else:
             self._selected_node = None
+        has_mesh = bool(self._mesh_nodes)
+        self.node_combo.setEnabled(has_mesh)
+        self.fit_button.setEnabled(has_mesh)
+        self.texture_button.setEnabled(has_mesh)
+        if has_mesh:
+            self.context_label.setText(
+                f"Showing UVs for {len(self._mesh_nodes)} mesh node(s). "
+                "Choose a node, then use Fit, Grid, or Texture."
+            )
+        else:
+            self.context_label.setText(
+                "No mesh loaded — open or select a model with mesh UVs in the main viewport."
+            )
         self.fit_view()
 
     def set_selected_node(self, node) -> None:
@@ -206,7 +228,16 @@ class QtUVViewerWindow(QtWidgets.QMainWindow):
         node = self._selected_node
         if not (node and getattr(node, "uvs", None) and getattr(node, "faces", None)):
             painter.setPen(QtGui.QColor(160, 90, 110))
-            painter.drawText(self.canvas.rect(), QtCore.Qt.AlignCenter, "No UV data for this node")
+            message = (
+                "No mesh loaded\nOpen or select a model with mesh UVs in the main viewport."
+                if node is None
+                else "This mesh node has no UV coordinates."
+            )
+            painter.drawText(
+                self.canvas.rect().adjusted(32, 32, -32, -32),
+                QtCore.Qt.AlignCenter | QtCore.Qt.TextWordWrap,
+                message,
+            )
             return
         painter.setPen(QtGui.QPen(QtGui.QColor(68, 255, 136), 1))
         uvs = node.uvs

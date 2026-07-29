@@ -790,8 +790,19 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
             elif label.startswith("Export MDL"):
                 button.setObjectName("exportAssignedRetargetAnimationsButton")
             button.clicked.connect(slot)
+            if label == "Play":
+                self.play_selected_button = button
+            elif label == "Pause":
+                self.pause_retarget_button = button
+            elif label == "Stop":
+                self.stop_retarget_button = button
+            elif label == "Retarget":
+                self.retarget_selected_button = button
+            elif label.startswith("Export MDL"):
+                self.export_assigned_button = button
             controls.addWidget(button, 1)
         widget.setLayout(controls)
+        self._update_action_controls()
         return widget
 
     def _make_animation_column(self) -> QtWidgets.QWidget:
@@ -804,6 +815,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         self.anim_list.currentItemChanged.connect(
             lambda item, _old=None: self._on_animation_selected(self._source_name_for_item(item))
         )
+        self.anim_list.itemChanged.connect(lambda _item: self._update_action_controls())
         self.anim_list.itemDoubleClicked.connect(lambda _item: self._play_source_animation())
         self.anim_list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.anim_list.customContextMenuRequested.connect(self._show_animation_context_menu)
@@ -995,11 +1007,13 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         if self.anim_list.count() == 1:
             self.anim_list.setCurrentRow(0)
         self._update_animation_playback_controls()
+        self._update_action_controls()
         self._update_info()
 
     def set_target_model(self, model) -> None:
         self._target_model = model
         self.target_label.setText(self._model_label(model))
+        self._update_action_controls()
         self._update_info()
 
     def set_mapping_report(self, report) -> None:
@@ -1018,6 +1032,7 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
     def _on_animation_selected(self, anim_name: str) -> None:
         self.animationSelected.emit(anim_name)
         self._update_animation_playback_controls()
+        self._update_action_controls()
 
     def _preview_source_animation(self) -> None:
         anim_name = self.selected_animation()
@@ -1034,6 +1049,39 @@ class QtAnimationRetargetPanel(QtWidgets.QWidget):
         ):
             if button is not None:
                 button.setEnabled(has_animation)
+
+    def _update_action_controls(self) -> None:
+        has_source = self._source_model is not None
+        has_target = self._target_model is not None
+        has_animation = bool(self.selected_animation())
+        can_retarget = has_source and has_target and has_animation
+        can_export = has_source and has_target and bool(self.checked_animation_assignments())
+
+        for name in ("play_selected_button", "pause_retarget_button", "stop_retarget_button"):
+            button = getattr(self, name, None)
+            if button is not None:
+                button.setEnabled(has_animation)
+                button.setToolTip(
+                    "Preview the selected source animation."
+                    if has_animation
+                    else "Select a source animation first."
+                )
+        retarget = getattr(self, "retarget_selected_button", None)
+        if retarget is not None:
+            retarget.setEnabled(can_retarget)
+            retarget.setToolTip(
+                "Preview the selected animation on the target."
+                if can_retarget
+                else "Load a source and target, then select an animation."
+            )
+        export = getattr(self, "export_assigned_button", None)
+        if export is not None:
+            export.setEnabled(can_export)
+            export.setToolTip(
+                "Export all checked animation assignments."
+                if can_export
+                else "Load a source and target with at least one checked animation."
+            )
 
     def select_animation(self, anim_name: str) -> bool:
         if not anim_name:

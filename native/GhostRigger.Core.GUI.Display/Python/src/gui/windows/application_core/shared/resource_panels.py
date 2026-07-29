@@ -2008,18 +2008,21 @@ class ResourcePanelsMixin:
             open_window = getattr(self, "_open_blueprint_editor_window", None)
             if callable(open_window):
                 open_window()
-            window = getattr(self, "blueprint_window", None)
-            panel = getattr(window, "panel", None) or getattr(self, "blueprint_panel", None)
-            load_payload = getattr(panel, "load_ipc_resource_payload", None)
-            if callable(load_payload):
-                load_payload(
-                    resource_type=resource_type,
-                    resref=resref,
+            window = getattr(self, "scripting_dialogue_studio_window", None)
+            controller = getattr(self, "scripting_dialogue_studio_controller", None)
+            blueprint = getattr(controller, "blueprint_controller", None)
+            if raw and blueprint is not None:
+                blueprint.open_bytes(raw, resref=resref)
+            elif blueprint is not None:
+                blueprint.report_unresolved_resource(
                     game=game,
-                    module_dir=module_dir,
-                    raw=raw,
+                    resref=resref,
+                    resource_type=resource_type,
                 )
             if window is not None:
+                show_page = getattr(window, "show_suite_page", None)
+                if callable(show_page):
+                    show_page("blueprint")
                 window.show()
                 window.raise_()
                 window.activateWindow()
@@ -3204,6 +3207,16 @@ class ResourcePanelsMixin:
         if window is None:
             self._not_migrated("Rigging Window")
             return
+        model = getattr(self, "_current_model", None)
+        model_name = str(
+            getattr(model, "name", "")
+            or getattr(self, "_model_path", "")
+            or ""
+        ).replace("\\", "/").rsplit("/", 1)[-1]
+        panel = getattr(window, "panel", None)
+        set_model_context = getattr(panel, "set_model_context", None)
+        if callable(set_model_context):
+            set_model_context(model is not None, model_name)
         window.show()
         window.raise_()
         window.activateWindow()

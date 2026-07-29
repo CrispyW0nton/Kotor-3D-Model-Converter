@@ -84,6 +84,11 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
         assert window.findChild(QtWidgets.QCheckBox, "retargetBonesToggle") is not None
         assert window.findChild(QtWidgets.QCheckBox, "retargetGizmoToggle") is not None
         assert window.findChild(QtWidgets.QCheckBox, "retargetRootMotionToggle") is not None
+        guidance = window.findChild(QtWidgets.QLabel, "retargetWorkflowGuidance")
+        assert guidance is not None
+        assert "1 Load an animated source" in guidance.text()
+        assert "readiness checks pass" in guidance.text()
+        assert window.statusBar().currentMessage() == "Choose a source and target to begin."
         output_controls = window.findChild(QtWidgets.QFrame, "retargetOutputGlobalControls")
         assert output_controls.isHidden() is False
         output_labels = [
@@ -102,6 +107,18 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
         assert window.findChild(QtWidgets.QPushButton, "pauseRetargetAnimationButton") is not None
         assert window.findChild(QtWidgets.QPushButton, "stopRetargetAnimationButton") is not None
         assert window.findChild(QtWidgets.QPushButton, "exportAssignedRetargetAnimationsButton") is not None
+        assert window.findChild(QtWidgets.QPushButton, "playSelectedRetargetAnimationButton").isEnabled() is False
+        assert window.findChild(QtWidgets.QPushButton, "retargetSelectedAnimationButton").isEnabled() is False
+        export_button = window.findChild(QtWidgets.QPushButton, "exportAssignedRetargetAnimationsButton")
+        assert export_button.isEnabled() is False
+        assert "Load a source and target" in export_button.toolTip()
+
+        window.panel.set_source_model(_sample_kotor_animation_model())
+        window.panel.set_target_model(_sample_kotor_animation_model())
+        window.panel.anim_list.setCurrentRow(0)
+        assert window.findChild(QtWidgets.QPushButton, "playSelectedRetargetAnimationButton").isEnabled() is True
+        assert window.findChild(QtWidgets.QPushButton, "retargetSelectedAnimationButton").isEnabled() is True
+        assert export_button.isEnabled() is True
     finally:
         window.close()
 
