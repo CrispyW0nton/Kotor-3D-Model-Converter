@@ -478,3 +478,162 @@ def test_export_selected_module_routes_marquee_selection_to_one_mesh_worker(
     assert args[2] == [room, sky]
     assert args[3] == str(output)
     assert kwargs["tex_cache"] == "texture-cache"
+
+
+def test_export_selected_single_static_room_routes_to_one_mesh_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.gui.windows.application_core.shared import model_io
+
+    runtime_model = SimpleNamespace(name="m14aa_01g")
+    room = SimpleNamespace(
+        id="room-id",
+        name="m14aa_01g",
+        metadata={"_runtime_model": runtime_model},
+    )
+    captured: dict[str, object] = {}
+    output = tmp_path / "m14aa_01g.fbx"
+
+    class _Harness(model_io.ModelIoMixin):
+        scene_manager = SimpleNamespace(
+            active_scene=SimpleNamespace(objects=[room]),
+            get_selected_objects=lambda: [room],
+        )
+        viewport = SimpleNamespace(
+            _selected_viewport_nodes=[
+                SimpleNamespace(_gr_scene_object_id="room-id"),
+            ]
+        )
+        settings_data = {"fbx_sdk": {}}
+
+        def _get_tex_cache_for_export(self):
+            return "texture-cache"
+
+        def _runtime_model_for_scene_object(self, _item):
+            return runtime_model
+
+        def _fbx_base_skeleton_for_export(self, _model):
+            return None
+
+        def _fbx_supplemental_animation_models(self, _model):
+            return ()
+
+        def _choose_fbx_animation_sets(self, *_args, **_kwargs):
+            return ()
+
+        def _fbx_resource_context_for_export(self, _model):
+            return None, None
+
+        def _run_io_async(self, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+
+        def _log(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        model_io.QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output), "Standard FBX (*.fbx)"),
+    )
+
+    _Harness()._export_selected_fbx()
+
+    args = captured["args"]
+    kwargs = captured["kwargs"]
+    assert args[1] is model_io._work_export_selected_fbx
+    assert args[2] == [room]
+    assert args[3] == str(output)
+    assert kwargs["tex_cache"] == "texture-cache"
+
+
+def test_full_module_export_resolves_every_object_in_selected_module_group() -> None:
+    from src.gui.windows.application_core.shared import model_io
+
+    module_objects = [
+        SimpleNamespace(
+            id=f"room-{suffix}",
+            name=f"m14aa_01{suffix}",
+            metadata={"module_group": {"module_root": "m14aa_01"}},
+        )
+        for suffix in "abcdefghi"
+    ]
+    unrelated = SimpleNamespace(
+        id="other-room",
+        name="m13aa_01a",
+        metadata={"module_group": {"module_root": "m13aa_01"}},
+    )
+    scene_manager = SimpleNamespace(
+        active_scene=SimpleNamespace(objects=[*module_objects, unrelated]),
+        get_selected_objects=lambda: [module_objects[6]],
+    )
+    viewport = SimpleNamespace(
+        _selected_viewport_nodes=[
+            SimpleNamespace(_gr_scene_object_id=module_objects[6].id),
+        ]
+    )
+
+    resolved = model_io._module_group_scene_objects_for_export(
+        scene_manager,
+        viewport,
+    )
+
+    assert resolved == module_objects
+
+
+def test_export_full_module_routes_all_group_objects_to_one_mesh_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.gui.windows.application_core.shared import model_io
+
+    module_objects = [
+        SimpleNamespace(
+            id=f"room-{suffix}",
+            name=f"m14aa_01{suffix}",
+            metadata={
+                "module_group": {"module_root": "m14aa_01"},
+                "_runtime_model": SimpleNamespace(name=f"m14aa_01{suffix}"),
+            },
+        )
+        for suffix in "abcdefghi"
+    ]
+    output = tmp_path / "m14aa_01_full.fbx"
+    captured: dict[str, object] = {}
+
+    class _Harness(model_io.ModelIoMixin):
+        scene_manager = SimpleNamespace(
+            active_scene=SimpleNamespace(objects=module_objects),
+            get_selected_objects=lambda: [module_objects[6]],
+        )
+        viewport = SimpleNamespace(
+            _selected_viewport_nodes=[
+                SimpleNamespace(_gr_scene_object_id=module_objects[6].id),
+            ]
+        )
+
+        def _get_tex_cache_for_export(self):
+            return "texture-cache"
+
+        def _run_io_async(self, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+
+        def _log(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        model_io.QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output), "Standard FBX (*.fbx)"),
+    )
+
+    _Harness()._export_full_module_fbx()
+
+    args = captured["args"]
+    kwargs = captured["kwargs"]
+    assert args[1] is model_io._work_export_selected_fbx
+    assert args[2] == module_objects
+    assert args[3] == str(output)
+    assert kwargs["tex_cache"] == "texture-cache"

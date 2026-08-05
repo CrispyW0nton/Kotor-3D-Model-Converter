@@ -130,6 +130,13 @@ class WindowChromeMixin:
         self.export_fbx_action.triggered.connect(self._export_fbx)
         self.export_selected_fbx_action = QtGui.QAction("Export Selected FBX...", self)
         self.export_selected_fbx_action.triggered.connect(self._export_selected_fbx)
+        self.export_full_module_fbx_action = QtGui.QAction(
+            "Export Full Module as One FBX...",
+            self,
+        )
+        self.export_full_module_fbx_action.triggered.connect(
+            self._export_full_module_fbx,
+        )
         self.export_gltf_action = QtGui.QAction("Export GLB/GLTF...", self)
         self.export_gltf_action.setShortcut("Ctrl+G")
         self.export_gltf_action.triggered.connect(self._export_gltf)
@@ -431,6 +438,7 @@ class WindowChromeMixin:
         file_menu.addAction(self.export_obj_action)
         file_menu.addAction(self.export_fbx_action)
         file_menu.addAction(self.export_selected_fbx_action)
+        file_menu.addAction(self.export_full_module_fbx_action)
         file_menu.addAction(self.export_gltf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.export_humanoid_action)

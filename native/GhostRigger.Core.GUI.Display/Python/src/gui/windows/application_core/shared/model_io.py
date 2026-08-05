@@ -57,6 +57,41 @@ def _selected_scene_objects_for_export(scene_manager, viewport) -> list:
     return list(getter() or []) if callable(getter) else []
 
 
+def _module_group_scene_objects_for_export(scene_manager, viewport) -> list:
+    """Resolve the complete loaded module group containing the selected room."""
+    selected = _selected_scene_objects_for_export(scene_manager, viewport)
+    anchor = next(
+        (
+            item
+            for item in selected
+            if isinstance(
+                (getattr(item, "metadata", {}) or {}).get("module_group"),
+                dict,
+            )
+        ),
+        None,
+    )
+    if anchor is None:
+        return []
+    anchor_group = (getattr(anchor, "metadata", {}) or {}).get("module_group") or {}
+    module_root = str(anchor_group.get("module_root") or "").strip().lower()
+    if not module_root:
+        return []
+    scene = getattr(scene_manager, "active_scene", None)
+    return [
+        item
+        for item in list(getattr(scene, "objects", None) or [])
+        if str(
+            (
+                (getattr(item, "metadata", {}) or {}).get("module_group")
+                or {}
+            ).get("module_root")
+            or ""
+        ).strip().lower()
+        == module_root
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Plain "work" functions that perform the actual blocking I/O.
 #
@@ -934,11 +969,7 @@ class ModelIoMixin:
                 "Export Composed Model… so the rig can be normalized as one asset.",
             )
             return
-        is_module_selection = any(
-            bool((getattr(item, "metadata", {}) or {}).get("module_group"))
-            for item in selected
-        )
-        if compatibility_profile == "standard" and (len(selected) > 1 or is_module_selection):
+        if compatibility_profile == "standard":
             def _on_complete(result, cancelled=False):
                 if cancelled or result is None:
                     return
@@ -1011,6 +1042,52 @@ class ModelIoMixin:
         except Exception as exc:
             self._log(f"Selected FBX export error: {exc}", "error")
             show_exception(self, "export_error", exc, context="Exporting selected mesh to FBX")
+
+    def _export_full_module_fbx(self):
+        module_objects = _module_group_scene_objects_for_export(
+            self.scene_manager,
+            getattr(self, "viewport", None),
+        )
+        if not module_objects:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Full Module as One FBX",
+                "Select any room in a loaded module layout first.",
+            )
+            return
+        module_group = (
+            (getattr(module_objects[0], "metadata", {}) or {}).get("module_group")
+            or {}
+        )
+        module_root = str(module_group.get("module_root") or "module").strip()
+        path, _selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export Full Module as One FBX",
+            f"{module_root}_full.fbx",
+            "Standard FBX (*.fbx);;All files (*.*)",
+        )
+        if not path:
+            return
+
+        def _on_complete(result, cancelled=False):
+            if cancelled or result is None:
+                return
+            self._log(
+                f"Exported full module as one FBX mesh "
+                f"({len(module_objects)} scene objects) -> {Path(result).name}",
+                "success",
+            )
+
+        self._run_io_async(
+            f"Combining and exporting full module — {Path(path).name}",
+            _work_export_selected_fbx,
+            module_objects,
+            path,
+            tex_cache=self._get_tex_cache_for_export(),
+            on_complete=_on_complete,
+            error_category="export_error",
+        )
+
     def _show_missing_fbx_sdk_dialog(self, details: str = "") -> None:
         message = (
             "Autodesk FBX Python SDK is not installed or not available to this Python environment. "

@@ -33,6 +33,17 @@ baked, and the static selection is flattened into one FBX geometry while
 retaining polygon materials, diffuse UVs, lightmap UVs, normals, and texture
 sidecars.
 
+Corrected the single-object path after Blender exposed that an ungrouped room
+could bypass the one-mesh worker. Standard `Export Selected FBX...` now always
+flattens the selected scene geometry, including one separately opened room;
+engine-specific Unity, Unreal, and 3ds Max profiles retain their rig/animation
+export paths.
+
+Added `File > Export Full Module as One FBX...` for the complete loaded layout.
+Selecting any room resolves every scene object in the same module group and
+routes all nine courtyard rooms through the one-mesh worker, so artists no
+longer need to marquee-select a large layout or risk exporting only one room.
+
 Affected files:
 
 - `native/GhostRigger.Core.Rendering/Python/src/core/rendering/gpu_shaders.py`
@@ -69,6 +80,17 @@ Verification:
 - Real nine-room merge produced one geometry with 38,945 faces, 116,835
   corner-expanded vertices, 25 polygon materials, both UV channels, and the
   original 2325 x 2325 x 1005 bounds.
+- Reproduced the supplied `m14aa_01g.fbx` as 341 Geometry records and 342
+  transform Models, then exported `m14aa_01g_fixed.fbx` as one Geometry/Model
+  at zero translation with 44,568 corner vertices, 14,856 faces, 17 materials,
+  and the source room bounds. Blender 4.5 loaded the equivalent merged geometry
+  as one mesh object for visual layout proof.
+- Exported all nine loaded courtyard rooms to `m14aa_full_map.fbx`: one
+  Geometry/Model at zero translation, 116,835 corner vertices, 38,945 faces,
+  25 materials, 25 decoded texture sidecars, and the complete
+  2325 x 2325 x 1005 bounds. Blender 4.5 loaded the equivalent merged geometry
+  as one object; a proof render confirmed the full courtyard and enclave layout
+  after hiding only the enclosing skybox/background faces from the proof camera.
 - Focused lightmap and selection-export regressions passed; individual Debug
   Rendering, IO, and GUI Display payload projects built successfully.
 
