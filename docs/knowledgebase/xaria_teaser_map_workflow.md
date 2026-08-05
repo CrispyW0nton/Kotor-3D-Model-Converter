@@ -15,7 +15,11 @@ regression map.
 - Module root: `xartease`.
 - Voice lookup: `module.ifo` stores numeric `Mod_VO_ID=997`. Private `xt_dlg`
   is silent; its guarded post-combat handoff launches production `xaria.dlg`,
-  whose VO resolves from `StreamVoice/997/xaria`.
+  whose 48-line package resolves from the ResRef-derived folders
+  `StreamVoice/997/xaria`, `StreamVoice/997/atton`, and
+  `StreamVoice/997/kreia`. The package covers 24 encounter lines, seven lesson
+  lines, fifteen post-recruit lines, and the Atton/Kreia recruitment
+  reactions. Candidate validation requires the exact 48-file set.
 - Entry: `(-7.0, -58.0, 2.651398)`.
 - Return transition: `(1.5, -1.2, 9.648286)` to
   `402dxn/From_401DXN`.
@@ -225,12 +229,14 @@ external and must be verified by the final transactional staging manifest:
   `p_xariab1.tga`, verified facial-performance head
   `p_xariah6.mdl`/`p_xariah6.mdx`, authored head texture
   `p_xaria06.tga`/`p_xaria06.txi`, and `po_pxaria.tga`.
-- Seventeen production Voice Design 1 WAV/LIP pairs. Their verified logical
-  source names remain `xv_intro`, `xv_name`, and the other `xv_*` dialogue
-  keys, but their retail runtime identities are
-  `997xaria001..997xaria017`.
+- Forty-eight production WAV/LIP pairs. The original nine encounter identities
+  use `997xaria001..997xaria009`, the seven lesson identities use
+  `997xaria010..997xaria016`, and the fifteen expanded-meeting identities
+  `xv_warn` through `xv_withhold` use `997xaria017..997xaria031`. The fifteen
+  post-recruit identities remain `997xaria101..997xaria115`; the two
+  companion reactions remain `997atton001` and `997kreia001`.
 - Runtime WAV directory:
-  `StreamVoice/997/xaria/<runtime-resref>.wav`.
+  `StreamVoice/997/<speaker>/<runtime-resref>.wav`.
 - Runtime LIP files:
   `Override/<runtime-resref>.lip`.
 - Global rows: `appearance.2da` row 725, `heads.2da` row 199,
@@ -243,21 +249,22 @@ external and must be verified by the final transactional staging manifest:
 
 The packed dialogue voice contract is exact:
 
-- `xv_intro`: “Stay where you are. The last wraid had poor judgment, and I
-  have not yet decided whether it is truly dead.”
-- `xv_name`: “Xaria. I claim no clan. A clan demands obedience; I prefer
-  debts, bargains, and the freedom to decide which secrets are worth killing
-  for.”
+- `xv_intro`: “Keep away, outlander. This valley will be your doom if you step
+  a foot closer. Their fear is still moving through the ichor—and something in
+  it recognizes you.”
+- `xv_name`: “Xaria. I belonged to a clan once, then an army, then the dead.”
 
 Both entries use speaker `XT_Xaria`, empty `Sound`, `SoundExists=1`, and zero
 plot XP in production `xaria.dlg`. They map to `997xaria001` and
-`997xaria002`; the other production nodes continue through
-`997xaria017`. Because the IFO's voice ID is `997` and the production DLG
-ResRef is `xaria`, retail derives
-`StreamVoice/997/xaria/997xariaNNN.wav`. The Patch Manager stager validates the
-packed IFO, production-dialogue dependency, and all 17 exact WAV/LIP pairs
-before installing them as one recoverable transaction. Logical `xv_*` source
-paths alone are not valid retail lookups.
+`997xaria002`. The original encounter continues through `997xaria009`, lessons
+use `997xaria010..997xaria016`, and the expanded meeting uses
+`997xaria017..997xaria031`; post-recruit and reaction lines retain their
+separate ranges above. Because the IFO's voice ID is `997` and the production
+DLG ResRef is `xaria`, retail derives each speaker folder from the runtime
+ResRef. The Patch Manager stager validates the packed IFO,
+production-dialogue dependency, and all 48 exact WAV/LIP pairs before
+installing them as one recoverable transaction. Logical `xv_*` source paths
+alone are not valid retail lookups.
 
 The generated proof records the exact SHA-256 and size of every loose external
 file found at build time. It leaves the global-row and runtime-patch entries
@@ -831,12 +838,14 @@ alphabetic `xar/xv_*` lookup. Its nested folder branch accepts `gbl`, `avo`,
 
 `StreamVoice/<resref[0:3]>/<resref[3:-3]>/<full-resref>`
 
-The corrected contract is numeric ID `997`, dialogue directory `xaria`, and
-runtime ResRefs `997xaria001..997xaria017`. The IFO stores
-`Mod_VO_ID=997`; production DLG nodes bind those runtime ResRefs; matching WAVs
-live in `StreamVoice/997/xaria`; matching LIPs live in Override. Voiced nodes
-temporarily use `FacialAnim=0` so the next test isolates the retail LIP track
-from the broad expression overlays seen pinching Xaria's face.
+The corrected contract is numeric ID `997`, Xaria dialogue directory `xaria`,
+and runtime ResRefs `997xaria001..997xaria031` plus
+`997xaria101..997xaria115`; Atton and Kreia use their matching speaker folders.
+The IFO stores `Mod_VO_ID=997`; production DLG nodes bind those runtime ResRefs;
+matching WAVs live under the ResRef-derived `StreamVoice/997/<speaker>` folder
+and matching LIPs live in Override. Voiced nodes temporarily use
+`FacialAnim=0` so the next test isolates the retail LIP track from the broad
+expression overlays seen pinching Xaria's face.
 
 The teaser presentation now holds camera 111 through the 2.60-second Miststep
 beat, gives cameras 112 and 113 a 0.65-second establishing hold before their
@@ -1139,3 +1148,260 @@ module transaction. Its stage manifest is
 The installed module is byte-identical to the Ghost candidate. This records
 package identity only; the assigned death-synchronized camera shots still
 require visible retail confirmation.
+
+## 2026-07-28 schema-13 natural three-camera handoff
+
+The prior schema-12 test hung after Wraid 3 because combat camera 114 remained
+inside the still-running private director dialogue. Calling
+`k_oei_endconv` did not end that dialogue; it is an engine event wrapper, not
+an active conversation-close operation.
+
+Schema 13 removes camera 114 from the combat graph. The private DLG is now a
+death-gated 111 -> 112 -> 113 graph with 400-millisecond polling links. Every
+node has an advancing proof link followed by a negated child backlink, and
+camera 113's proof link ends the graph naturally. `xt_camend`, installed as
+the DLG `OnEnd` handler, validates the finished encounter, proof mask 7, all
+three dead Wraids, and the once-only handoff latch before it calls `xt_post`.
+The camera-114 marker remains available exclusively to the production
+dialogue.
+
+Camera 111 is byte-for-design unchanged. The revised cinematic views are:
+
+- camera 112: position `(9.0, -13.0, 9.986575)`, target
+  `(5.5, -20.0, 11.0)`, FOV 58;
+- camera 113: position `(-2.0, -10.0, 10.048286)`, target
+  `(4.5, -17.5, 11.0)`, FOV 58.
+
+Each beat clears the target's actions, explicitly plays the stock Wraid
+`cspasm` reaction for 0.65 seconds, and then applies lethal universal damage
+so the stock `cdie` animation is available before the graph advances.
+
+Two clean builds matched. Current artifact evidence:
+
+- `xartease.mod`: 1,246,279 bytes, SHA-256
+  `277AC9611BCCF3CDADEBE55566F96E177BBD42DABA7A9107F3086257C88DADCD`;
+- `structural_proof.json`: 101,665 bytes, SHA-256
+  `0C03E2C167C34FF36D9050356BE2BB478D52D8E51871342704F85E4C5A7AC778`;
+- `xaria_teaser_manifest.json`: 98,830 bytes, SHA-256
+  `32920C3D54690D9C4F60BE5CE027FD6DF1B84916FFFDD4F56EEFDC0091CBE46A`;
+- 59 packed module resources, including 26 private/director resources;
+- 27 focused Ghost tests passed; the paired Patch Manager suite passed 66.
+
+The paired installer now independently rejects non-executable private NCS
+payloads, missing `xartease.git` encounter placements, and private Xaria UTCs
+that lose `xt_click`, `xt_hb`, or `ScriptEndDialogu=xt_enddlg`.
+
+Patch Manager installed the byte-identical module transactionally under
+`logs/k2-xaria-teaser-staging/20260728T095035056770/stage-manifest.json`
+(SHA-256
+`5FBF86A506D6879F67FF4ADDB2819B5ACBC3E7CBF248BE57779741C01DD44C74`).
+This remains structural evidence until the user confirms framing, reactions,
+camera release, and the one-time recruitment dialogue in retail.
+
+## 2026-07-28 schema-14 retail DLG-delay unit correction
+
+The first schema-13 retail run killed Wraid 1 but then appeared to freeze on
+camera 111. The death proof and beat script were not the failure. The invalid
+assumption was that a DLG node's integer `Delay` field is measured in
+milliseconds. Both installed modules contained `[400, 400, 400]`, so retail
+held each silent camera node for approximately 400 seconds before it could
+reevaluate the death-proof link.
+
+The unit is now independently proven as seconds:
+
+- retail `FUN_006C67E0` reads `Delay`, `FUN_006CC140` passes it to
+  `FUN_006C9770`, and `FUN_00545470` converts the duration using the integer
+  `1000` at `0x00992384`;
+- a scan of 1,242 stock KOTOR II dialogues found no `Delay=400`; stock
+  cinematic nodes use small whole-second values such as 1, 3, 4, 5, and 13;
+- KotOR.js multiplies the field by 1000, while reone treats it as a
+  seconds-based timer.
+
+Schema 14 therefore uses the smallest safe integer poll, `[1, 1, 1]`. Zero
+was deliberately rejected because the graph contains child backlinks and a
+zero-time cycle could spin without yielding. The builder, package validator,
+and focused tests now require the exact one-second values. Ghost Studio's PIE
+timing helper was corrected at the same time: its public argument is
+`delay_seconds`, it no longer divides by 1000, and the generated Core Scene
+and Core Tools payloads were regenerated.
+
+Verification:
+
+- 36 focused teaser/PIE tests passed;
+- 22 embedded-Python payload tests passed;
+- two clean teaser builds matched;
+- candidate `xartease.mod`: 1,246,279 bytes, SHA-256
+  `95123423CB3AAD35BF5754B499B95125F58459FFA72AE0EE45FA50C52459259B`;
+- `structural_proof.json`: 101,652 bytes, SHA-256
+  `49FBA487564F0FD797708092046A9E1B5D876C74BD096B377CF744A995556398`;
+- `xaria_teaser_manifest.json`: 98,830 bytes, SHA-256
+  `DC9E6EBCD343A280E4FBC2DF7264C703C701D277A373193D5D2C36D32BAA1552`.
+
+Patch Manager installed that exact candidate transactionally under
+`logs/k2-xaria-teaser-staging/20260728T104139571289/stage-manifest.json`.
+This proves package identity and graph structure only. Retail acceptance still
+requires the user to see camera 111 advance to 112 after Wraid 1, then to 113,
+and finally release into the recruitment dialogue.
+
+## 2026-07-28 acknowledged post-combat conversation retry
+
+The next retail run visibly completed all three combat beats and naturally
+released camera 113, but the production recruitment dialogue did not open.
+The invalid assumption was that scheduling `ActionStartConversation` and
+setting local Boolean 61 first proved the conversation had started. Retail can
+silently reject that queued action during camera-dialogue and combat teardown,
+after which the optimistic latch prevented every heartbeat retry.
+
+The shared production dialogue now supplies the acknowledgement:
+`xaria.dlg` runs external dependency `kxar_dlgack.ncs` on its first entry and
+sets Boolean 61 only when that node actually executes. `xt_post` now uses the
+stock combat-to-dialogue teardown pattern on Xaria and the PC, waits 1.00
+second before requesting the conversation, and retries after 2.00 seconds
+while acknowledgement is absent. `xt_hb` retains the state-2 recovery path,
+and the private camera DLG routes both `OnEnd` and `OnAbort` to `xt_camend`.
+
+Verification:
+
+- 27 focused Ghost teaser tests passed;
+- the paired Patch Manager Xaria suite passed 73 tests;
+- two clean builds matched and structural proof reports `PASS`;
+- `xartease.mod`: 1,246,513 bytes, SHA-256
+  `300EA47A14A2C2215AEA68200EEA8870B015D5FC99EA509A2077B024EF553276`;
+- `structural_proof.json`: 103,020 bytes, SHA-256
+  `106348C6BCD429D31F3C43E10F202A685554CD86BC485F05F51CFAE484DC3F43`;
+- `xaria_teaser_manifest.json`: 100,133 bytes, SHA-256
+  `35176A3FFB97DF45BFA5E2CB5B9646F23D6BF88FBEB236C0D65C7D919B0CBFB2`;
+- Patch Manager installed the byte-identical module transactionally under
+  `logs/k2-xaria-teaser-staging/20260728T183453232977/stage-manifest.json`
+  after validating 259 live dependencies.
+
+The package readback proves `OnEnd=OnAbort=xt_camend` and the acknowledgement
+dependency matches the installed production candidate. It does not prove
+retail behavior. The remaining acceptance gate is one production recruitment
+dialogue immediately after Wraid 3, with no encounter restart.
+
+## 2026-07-28 camera-OnEnd handoff deadlock and independent recovery
+
+The next retail run again completed all three Wraid kills and the complete
+three-camera combat sequence, but no production dialogue began. Interacting
+with Xaria afterward also did nothing. This invalidated a second assumption:
+even with a naturally terminating DLG, `OnEnd`/`OnAbort` cannot be the sole
+authority that unlocks postcombat gameplay.
+
+The deadlock was deterministic:
+
+- `xt_dead` committed private state 2 and proof mask 7 but did not schedule
+  production dialogue;
+- only `xt_camend` could set camera-handoff Boolean 60;
+- `xt_post` required Boolean 60 before doing any work;
+- heartbeat called the same gated `xt_post`, so it could never recover; and
+- `xt_click` accepted only production globals 2 or 4, while the missed callback
+  left the global at 0 or 1.
+
+The last retail-proven schema that visibly reached postcombat subtitles did
+not rely on the callback. Schema 14 now restores that architecture without
+reverting the working three-camera combat:
+
+1. proof mask 7 schedules `xt_post` independently after 0.90 seconds;
+2. `xt_post` no longer requires Boolean 60;
+3. it polls the real `XT_Director` with `GetIsInConversation` every 0.50
+   seconds and lets the camera DLG end naturally;
+4. after release it records Boolean 60 as telemetry, performs the guarded
+   combat teardown, and requests `xaria.dlg` after the retail-proven 0.35
+   seconds;
+5. Boolean 61 remains post-launch evidence from `kxar_dlgack`, and heartbeat
+   retries until that acknowledgement; and
+6. a click in completed private state retries the handler even when the
+   production global is still 0 or 1.
+
+Do not reintroduce `k_oei_endconv` as a close operation. Retail already proved
+that it is an event wrapper and does not end the active camera conversation.
+
+Verification and staging:
+
+- all 27 focused Ghost teaser tests passed, including native K2 ACTION operand
+  validation and binary DLG readback;
+- two clean candidate builds matched;
+- `xartease.mod`: 1,246,513 bytes, SHA-256
+  `D74DD904C9CFA2321503C8E4A6A3B89487A4BC40142CEEDDBB481AAA5BB4CDC2`;
+- `xt_dead.ncs` SHA-256
+  `57A041BD9A99F5A620574799DC0B525CD4C292FBCAFF507F6E62854942CF769`;
+- `xt_post.ncs` SHA-256
+  `AA009975D54430D4CA35F8E5B7638E4DEBB96AD30788BAF624766708854DB42D`;
+- `xt_hb.ncs` SHA-256
+  `60DD5A965CD7AD47764CE2AAF3C069A53CC613C9095F83DCE01A6179FCEAD289`;
+- installed transaction:
+  `logs/k2-xaria-teaser-staging/20260728T201304618797/stage-manifest.json`.
+
+The installer validated the newly staged PLCaa dependency manifest before
+committing the byte-identical xartease module. This is structural and package
+identity evidence only. The required retail gate remains: all three kills and
+cameras complete, the recruitment dialogue begins once without interaction,
+and clicking Xaria also recovers it if the automatic launch is deliberately
+missed.
+
+## 2026-08-03 — gender-aware reaction LIP dependency refresh
+
+The teaser's external dependency contract now matches the production
+encounter's complete 49-line voice set. The obsolete single
+`cxar_atton.ncs` dependency was replaced by `cxar_atton_m.ncs` and
+`cxar_atton_f.ncs`; `997atton002` was added for the female-player reaction.
+Atton's two LIPs and Kreia's LIP were regenerated from reviewed
+faster-whisper large-v3 word timestamps rather than uniform whole-line
+grapheme timing.
+
+Pinned LIP SHA-256 values:
+
+- `997atton001.lip`:
+  `DDDDE6BF03600C455A9AAD5D2E3344A9806C76BB8B1F927DA357CCC839D8E0EF`;
+- `997atton002.lip`:
+  `A8026DCAC4E5B9F4EF2C38D0F1FFE422468217A7BE0A0C171AD7446BB65FB373`;
+- `997kreia001.lip`:
+  `32F8274B6205810E696C284006BD9325E324B2CC73596C9FD540F8A15CF81190`.
+
+All 30 focused teaser tests passed. Two clean teaser builds completed, and
+KPM transactionally installed the 1,247,892-byte module with SHA-256
+`EA6F0E1AB59CFC27811C14003050B02921F19E43EA7302101A9E6C8AAC7088A6`
+under
+`logs/k2-xaria-teaser-staging/20260803T170146849133/stage-manifest.json`.
+The install validated 365 live dependencies. This is structural, alignment,
+package, and installed-byte evidence only; visible in-game facial sync remains
+pending.
+
+## 2026-08-04 — reaction LIPs advanced to audio-derived mouth cues
+
+Retail testing invalidated the preceding word-aligned LIPs: Atton's added
+reaction still did not animate his lips correctly. Kreia was not yet tested,
+but shared the same generator and was corrected in the same pass. The failed
+method aligned words to audio and then divided each word evenly by transcript
+characters, choosing visemes from English spelling. It was not a reliable
+phonetic model.
+
+KPM now builds all three reaction LIPs from reviewed Rhubarb Lip Sync 1.13.0
+PocketSphinx mouth cues bound to the exact source-audio hashes. Ghost Studio's
+dependency pins are:
+
+- `997atton001.lip`:
+  `A4D67480F3424C4FAC58590C7001F74AFE76117BE1E847516B7D7015CC6A158B`;
+- `997atton002.lip`:
+  `F2F4AA61CF32012C5F084B087EA8DA68F7ADA83069829D94155ABA4DFBD5AFE3`;
+- `997kreia001.lip`:
+  `15FA2FDF1D812002107CB15C294F02C37EF1BE1366F51E8A44C30FCA52EF5FD9`.
+
+The rebuilt teaser retains the byte-identical 1,247,892-byte
+`xartease.mod`, SHA-256
+`EA6F0E1AB59CFC27811C14003050B02921F19E43EA7302101A9E6C8AAC7088A6`,
+because these reaction LIPs are loose dependencies. Updated artifact hashes:
+
+- `structural_proof.json`:
+  `600B8E5317036A9C7D03403CB0645F2264BDB642931563B2D0E2743D6A167470`;
+- `xaria_teaser_manifest.json`:
+  `7E01B6F5D7DBB4F0F94ABE83827EC296EE0C736F6C13BF35ADD8DF3A17EEAA17`.
+
+All 30 focused Ghost Studio teaser tests and 75 affected KPM tests pass. KPM
+transactionally installed the updated dependency set under
+`logs/k2-xaria-teaser-staging/20260804T162120563070/stage-manifest.json`
+(SHA-256
+`DAC2E204FC5555A7CE265A241F50738B5D7A4A8237CD6A83A9D9EFBD0CD6138F`).
+Installed loose LIP hashes exactly match the pins above. Visible in-game sync
+remains `candidate_unverified` until Atton and Kreia are retested.

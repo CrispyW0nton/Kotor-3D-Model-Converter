@@ -7,11 +7,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from src.core.geometry.model_data import KotorModel, ModelNode
+from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 from src.core.scene.kmax_scene import KMaxScene
+from src.math.transform_math import rotate_vector
 
 from .fbx_scene_adapter import (
     FbxExportSummary,
+    euler_degrees_to_quat_xyz,
     gr_material_to_fbx_material,
     gr_mesh_to_fbx_mesh,
     iter_renderable_mesh_nodes,
@@ -38,6 +40,7 @@ DEFAULT_EXPORT_OPTIONS: dict[str, Any] = {
     "apply_unit_conversion": True,
     "bake_transforms": False,
     "triangulate": True,
+    "merge_selection": False,
 }
 
 
@@ -146,6 +149,9 @@ def _models_from_payload(payload: Any, options: dict[str, Any]) -> list[tuple[Ko
         objects = list(payload.objects)
         if options.get("export_selection_only"):
             objects = [obj for obj in objects if getattr(obj, "selected", False)]
+        if options.get("merge_selection"):
+            name = "selection" if options.get("export_selection_only") else (payload.name or "scene")
+            return [(merge_selected_scene_objects(objects, name=name), name)]
         result = []
         for obj in objects:
             model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
@@ -156,6 +162,8 @@ def _models_from_payload(payload: Any, options: dict[str, Any]) -> list[tuple[Ko
             raise FbxExportError("Scene export has no runtime mesh objects to export.")
         return result
     if isinstance(payload, (list, tuple)):
+        if options.get("merge_selection"):
+            return [(merge_selected_scene_objects(payload, name="selection"), "selection")]
         result = []
         for item in payload:
             if isinstance(item, KotorModel):
@@ -167,6 +175,191 @@ def _models_from_payload(payload: Any, options: dict[str, Any]) -> list[tuple[Ko
         if result:
             return result
     raise FbxExportError("FBX export expects a KotorModel, KMaxScene, or selected scene objects with runtime models.")
+
+
+def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection") -> KotorModel:
+    """Bake selected static scene objects into one FBX-ready mesh.
+
+    Vertices are expanded per polygon corner so meshes with independent
+    texture-vertex indices retain their UV seams after becoming one FBX mesh.
+    """
+    items = list(scene_objects or [])
+    merged = ModelNode(
+        name=str(name or "selection"),
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        vertex_space=1,
+    )
+    material_slots: list[ModelNode] = []
+    material_indices: dict[tuple[Any, ...], int] = {}
+    first_model: KotorModel | None = None
+
+    for item in items:
+        if isinstance(item, KotorModel):
+            model = item
+            transform = None
+        else:
+            model = (getattr(item, "metadata", {}) or {}).get("_runtime_model")
+            transform = getattr(item, "transform", None)
+        if not isinstance(model, KotorModel):
+            continue
+        if first_model is None:
+            first_model = model
+
+        scene_position = _vec3(getattr(transform, "position", None), (0.0, 0.0, 0.0))
+        scene_rotation = euler_degrees_to_quat_xyz(
+            _vec3(getattr(transform, "rotation", None), (0.0, 0.0, 0.0))
+        )
+        scene_scale = _vec3(getattr(transform, "scale", None), (1.0, 1.0, 1.0))
+
+        for node in iter_renderable_mesh_nodes(model):
+            if int(getattr(node, "vertex_space", 0) or 0) == 2:
+                continue
+            node_slots = _material_slots_for_node(node)
+            node_material_indices = []
+            for slot in node_slots:
+                key = _material_key(slot)
+                material_index = material_indices.get(key)
+                if material_index is None:
+                    material_index = len(material_slots)
+                    material_indices[key] = material_index
+                    material_slots.append(slot)
+                node_material_indices.append(material_index)
+            world_position, world_rotation = node.world_transform()
+            vertices_are_world = bool(
+                int(getattr(node, "vertex_space", 0) or 0) == 1
+                or getattr(node, "_gr_vertices_in_kotor_world", False)
+            )
+
+            for face_index, face in enumerate(node.faces):
+                if len(face) != 3 or any(int(index) < 0 or int(index) >= len(node.vertices) for index in face):
+                    continue
+                output_face = []
+                for corner, raw_vertex_index in enumerate(face):
+                    vertex_index = int(raw_vertex_index)
+                    point = tuple(float(v) for v in node.vertices[vertex_index][:3])
+                    normal = (
+                        tuple(float(v) for v in node.normals[vertex_index][:3])
+                        if vertex_index < len(node.normals)
+                        else (0.0, 0.0, 1.0)
+                    )
+                    if not vertices_are_world:
+                        point = _add3(rotate_vector(world_rotation, point), world_position)
+                        normal = rotate_vector(world_rotation, normal)
+                    point = _apply_scene_point(point, scene_position, scene_rotation, scene_scale)
+                    normal = _apply_scene_normal(normal, scene_rotation, scene_scale)
+
+                    uv_index = vertex_index
+                    if face_index < len(node.face_uvs) and corner < len(node.face_uvs[face_index]):
+                        candidate = int(node.face_uvs[face_index][corner])
+                        if 0 <= candidate < len(node.uvs):
+                            uv_index = candidate
+                    uv = node.uvs[uv_index] if 0 <= uv_index < len(node.uvs) else (0.0, 0.0)
+                    uv_lm = node.uvs_lm[vertex_index] if vertex_index < len(node.uvs_lm) else (0.0, 0.0)
+
+                    output_face.append(len(merged.vertices))
+                    merged.vertices.append(point)
+                    merged.normals.append(normal)
+                    merged.uvs.append(tuple(float(v) for v in uv[:2]))
+                    merged.uvs_lm.append(tuple(float(v) for v in uv_lm[:2]))
+
+                merged.faces.append(tuple(output_face))
+                source_material = (
+                    int(node.face_mats[face_index])
+                    if _uses_face_material_slots(node) and face_index < len(node.face_mats)
+                    else 0
+                )
+                source_material = max(0, min(source_material, len(node_slots) - 1))
+                merged.face_mats.append(node_material_indices[source_material])
+
+    if first_model is None or not merged.faces:
+        raise FbxExportError("Selected scene objects contain no runtime mesh geometry to merge.")
+
+    merged._gr_fbx_material_slots = material_slots
+    merged.texture_names = [slot.texture for slot in material_slots]
+    merged.tex_count = len(material_slots)
+    merged.texture = merged.texture_names[0] if merged.texture_names else ""
+    result = KotorModel(
+        name=str(name or "selection"),
+        supermodel="NULL",
+        classification=first_model.classification,
+        game_version=first_model.game_version,
+        model_type=first_model.model_type,
+        root_node=merged,
+    )
+    result.compute_bounds()
+    return result
+
+
+def _material_slots_for_node(node: ModelNode) -> list[ModelNode]:
+    names = [str(getattr(node, "texture", "") or "")]
+    if _uses_face_material_slots(node):
+        names = [str(value or "") for value in (getattr(node, "texture_names", None) or names)]
+    slots = []
+    for index, texture_name in enumerate(names):
+        slot = copy.copy(node)
+        slot.name = f"{node.name}_material_{index + 1}"
+        slot.texture = texture_name
+        slot.texture_names = [texture_name] if texture_name else []
+        slot.tex_count = 1
+        slots.append(slot)
+    return slots
+
+
+def _uses_face_material_slots(node: ModelNode) -> bool:
+    return bool(
+        getattr(node, "imported_ascii", False)
+        and not getattr(node, "has_lightmap", False)
+        and len(getattr(node, "texture_names", None) or []) > 1
+        and getattr(node, "face_mats", None)
+    )
+
+
+def _material_key(node: ModelNode) -> tuple[Any, ...]:
+    return (
+        str(getattr(node, "texture_clean", "") or getattr(node, "texture", "") or "").lower(),
+        tuple(float(value) for value in getattr(node, "diffuse", (0.8, 0.8, 0.8))[:3]),
+        tuple(float(value) for value in getattr(node, "ambient", (0.2, 0.2, 0.2))[:3]),
+        tuple(float(value) for value in getattr(node, "specular", (0.0, 0.0, 0.0))[:3]),
+        float(getattr(node, "alpha", 1.0)),
+    )
+
+
+def _vec3(value: Any, default: tuple[float, float, float]) -> tuple[float, float, float]:
+    try:
+        values = tuple(value)
+        return (float(values[0]), float(values[1]), float(values[2]))
+    except (TypeError, ValueError, IndexError):
+        return default
+
+
+def _add3(a: Any, b: Any) -> tuple[float, float, float]:
+    return (float(a[0]) + float(b[0]), float(a[1]) + float(b[1]), float(a[2]) + float(b[2]))
+
+
+def _apply_scene_point(
+    point: Any,
+    position: tuple[float, float, float],
+    rotation: tuple[float, float, float, float],
+    scale: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    scaled = tuple(float(point[index]) * scale[index] for index in range(3))
+    return _add3(rotate_vector(rotation, scaled), position)
+
+
+def _apply_scene_normal(
+    normal: Any,
+    rotation: tuple[float, float, float, float],
+    scale: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    inverse_scaled = tuple(
+        float(normal[index]) / scale[index] if abs(scale[index]) > 1e-12 else 0.0
+        for index in range(3)
+    )
+    rotated = rotate_vector(rotation, inverse_scaled)
+    length = sum(float(value) * float(value) for value in rotated) ** 0.5
+    if length <= 1e-12:
+        return (0.0, 0.0, 1.0)
+    return tuple(float(value) / length for value in rotated)
 
 
 def _copy_model_with_instance_transform(model: KotorModel, instance: Any) -> KotorModel:
@@ -184,12 +377,14 @@ def _create_mesh_node(fbx: Any, manager: Any, node: ModelNode, options: dict[str
     fbx_mesh = gr_mesh_to_fbx_mesh(fbx, manager, node, triangulate=bool(options.get("triangulate", True)))
     fbx_node.SetNodeAttribute(fbx_mesh)
     _set_node_transform(fbx, fbx_node, node)
-    material = gr_material_to_fbx_material(fbx, manager, node)
-    if material is not None:
-        fbx_node.AddMaterial(material)
-        summary.materials += 1
-        if node.texture:
-            summary.textures += 1
+    material_slots = list(getattr(node, "_gr_fbx_material_slots", None) or [node])
+    for material_node in material_slots:
+        material = gr_material_to_fbx_material(fbx, manager, material_node)
+        if material is not None:
+            fbx_node.AddMaterial(material)
+            summary.materials += 1
+            if getattr(material_node, "texture", ""):
+                summary.textures += 1
     summary.meshes += 1
     summary.vertices += len(node.vertices)
     summary.faces += len(node.faces)

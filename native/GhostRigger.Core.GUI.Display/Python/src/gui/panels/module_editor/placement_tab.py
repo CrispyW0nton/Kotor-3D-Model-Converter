@@ -267,6 +267,7 @@ class PlacementTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str, str)
     thumbnailRequested = QtCore.Signal(object)
     statusChanged = QtCore.Signal(str)
+    customUtcImportRequested = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -275,7 +276,7 @@ class PlacementTab(QtWidgets.QWidget):
         self._filtered_palette_entries: list[object] = []
         self._placements: dict[str, object] = {}
         self._auto_tag_value = ""
-        self._asset_page_limit = 192
+        self._asset_page_limit = 96
         self._placeholder_icon_cache: dict[str, QtGui.QIcon] = {}
         self._thumbnail_timer = QtCore.QTimer(self)
         self._thumbnail_timer.setSingleShot(True)
@@ -286,7 +287,10 @@ class PlacementTab(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
-        guide = QtWidgets.QLabel("1  Find an asset   →   2  Drag it onto the level   →   3  W/E adjust   →   4  Validate")
+        guide = QtWidgets.QLabel(
+            "1  Choose a verified template   →   2  Drag onto highlighted level geometry   →   "
+            "3  W/E adjust   →   4  Validate"
+        )
         guide.setObjectName("mapStudioPlacementGuideLabel")
         guide.setWordWrap(True)
         root.addWidget(guide)
@@ -316,7 +320,11 @@ class PlacementTab(QtWidgets.QWidget):
         self.palette_combo.setVisible(False)
         self.template_edit = QtWidgets.QLineEdit(asset_box)
         self.template_edit.setObjectName("mapStudioPlacementTemplateLineEdit")
-        self.template_edit.setPlaceholderText("Template resref")
+        self.template_edit.setPlaceholderText("Advanced: type a template resref")
+        self.template_edit.setToolTip(
+            "A typed resref is unverified until Map Studio resolves a real UTC/UTP/UTD/etc. template. "
+            "A model name such as c_gizka is not a creature UTC."
+        )
         self.tag_edit = QtWidgets.QLineEdit(asset_box)
         self.tag_edit.setObjectName("mapStudioPlacementTagLineEdit")
         self.tag_edit.setPlaceholderText("Instance tag (optional)")
@@ -324,6 +332,13 @@ class PlacementTab(QtWidgets.QWidget):
         asset_layout.addRow("Find", self.search_edit)
         asset_layout.addRow(self.asset_result_label)
         asset_layout.addRow("Assets", self.asset_list)
+        self.import_custom_utc_button = QtWidgets.QPushButton("Import custom creature UTC…", asset_box)
+        self.import_custom_utc_button.setObjectName("mapStudioImportCustomUtcButton")
+        self.import_custom_utc_button.setToolTip(
+            "Add a custom .utc creature template to this map's placement library. "
+            "Its appearance model still resolves from the selected KOTOR game."
+        )
+        asset_layout.addRow(self.import_custom_utc_button)
         self.asset_thumbnail_label = QtWidgets.QLabel("3D previews load for visible assets", asset_box)
         self.asset_thumbnail_label.setObjectName("mapStudioPlacementAssetThumbnailLabel")
         self.asset_thumbnail_label.setAccessibleName("Selected placement asset preview")
@@ -336,7 +351,7 @@ class PlacementTab(QtWidgets.QWidget):
         asset_layout.addRow("Tag", self.tag_edit)
 
         drag_hint = QtWidgets.QLabel(
-            "Drag and release on a highlighted floor, wall, terrain, or walkmesh point. The new object is selected immediately for W/E adjustment.",
+            "Release only when authored room or terrain geometry highlights. The white editor grid and green X-ray WOK lines are guides, not placement surfaces.",
             asset_box,
         )
         drag_hint.setObjectName("mapStudioPlacementAssetDragHintLabel")
@@ -467,6 +482,7 @@ class PlacementTab(QtWidgets.QWidget):
         self.kind_combo.currentIndexChanged.connect(self._refresh_active_placement_context)
         self.search_edit.textChanged.connect(self._apply_palette_filter)
         self.palette_combo.currentIndexChanged.connect(self._use_current_palette_entry)
+        self.import_custom_utc_button.clicked.connect(self.customUtcImportRequested.emit)
         self.asset_list.selectionModel().currentChanged.connect(self._asset_list_current_changed)
         self.asset_list.clicked.connect(self._request_clicked_thumbnail)
         self.asset_list.verticalScrollBar().valueChanged.connect(self._queue_visible_thumbnails)
@@ -672,6 +688,7 @@ class PlacementTab(QtWidgets.QWidget):
             template = str(self._value(entry, "template_resref", "") or "").strip()
             category = str(self._value(entry, "category", "") or "").strip()
             source = str(self._value(entry, "source", "") or "").strip()
+            confidence = str(self._value(entry, "confidence", "") or "").strip()
             search_text = " ".join((label, template, category, source, game, kind, family)).lower()
             item = QtGui.QStandardItem(label)
             item.setEditable(False)
@@ -686,7 +703,8 @@ class PlacementTab(QtWidgets.QWidget):
                 icon = self._placeholder_thumbnail(placeholder_key, "")
                 self._placeholder_icon_cache[placeholder_key] = icon
             item.setIcon(icon)
-            details = [value for value in (game, kind.upper(), template, category, source) if value]
+            verification = "Verified template" if confidence == "template" else "Unverified resource identity"
+            details = [value for value in (verification, game, kind.upper(), template, category, source) if value]
             item.setToolTip(" · ".join(details) + "\nDrag into the viewport to place this resource.")
             self._asset_model.appendRow(item)
 
@@ -853,14 +871,36 @@ class PlacementTab(QtWidgets.QWidget):
         context = self.placement_context()
         kind = context["kind"]
         template = context["template_resref"]
+        selected_entry = self.palette_combo.currentData()
+        selected_template = str(self._value(selected_entry, "template_resref", "") or "").strip()
+        verified = bool(
+            selected_entry is not None
+            and selected_template == template
+            and str(self._value(selected_entry, "confidence", "") or "").strip() == "template"
+        )
         if kind != "camera" and not template:
-            text = "Choose a game resource or type a template resref."
+            text = "Choose a verified game template. Use Import custom creature UTC for an NPC not already listed."
         elif kind == "store":
             text = "Store resources are module-level; use Add at coordinates because they have no viewport marker."
+        elif not verified and kind != "camera":
+            expected = {
+                "creature": "UTC",
+                "placeable": "UTP",
+                "door": "UTD",
+                "trigger": "UTT",
+                "waypoint": "UTW",
+                "sound": "UTS",
+                "encounter": "UTE",
+                "store": "UTM",
+            }.get(kind, "game template")
+            text = (
+                f"Unverified typed resref: {template}. Placement requires a real {expected}; "
+                "a similarly named MDL model is not enough."
+            )
         elif kind == "door":
-            text = f"Ready to place animated door {template}: previewed as its resolved model and exported as UTD + GIT Door List."
+            text = f"Verified UTD {template}: previewed as its animated model and exported in the GIT Door List."
         else:
-            text = f"Ready to place {template or 'camera'}: resolved assets preview as their actual model; unresolved assets keep a marker."
+            text = f"Verified {kind} template {template or 'camera'}: ready to drag onto authored level geometry."
         self.asset_status_label.setText(text)
         self.statusChanged.emit(text)
 

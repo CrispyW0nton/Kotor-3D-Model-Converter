@@ -1,4 +1,6 @@
 import asyncio
+from hashlib import sha256
+from io import BytesIO
 import json
 import math
 import os
@@ -1752,7 +1754,45 @@ def test_mcp_engine_export_schemas_expose_explicit_animation_selection():
     assert unity_properties["animation_names"]["type"] == "array"
     assert unity_properties["animation_names"]["items"] == {"type": "string"}
     assert unreal_properties["animation_names"]["type"] == "array"
+    assert unreal_properties["export_textures"]["type"] == "boolean"
+    assert unreal_properties["export_textures"]["default"] is True
     assert {"output_path", "export_dir"} <= set(unreal_properties)
+
+
+def test_installation_texture_cache_decodes_tga_and_reports_resolution():
+    from PIL import Image
+
+    from kotormcp.adapters import InstallationTextureCache
+    from kotormcp.ports import ResourceEntry
+
+    stream = BytesIO()
+    Image.new("RGB", (2, 1), (32, 64, 96)).save(stream, format="TGA")
+    resource = ResourceEntry(
+        resref="v_ehawk01",
+        restype="TGA",
+        extension="tga",
+        size=len(stream.getvalue()),
+        source="test",
+        data=stream.getvalue(),
+    )
+    requested = []
+    installation = SimpleNamespace(
+        get_texture_resource=lambda name: requested.append(name) or resource
+    )
+
+    cache = InstallationTextureCache(installation)
+    image = cache.get("V_EHawk01.tga")
+
+    assert image is not None
+    assert image.mode == "RGBA"
+    assert image.size == (2, 1)
+    assert requested == ["V_EHawk01"]
+    assert cache.summary()["counts"] == {
+        "requested": 1,
+        "decoded": 1,
+        "missing": 0,
+        "errors": 0,
+    }
 
 
 def test_mcp_unreal_export_materializes_only_selected_animation_sets(monkeypatch):
@@ -1769,12 +1809,32 @@ def test_mcp_unreal_export_materializes_only_selected_animation_sets(monkeypatch
             model.anim_scale = 1.0
             return model
 
-    def _fake_exporter(model, out_path, export_rigging):
+    texture_cache = SimpleNamespace(
+        summary=lambda: {
+            "requested": ["LEH_hull"],
+            "decoded": ["LEH_hull"],
+            "missing": [],
+            "errors": {},
+            "counts": {"requested": 1, "decoded": 1, "missing": 0, "errors": 0},
+        }
+    )
+
+    def _fake_exporter(model, out_path, export_rigging, *, tex_cache=None):
         exported["animations"] = [animation.name for animation in model.animations]
+        exported["texture_cache"] = tex_cache
         out_path.write_text("fbx", encoding="utf-8")
+        texture_dir = out_path.parent / "textures"
+        texture_dir.mkdir(parents=True, exist_ok=True)
+        (texture_dir / "LEH_hull.png").write_bytes(b"png")
         return True
 
-    services = SimpleNamespace(locator=_Locator(), parser=_Parser(), analyzer=None, registry=None)
+    services = SimpleNamespace(
+        locator=_Locator(),
+        parser=_Parser(),
+        analyzer=None,
+        registry=None,
+        texture_cache_factory=lambda game, game_path: texture_cache,
+    )
     monkeypatch.setattr(ghostrigger, "_get_services", lambda: services)
     monkeypatch.setattr(ghostrigger, "_export_fbx_for_unreal", _fake_exporter)
 
@@ -1796,6 +1856,11 @@ def test_mcp_unreal_export_materializes_only_selected_animation_sets(monkeypatch
         assert payload["animation_selection"]["requested"] == ["tlknorm"]
         assert payload["animation_selection"]["embedded"] == ["tlknorm"]
         assert exported["animations"] == ["tlknorm"]
+        assert exported["texture_cache"] is texture_cache
+        assert payload["counts"]["texture_sidecars"] == 1
+        assert payload["textures"]["sidecars"][0]["name"] == "LEH_hull"
+        assert payload["textures"]["sidecars"][0]["sha256"] == sha256(b"png").hexdigest()
+        assert payload["textures"]["resolution"]["counts"]["decoded"] == 1
         assert Path(payload["asset"]).exists()
     finally:
         shutil.rmtree(out_root, ignore_errors=True)

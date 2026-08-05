@@ -18,25 +18,43 @@ Actions sent (client calls):
 
 from __future__ import annotations
 
+import hmac
 import importlib
 import json
 import logging
 import os
-from pathlib import Path
 import re
 import sys
 import threading
-from typing import Callable, Optional, Dict, Any
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
 
 from src.adapters.qt_ipc.threading import marshal_to_gui_thread
+
 from .spatial_auth import (
     HEADER_SIGNATURE,
+    LOOPBACK_SPATIAL_TRANSPORT,
+    WINDOWS_SPATIAL_TRANSPORT,
     SpatialAuthenticationError,
     SpatialRequestAuthenticator,
     SpatialRequestSigner,
+    SpatialServerBootstrap,
     SpatialSessionCredentials,
+    WindowsSpatialSessionLease,
+    acquire_windows_spatial_session_lease,
+    assert_spatial_bootstrap_environment,
+    load_spatial_session_descriptor,
+    prepare_private_spatial_directory,
     publish_spatial_session_descriptor,
     remove_spatial_session_descriptor,
+    spatial_app_container_package_sid,
+    spatial_transport_marker,
+)
+from .spatial_pipe import (
+    SpatialPipeRequest,
+    SpatialPipeResponse,
+    WindowsSpatialNamedPipeServer,
 )
 
 log = logging.getLogger(__name__)
@@ -78,6 +96,278 @@ PORT_GMODULAR     = 7003
 _PROGRAM_NAME = "GhostStudio"
 _RESREF_RE = re.compile(r"^[A-Za-z0-9_]{1,16}$")
 _IPC_PORT_ENV = "GHOSTRIGGER_IPC_PORT"
+_SPATIAL_REVISION_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_MAX_SPATIAL_ENTITIES = 1024
+_MAX_SPATIAL_RESPONSE_BYTES = (4 * 1024 * 1024) - (128 * 1024)
+_SPATIAL_PIPE_WSGI_ENV = "ghoststudio.spatial.transport"
+_SPATIAL_AUTHENTICATOR_WSGI_ENV = "ghoststudio.spatial.authenticator"
+_SPATIAL_SESSION_TTL_SECONDS = 8 * 60 * 60
+_SPATIAL_SESSION_RENEWAL_MARGIN_SECONDS = 15 * 60
+_SPATIAL_SESSION_RETRY_SECONDS = 30.0
+_SPATIAL_SESSION_WATCH_SECONDS = 2.0
+_SPATIAL_OLD_ENDPOINT_GRACE_SECONDS = 2.0
+_GUI_READINESS_REASONS = frozenset(
+    {
+        "gui-main-thread-unobserved",
+        "window-not-visible",
+        "window-minimized",
+        "viewport-state-unavailable",
+        "viewport-not-visible",
+        "grid-state-unavailable",
+        "gui-readiness-callback-unavailable",
+        "gui-readiness-check-failed",
+    }
+)
+
+
+def _unready_spatial_gui(reason: str) -> dict[str, Any]:
+    return {
+        "ready": False,
+        "mainThreadObserved": False,
+        "windowVisible": False,
+        "windowMinimized": False,
+        "viewport": {
+            "stateAvailable": False,
+            "visible": False,
+            "width": 0,
+            "height": 0,
+        },
+        "grid": {
+            "stateAvailable": False,
+            "visible": False,
+        },
+        "reason": reason,
+    }
+
+
+def _normalize_spatial_gui_readiness(value: object) -> dict[str, Any]:
+    """Validate the GUI callback without leaking arbitrary callback fields."""
+
+    if not isinstance(value, dict) or set(value) != {
+        "ready",
+        "mainThreadObserved",
+        "windowVisible",
+        "windowMinimized",
+        "viewport",
+        "grid",
+        "reason",
+    }:
+        raise ValueError("invalid GUI readiness payload")
+    viewport = value.get("viewport")
+    grid = value.get("grid")
+    if not isinstance(viewport, dict) or set(viewport) != {
+        "stateAvailable",
+        "visible",
+        "width",
+        "height",
+    }:
+        raise ValueError("invalid viewport readiness marker")
+    if not isinstance(grid, dict) or set(grid) != {
+        "stateAvailable",
+        "visible",
+    }:
+        raise ValueError("invalid grid readiness marker")
+    boolean_values = (
+        value.get("ready"),
+        value.get("mainThreadObserved"),
+        value.get("windowVisible"),
+        value.get("windowMinimized"),
+        viewport.get("stateAvailable"),
+        viewport.get("visible"),
+        grid.get("stateAvailable"),
+        grid.get("visible"),
+    )
+    if any(type(item) is not bool for item in boolean_values):
+        raise ValueError("GUI readiness booleans are invalid")
+    width = viewport.get("width")
+    height = viewport.get("height")
+    if (
+        isinstance(width, bool)
+        or not isinstance(width, int)
+        or isinstance(height, bool)
+        or not isinstance(height, int)
+        or not 0 <= width <= 32768
+        or not 0 <= height <= 32768
+    ):
+        raise ValueError("GUI readiness viewport dimensions are invalid")
+    ready = value["ready"]
+    reason = value["reason"]
+    positive_markers = (
+        value["mainThreadObserved"]
+        and value["windowVisible"]
+        and not value["windowMinimized"]
+        and viewport["stateAvailable"]
+        and viewport["visible"]
+        and width > 0
+        and height > 0
+        and grid["stateAvailable"]
+    )
+    if ready:
+        if not positive_markers or reason is not None:
+            raise ValueError("GUI ready claim lacks viewport and grid evidence")
+    elif not isinstance(reason, str) or reason not in _GUI_READINESS_REASONS:
+        raise ValueError("GUI unready claim lacks a stable reason")
+    return {
+        "ready": ready,
+        "mainThreadObserved": value["mainThreadObserved"],
+        "windowVisible": value["windowVisible"],
+        "windowMinimized": value["windowMinimized"],
+        "viewport": {
+            "stateAvailable": viewport["stateAvailable"],
+            "visible": viewport["visible"],
+            "width": width,
+            "height": height,
+        },
+        "grid": {
+            "stateAvailable": grid["stateAvailable"],
+            "visible": grid["visible"],
+        },
+        "reason": reason,
+    }
+
+
+def _validate_live_spatial_snapshot(
+    value: object,
+    *,
+    include_bounds: bool,
+    include_hierarchy: bool,
+    include_selection: bool,
+) -> dict[str, Any]:
+    """Fail closed unless a callback returned one bounded live-GUI snapshot."""
+
+    if not isinstance(value, dict):
+        raise ValueError("spatial snapshot must be an object")
+    allowed = {
+        "schemaVersion",
+        "application",
+        "sceneRevision",
+        "capturedAt",
+        "coordinateFrames",
+        "entities",
+        "hierarchy",
+        "selection",
+        "evidence",
+        "viewports",
+        "grid",
+        "guiReadiness",
+    }
+    required = allowed - {"hierarchy", "selection"}
+    if set(value) - allowed or not required.issubset(value):
+        raise ValueError("spatial snapshot shape is invalid")
+    if value.get("schemaVersion") != "1.0":
+        raise ValueError("spatial snapshot schema is invalid")
+    if not _SPATIAL_REVISION_RE.fullmatch(str(value.get("sceneRevision") or "")):
+        raise ValueError("spatial scene revision is invalid")
+    application = value.get("application")
+    if (
+        not isinstance(application, dict)
+        or set(application) != {"id", "version", "apiVersion"}
+        or application.get("id") != "ghoststudio"
+        or application.get("apiVersion") != "ghoststudio-spatial/v1"
+        or not isinstance(application.get("version"), str)
+        or not 1 <= len(application["version"]) <= 64
+    ):
+        raise ValueError("spatial application marker is invalid")
+    captured_at = value.get("capturedAt")
+    if not isinstance(captured_at, str) or not 1 <= len(captured_at) <= 64:
+        raise ValueError("spatial capture timestamp is invalid")
+    coordinate_frames = value.get("coordinateFrames")
+    if not isinstance(coordinate_frames, list) or len(coordinate_frames) != 1:
+        raise ValueError("spatial coordinate frame is invalid")
+    entities = value.get("entities")
+    if not isinstance(entities, list) or len(entities) > _MAX_SPATIAL_ENTITIES:
+        raise ValueError("spatial entity bound is invalid")
+    entity_allowed = {
+        "stableId",
+        "path",
+        "type",
+        "visible",
+        "locked",
+        "selected",
+        "coordinateFrameId",
+        "localMatrix",
+        "worldMatrix",
+        "pivot",
+        "transformSemantics",
+        "bounds",
+        "materials",
+    }
+    entity_required = entity_allowed - {"selected", "bounds", "materials"}
+    stable_ids: set[str] = set()
+    for entity in entities:
+        if (
+            not isinstance(entity, dict)
+            or set(entity) - entity_allowed
+            or not entity_required.issubset(entity)
+            or "parentStableId" in entity
+        ):
+            raise ValueError("spatial entity shape is invalid")
+        stable_id = entity.get("stableId")
+        if (
+            not isinstance(stable_id, str)
+            or not 1 <= len(stable_id) <= 256
+            or stable_id in stable_ids
+        ):
+            raise ValueError("spatial entity identity is invalid")
+        stable_ids.add(stable_id)
+        if include_selection != ("selected" in entity):
+            raise ValueError("spatial selection redaction is invalid")
+        if "selected" in entity and type(entity["selected"]) is not bool:
+            raise ValueError("spatial selected marker is invalid")
+        if not include_bounds and "bounds" in entity:
+            raise ValueError("spatial bounds redaction is invalid")
+    if include_selection:
+        selection = value.get("selection")
+        if (
+            not isinstance(selection, dict)
+            or set(selection) != {"mode", "stableIds"}
+            or selection.get("mode") != "object"
+            or not isinstance(selection.get("stableIds"), list)
+            or len(selection["stableIds"]) > _MAX_SPATIAL_ENTITIES
+            or any(item not in stable_ids for item in selection["stableIds"])
+        ):
+            raise ValueError("spatial selection is invalid")
+    elif "selection" in value:
+        raise ValueError("spatial selection was not redacted")
+    if include_hierarchy:
+        if value.get("hierarchy") != {
+            "status": "unavailable",
+            "reason": "scene-parent-hierarchy-unavailable",
+        }:
+            raise ValueError("spatial hierarchy availability is invalid")
+    elif "hierarchy" in value:
+        raise ValueError("spatial hierarchy was not redacted")
+    viewports = value.get("viewports")
+    if (
+        not isinstance(viewports, list)
+        or len(viewports) != 1
+        or not isinstance(viewports[0], dict)
+        or not _SPATIAL_REVISION_RE.fullmatch(
+            str(viewports[0].get("revision") or "")
+        )
+    ):
+        raise ValueError("spatial viewport marker is invalid")
+    if not isinstance(value.get("grid"), dict):
+        raise ValueError("spatial grid marker is invalid")
+    gui = _normalize_spatial_gui_readiness(value.get("guiReadiness"))
+    if not gui["ready"]:
+        raise ValueError("spatial snapshot is not live-GUI ready")
+    evidence = value.get("evidence")
+    if not isinstance(evidence, list) or not 1 <= len(evidence) <= 16:
+        raise ValueError("spatial evidence bound is invalid")
+    if len(
+        json.dumps(
+            value,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ) > _MAX_SPATIAL_RESPONSE_BYTES:
+        raise ValueError("spatial snapshot response is too large")
+    normalized = dict(value)
+    normalized["guiReadiness"] = gui
+    return normalized
 
 
 def resolve_ghostrigger_ipc_port(raw_value: object | None = None) -> int:
@@ -295,7 +585,27 @@ class GhostRiggerIPCServer:
         program_name: str = _PROGRAM_NAME,
         spatial_authenticator: SpatialRequestAuthenticator | None = None,
         spatial_session_path: str | os.PathLike[str] | None = None,
+        spatial_bootstrap: SpatialServerBootstrap | None = None,
+        spatial_session_ttl_seconds: int = _SPATIAL_SESSION_TTL_SECONDS,
+        spatial_session_renewal_margin_seconds: int = (
+            _SPATIAL_SESSION_RENEWAL_MARGIN_SECONDS
+        ),
     ):
+        if spatial_bootstrap is not None and (
+            spatial_authenticator is not None
+            or spatial_session_path is not None
+        ):
+            raise ValueError(
+                "spatial_bootstrap is mutually exclusive with legacy "
+                "spatial session inputs"
+            )
+        if (
+            spatial_bootstrap is not None
+            and not isinstance(spatial_bootstrap, SpatialServerBootstrap)
+        ):
+            raise TypeError(
+                "spatial_bootstrap must be a SpatialServerBootstrap"
+            )
         if spatial_authenticator is not None and spatial_session_path is not None:
             raise ValueError(
                 "spatial_authenticator and spatial_session_path are mutually exclusive"
@@ -308,10 +618,15 @@ class GhostRiggerIPCServer:
         self._port = resolve_ghostrigger_ipc_port() if port is None else int(port)
         self._program_name = str(program_name or _PROGRAM_NAME)
         self._spatial_authenticator = spatial_authenticator
+        self._spatial_bootstrap = spatial_bootstrap
         self._spatial_session_path = (
-            Path(spatial_session_path).expanduser()
-            if spatial_session_path is not None
-            else None
+            Path(spatial_bootstrap.session_path)
+            if spatial_bootstrap is not None
+            else (
+                Path(spatial_session_path).expanduser()
+                if spatial_session_path is not None
+                else None
+            )
         )
         if (
             self._spatial_session_path is not None
@@ -320,11 +635,444 @@ class GhostRiggerIPCServer:
             raise ValueError("spatial_session_path must be absolute")
         self._spatial_session_id: str | None = None
         self._spatial_session_lock = threading.Lock()
+        self._spatial_teardown_lock = threading.Lock()
+        self._spatial_pipe_server: WindowsSpatialNamedPipeServer | None = None
+        self._spatial_credentials: SpatialSessionCredentials | None = None
+        self._spatial_session_lease: WindowsSpatialSessionLease | None = None
+        self._spatial_lease_storage_prepared = False
+        self._spatial_renewal_thread: threading.Thread | None = None
+        self._spatial_profile_root: Path | None = (
+            spatial_bootstrap.profile_root
+            if spatial_bootstrap is not None
+            else None
+        )
+        if (
+            not isinstance(spatial_session_ttl_seconds, int)
+            or isinstance(spatial_session_ttl_seconds, bool)
+            or spatial_session_ttl_seconds < 60
+        ):
+            raise ValueError(
+                "spatial_session_ttl_seconds must be an integer of at least 60"
+            )
+        if (
+            not isinstance(spatial_session_renewal_margin_seconds, int)
+            or isinstance(spatial_session_renewal_margin_seconds, bool)
+            or not (
+                1
+                <= spatial_session_renewal_margin_seconds
+                < spatial_session_ttl_seconds
+            )
+        ):
+            raise ValueError(
+                "spatial_session_renewal_margin_seconds must be between 1 "
+                "and the session TTL"
+            )
+        self._spatial_session_ttl_seconds = spatial_session_ttl_seconds
+        self._spatial_session_renewal_margin_seconds = (
+            spatial_session_renewal_margin_seconds
+        )
+        self._spatial_package_sid: str | None = None
+        self._spatial_transport = LOOPBACK_SPATIAL_TRANSPORT
+        if spatial_bootstrap is not None:
+            if os.name != "nt":
+                raise SpatialAuthenticationError(
+                    "invalid-spatial-transport"
+                )
+            assert_spatial_bootstrap_environment(spatial_bootstrap)
+            self._spatial_package_sid = spatial_bootstrap.package_sid
+            self._spatial_transport = spatial_bootstrap.transport
+        elif self._spatial_session_path is not None and os.name == "nt":
+            spatial_transport_marker(required=True)
+            self._spatial_package_sid = spatial_app_container_package_sid()
+            if self._spatial_package_sid is None:
+                raise SpatialAuthenticationError(
+                    "invalid-app-container-sid"
+                )
+            self._spatial_transport = WINDOWS_SPATIAL_TRANSPORT
         self._startup_complete = threading.Event()
         self._startup_error: BaseException | None = None
         self._stop_requested = threading.Event()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
+
+    def _uses_windows_spatial_session_lease(self) -> bool:
+        return (
+            self._spatial_bootstrap is not None
+            and self._spatial_transport == WINDOWS_SPATIAL_TRANSPORT
+        )
+
+    def _prepare_windows_spatial_session_lease_storage(self) -> None:
+        """Create and audit the private directory before leasing its owner file."""
+
+        if not self._uses_windows_spatial_session_lease():
+            return
+        with self._spatial_session_lock:
+            if self._spatial_lease_storage_prepared:
+                return
+            path = self._spatial_session_path
+            profile_root = self._spatial_profile_root
+            package_sid = self._spatial_package_sid
+            if path is None or profile_root is None:
+                raise SpatialAuthenticationError(
+                    "invalid-spatial-profile-root"
+                )
+            if package_sid is None:
+                raise SpatialAuthenticationError(
+                    "invalid-app-container-sid"
+                )
+            prepare_private_spatial_directory(
+                path.parent,
+                package_sid=package_sid,
+                app_container_root=profile_root,
+            )
+            self._spatial_lease_storage_prepared = True
+
+    def _try_acquire_windows_spatial_session_ownership(self, app) -> bool:
+        """Acquire first-publisher ownership, returning False while on standby."""
+
+        if not self._uses_windows_spatial_session_lease():
+            raise RuntimeError(
+                "spatial session ownership requires a Windows bootstrap"
+            )
+        self._prepare_windows_spatial_session_lease_storage()
+        with self._spatial_session_lock:
+            current = self._spatial_session_lease
+            if current is not None:
+                if current.closed:
+                    raise SpatialAuthenticationError(
+                        "private-session-required"
+                    )
+                return True
+            path = self._spatial_session_path
+            profile_root = self._spatial_profile_root
+            package_sid = self._spatial_package_sid
+        if path is None or profile_root is None:
+            raise SpatialAuthenticationError("invalid-spatial-profile-root")
+        if package_sid is None:
+            raise SpatialAuthenticationError("invalid-app-container-sid")
+
+        lease = acquire_windows_spatial_session_lease(
+            path,
+            package_sid=package_sid,
+            app_container_root=profile_root,
+        )
+        if lease is None:
+            return False
+
+        close_unused = False
+        with self._spatial_session_lock:
+            if self._stop_requested.is_set():
+                close_unused = True
+            elif self._spatial_session_lease is None:
+                self._spatial_session_lease = lease
+            else:
+                close_unused = True
+        if close_unused:
+            lease.close()
+            with self._spatial_session_lock:
+                existing = self._spatial_session_lease
+            return existing is not None and not existing.closed
+
+        try:
+            self._rotate_windows_spatial_session(app)
+        except BaseException:
+            self._shutdown_spatial_session()
+            raise
+        return True
+
+    def _windows_spatial_session_descriptor_is_current(self) -> bool:
+        with self._spatial_session_lock:
+            credentials = self._spatial_credentials
+            pipe_server = self._spatial_pipe_server
+            path = self._spatial_session_path
+            package_sid = self._spatial_package_sid
+            profile_root = self._spatial_profile_root
+        if credentials is None or pipe_server is None or path is None:
+            return False
+
+        descriptor = load_spatial_session_descriptor(
+            path,
+            package_sid=package_sid,
+            app_container_root=profile_root,
+        )
+        observed = descriptor.credentials
+        return (
+            descriptor.schema == "ghoststudio-spatial-session/v2"
+            and descriptor.transport == WINDOWS_SPATIAL_TRANSPORT
+            and descriptor.port is None
+            and descriptor.pid == os.getpid()
+            and descriptor.pipe_name == pipe_server.pipe_name
+            and observed.session_id == credentials.session_id
+            and observed.expires_at == credentials.expires_at
+            and hmac.compare_digest(observed.secret, credentials.secret)
+        )
+
+    def _maintain_windows_spatial_session(self, app) -> bool:
+        """Probe standby ownership or repair/renew the active publication."""
+
+        if self._stop_requested.is_set():
+            return False
+        if not self._uses_windows_spatial_session_lease():
+            with self._spatial_session_lock:
+                credentials = self._spatial_credentials
+            if credentials is None:
+                return False
+            renew_at = (
+                credentials.expires_at
+                - self._spatial_session_renewal_margin_seconds
+            )
+            if time.time() >= renew_at:
+                self._rotate_windows_spatial_session(app)
+            return True
+
+        with self._spatial_session_lock:
+            lease = self._spatial_session_lease
+        if lease is None:
+            return self._try_acquire_windows_spatial_session_ownership(app)
+        if lease.closed:
+            raise SpatialAuthenticationError("private-session-required")
+
+        try:
+            descriptor_is_current = (
+                self._windows_spatial_session_descriptor_is_current()
+            )
+        except SpatialAuthenticationError as exc:
+            if exc.code not in {
+                "expired-session",
+                "invalid-session-descriptor",
+                "session-descriptor-unavailable",
+            }:
+                raise
+            descriptor_is_current = False
+
+        with self._spatial_session_lock:
+            credentials = self._spatial_credentials
+        renewal_due = (
+            credentials is None
+            or time.time()
+            >= (
+                credentials.expires_at
+                - self._spatial_session_renewal_margin_seconds
+            )
+        )
+        if renewal_due or not descriptor_is_current:
+            self._rotate_windows_spatial_session(app)
+        return True
+
+    def _handle_spatial_pipe_fatal(self, error: BaseException) -> None:
+        log.critical(
+            "Ghost Studio spatial pipe encountered a fatal identity failure: %s",
+            type(error).__name__,
+        )
+        self._stop_requested.set()
+        self._running = False
+        server = self._http_server
+        if server is not None:
+            server.shutdown()
+
+    def _build_windows_spatial_pipe(
+        self,
+        app,
+        credentials: SpatialSessionCredentials,
+        authenticator: SpatialRequestAuthenticator,
+    ) -> WindowsSpatialNamedPipeServer:
+        package_sid = self._spatial_package_sid
+        if package_sid is None:
+            raise SpatialAuthenticationError("invalid-app-container-sid")
+
+        def _handle_spatial_pipe_request(
+            pipe_request: SpatialPipeRequest,
+        ) -> SpatialPipeResponse:
+            with app.test_client() as spatial_client:
+                response = spatial_client.open(
+                    pipe_request.path,
+                    method=pipe_request.method,
+                    data=pipe_request.body or None,
+                    headers=pipe_request.headers,
+                    content_type=(
+                        "application/json"
+                        if pipe_request.method == "POST"
+                        else None
+                    ),
+                    environ_overrides={
+                        _SPATIAL_PIPE_WSGI_ENV: WINDOWS_SPATIAL_TRANSPORT,
+                        _SPATIAL_AUTHENTICATOR_WSGI_ENV: authenticator,
+                    },
+                )
+                raw = response.get_data()
+                if len(raw) > _MAX_SPATIAL_RESPONSE_BYTES:
+                    return SpatialPipeResponse(
+                        status=503,
+                        content_type="application/json",
+                        body=(
+                            b'{"status":"error","code":'
+                            b'"spatial-response-too-large"}'
+                        ),
+                    )
+                return SpatialPipeResponse(
+                    status=int(response.status_code),
+                    content_type="application/json",
+                    body=raw,
+                )
+
+        return WindowsSpatialNamedPipeServer(
+            package_sid=package_sid,
+            request_handler=_handle_spatial_pipe_request,
+            response_secret=credentials.secret,
+            fatal_error_handler=self._handle_spatial_pipe_fatal,
+        )
+
+    def _rotate_windows_spatial_session(self, app) -> None:
+        """Publish a replacement endpoint before draining the previous one."""
+
+        owner_lease: WindowsSpatialSessionLease | None = None
+        if self._uses_windows_spatial_session_lease():
+            with self._spatial_session_lock:
+                owner_lease = self._spatial_session_lease
+                if owner_lease is None or owner_lease.closed:
+                    raise RuntimeError(
+                        "spatial session ownership lease is not held"
+                    )
+        credentials = SpatialSessionCredentials.create(
+            ttl_seconds=self._spatial_session_ttl_seconds
+        )
+        authenticator = SpatialRequestAuthenticator(credentials)
+        replacement = self._build_windows_spatial_pipe(
+            app,
+            credentials,
+            authenticator,
+        )
+        previous: WindowsSpatialNamedPipeServer | None = None
+        try:
+            replacement.start()
+            with self._spatial_session_lock:
+                if self._stop_requested.is_set():
+                    raise RuntimeError("spatial session is stopping")
+                if (
+                    owner_lease is not None
+                    and (
+                        self._spatial_session_lease is not owner_lease
+                        or owner_lease.closed
+                    )
+                ):
+                    raise RuntimeError(
+                        "spatial session ownership lease was released"
+                    )
+                publish_spatial_session_descriptor(
+                    self._spatial_session_path,
+                    pipe_name=replacement.pipe_name,
+                    transport=WINDOWS_SPATIAL_TRANSPORT,
+                    credentials=credentials,
+                    package_sid=self._spatial_package_sid,
+                    app_container_root=self._spatial_profile_root,
+                )
+                previous = self._spatial_pipe_server
+                self._spatial_pipe_server = replacement
+                self._spatial_authenticator = authenticator
+                self._spatial_credentials = credentials
+                self._spatial_session_id = credentials.session_id
+        except BaseException:
+            if owner_lease is not None:
+                try:
+                    remove_spatial_session_descriptor(
+                        self._spatial_session_path,
+                        session_id=credentials.session_id,
+                        package_sid=self._spatial_package_sid,
+                        app_container_root=self._spatial_profile_root,
+                    )
+                except Exception:
+                    log.exception(
+                        "Ghost Studio failed spatial publication cleanup"
+                    )
+            try:
+                replacement.stop()
+            except Exception:
+                log.exception(
+                    "Ghost Studio replacement spatial pipe cleanup failed"
+                )
+            raise
+        if previous is not None:
+            stopping = self._stop_requested.wait(
+                _SPATIAL_OLD_ENDPOINT_GRACE_SECONDS
+            )
+            previous.stop(drain_active=not stopping)
+
+    def _renew_spatial_sessions(self, app) -> None:
+        if self._uses_windows_spatial_session_lease():
+            while not self._stop_requested.is_set():
+                if self._stop_requested.wait(
+                    _SPATIAL_SESSION_WATCH_SECONDS
+                ):
+                    return
+                try:
+                    self._maintain_windows_spatial_session(app)
+                except SpatialAuthenticationError as exc:
+                    if self._stop_requested.is_set():
+                        return
+                    log.critical(
+                        "Ghost Studio spatial session watchdog failed closed "
+                        "(%s)",
+                        exc.code,
+                    )
+                    self._stop_requested.set()
+                    self._running = False
+                    self._shutdown_spatial_session()
+                    server = self._http_server
+                    if server is not None:
+                        server.shutdown()
+                    return
+                except Exception:
+                    if self._stop_requested.is_set():
+                        return
+                    log.exception(
+                        "Ghost Studio spatial session watchdog failed closed"
+                    )
+                    self._stop_requested.set()
+                    self._running = False
+                    self._shutdown_spatial_session()
+                    server = self._http_server
+                    if server is not None:
+                        server.shutdown()
+                    return
+            return
+
+        while not self._stop_requested.is_set():
+            with self._spatial_session_lock:
+                credentials = self._spatial_credentials
+            if credentials is None:
+                return
+            renew_at = (
+                credentials.expires_at
+                - self._spatial_session_renewal_margin_seconds
+            )
+            delay = max(0.05, renew_at - time.time())
+            if self._stop_requested.wait(delay):
+                return
+            try:
+                self._rotate_windows_spatial_session(app)
+            except Exception:
+                if self._stop_requested.is_set():
+                    return
+                log.exception(
+                    "Ghost Studio spatial session renewal failed; retrying"
+                )
+                if self._stop_requested.wait(_SPATIAL_SESSION_RETRY_SECONDS):
+                    return
+
+    def _start_spatial_renewal(self, app) -> None:
+        if self._spatial_transport != WINDOWS_SPATIAL_TRANSPORT:
+            return
+        current = self._spatial_renewal_thread
+        if current is not None and current.is_alive():
+            return
+        renewal = threading.Thread(
+            target=self._renew_spatial_sessions,
+            args=(app,),
+            name="GhostStudio-Spatial-Session-Renewal",
+            daemon=True,
+        )
+        self._spatial_renewal_thread = renewal
+        renewal.start()
 
     def start(self):
         """Start the IPC server in a daemon background thread."""
@@ -366,13 +1114,68 @@ class GhostRiggerIPCServer:
 
         return int(self._port)
 
+    def _stop_spatial_renewal(self) -> bool:
+        renewal = self._spatial_renewal_thread
+        if renewal is None:
+            return True
+        if renewal is threading.current_thread():
+            return True
+        renewal.join(
+            timeout=(
+                _SPATIAL_SESSION_WATCH_SECONDS
+                + _SPATIAL_OLD_ENDPOINT_GRACE_SECONDS
+                + 1.0
+            )
+        )
+        if renewal.is_alive():
+            log.critical(
+                "Ghost Studio spatial watchdog did not stop; "
+                "ownership lease remains held"
+            )
+            return False
+        self._spatial_renewal_thread = None
+        return True
+
+    def _shutdown_spatial_session(self) -> None:
+        """Remove publication and endpoints before releasing ownership."""
+
+        # A caller-supplied authenticator without a session path is an
+        # externally owned route-test/legacy binding, not a published spatial
+        # session for this server to dismantle.
+        if self._spatial_session_path is None:
+            return
+        with self._spatial_teardown_lock:
+            self._remove_owned_spatial_session_descriptor()
+            with self._spatial_session_lock:
+                pipe_server = self._spatial_pipe_server
+                lease = self._spatial_session_lease
+                self._spatial_pipe_server = None
+                self._spatial_session_lease = None
+                self._spatial_authenticator = None
+                self._spatial_credentials = None
+                self._spatial_session_id = None
+            try:
+                if pipe_server is not None:
+                    pipe_server.stop()
+            except Exception:
+                log.exception(
+                    "Ghost Studio spatial named-pipe shutdown failed"
+                )
+            finally:
+                if lease is not None:
+                    try:
+                        lease.close()
+                    except Exception:
+                        log.exception(
+                            "Ghost Studio spatial ownership lease close failed"
+                        )
+
     def stop(self):
         """Stop the background Werkzeug server without leaving a bound port."""
         self._stop_requested.set()
         self._running = False
-        if self._spatial_session_path is not None:
-            self._spatial_authenticator = None
-        self._remove_owned_spatial_session_descriptor()
+        if self._stop_spatial_renewal():
+            self._shutdown_spatial_session()
         server = self._http_server
         if server is not None:
             try:
@@ -393,6 +1196,8 @@ class GhostRiggerIPCServer:
                 remove_spatial_session_descriptor(
                     path,
                     session_id=session_id,
+                    package_sid=self._spatial_package_sid,
+                    app_container_root=self._spatial_profile_root,
                 )
             except Exception:
                 log.exception(
@@ -405,7 +1210,13 @@ class GhostRiggerIPCServer:
     def is_running(self) -> bool:
         return self._running
 
-    def _invoke_callback_sync(self, cb: Callable, *args: Any, timeout: float = 2.0) -> tuple[bool, Any]:
+    def _invoke_callback_sync(
+        self,
+        cb: Callable,
+        *args: Any,
+        timeout: float = 2.0,
+        require_gui_thread: bool = False,
+    ) -> tuple[bool, Any]:
         """Invoke a callback on the GUI thread and wait briefly for its result."""
         done = threading.Event()
         result: dict[str, Any] = {}
@@ -422,6 +1233,8 @@ class GhostRiggerIPCServer:
                 done.set()
 
         if not marshal_to_gui_thread(_runner):
+            if require_gui_thread:
+                return False, "GUI thread dispatch unavailable"
             _runner()
         if not done.wait(max(0.1, float(timeout))):
             return False, "callback timeout"
@@ -431,7 +1244,7 @@ class GhostRiggerIPCServer:
 
     def _run_server(self):
         try:
-            from flask import Flask, request, jsonify
+            from flask import Flask, jsonify, request
         except ImportError:
             self._startup_error = RuntimeError("Flask is not installed")
             self._startup_complete.set()
@@ -467,7 +1280,19 @@ class GhostRiggerIPCServer:
             return payload if isinstance(payload, dict) else {}
 
         def _authenticate_spatial_request():
-            authenticator = self._spatial_authenticator
+            if (
+                self._spatial_transport == WINDOWS_SPATIAL_TRANSPORT
+                and request.environ.get(_SPATIAL_PIPE_WSGI_ENV)
+                != WINDOWS_SPATIAL_TRANSPORT
+            ):
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-transport-unavailable",
+                }), 404
+            authenticator = request.environ.get(
+                _SPATIAL_AUTHENTICATOR_WSGI_ENV,
+                self._spatial_authenticator,
+            )
             if authenticator is None:
                 return jsonify({
                     "status": "error",
@@ -1154,10 +1979,38 @@ class GhostRiggerIPCServer:
             auth_error = _authenticate_spatial_request()
             if auth_error is not None:
                 return auth_error
+            cb = self.callbacks.get("get_spatial_health")
+            if cb is None:
+                gui = _unready_spatial_gui(
+                    "gui-readiness-callback-unavailable"
+                )
+            else:
+                ok, readiness = self._invoke_callback_sync(
+                    cb,
+                    timeout=2.0,
+                    require_gui_thread=True,
+                )
+                try:
+                    gui = (
+                        _normalize_spatial_gui_readiness(readiness)
+                        if ok
+                        else _unready_spatial_gui(
+                            "gui-readiness-check-failed"
+                        )
+                    )
+                except (TypeError, ValueError):
+                    gui = _unready_spatial_gui(
+                        "gui-readiness-check-failed"
+                    )
             return jsonify({
                 "status": "ok",
-                "schema": "ghoststudio-spatial-health/v1",
-                "program": self._program_name,
+                "schema": "ghoststudio-spatial-health/v2",
+                "program": self._program_name[:64],
+                "endpoint": {
+                    "authenticated": True,
+                    "transport": self._spatial_transport,
+                },
+                "gui": gui,
                 "capabilities": [
                     "health",
                     "spatial-snapshot",
@@ -1178,18 +2031,46 @@ class GhostRiggerIPCServer:
             })
             if payload_error is not None:
                 return payload_error
+            if any(type(value) is not bool for value in payload.values()):
+                return jsonify({
+                    "status": "error",
+                    "code": "invalid-spatial-payload",
+                }), 400
             cb = self.callbacks.get("get_spatial_snapshot")
             if cb is None:
                 return jsonify({
                     "status": "error",
                     "code": "spatial-snapshot-unavailable",
                 }), 503
-            ok, snapshot = self._invoke_callback_sync(cb, payload, timeout=3.0)
+            ok, snapshot = self._invoke_callback_sync(
+                cb,
+                payload,
+                timeout=3.0,
+                require_gui_thread=True,
+            )
             if not ok or not isinstance(snapshot, dict):
                 return jsonify({
                     "status": "error",
                     "code": "spatial-snapshot-failed",
                 }), 504
+            try:
+                snapshot = _validate_live_spatial_snapshot(
+                    snapshot,
+                    include_bounds=payload.get("includeBounds", True),
+                    include_hierarchy=payload.get(
+                        "includeHierarchy",
+                        True,
+                    ),
+                    include_selection=payload.get(
+                        "includeSelection",
+                        True,
+                    ),
+                )
+            except (TypeError, ValueError):
+                return jsonify({
+                    "status": "error",
+                    "code": "spatial-snapshot-invalid",
+                }), 503
             return jsonify({
                 "status": "ok",
                 "schema": "ghoststudio-spatial-response/v1",
@@ -1216,7 +2097,12 @@ class GhostRiggerIPCServer:
                     "status": "error",
                     "code": "spatial-capture-unavailable",
                 }), 503
-            ok, capture = self._invoke_callback_sync(cb, payload, timeout=5.0)
+            ok, capture = self._invoke_callback_sync(
+                cb,
+                payload,
+                timeout=5.0,
+                require_gui_thread=True,
+            )
             if not ok or not isinstance(capture, dict):
                 return jsonify({
                     "status": "error",
@@ -1242,7 +2128,12 @@ class GhostRiggerIPCServer:
                     "status": "error",
                     "code": "spatial-evidence-unavailable",
                 }), 503
-            ok, evidence = self._invoke_callback_sync(cb, payload, timeout=3.0)
+            ok, evidence = self._invoke_callback_sync(
+                cb,
+                payload,
+                timeout=3.0,
+                require_gui_thread=True,
+            )
             if not ok or not isinstance(evidence, dict):
                 return jsonify({
                     "status": "error",
@@ -1372,22 +2263,79 @@ class GhostRiggerIPCServer:
         srv = None
         try:
             from werkzeug.serving import make_server
-            srv = make_server("127.0.0.1", self._port, app, threaded=True)
-            self._http_server = srv
-            if self._port == 0:
-                self._port = int(srv.server_port)
-            if self._spatial_session_path is not None:
-                credentials = SpatialSessionCredentials.create()
-                self._spatial_authenticator = SpatialRequestAuthenticator(
-                    credentials
+            requested_port = self._port
+            try:
+                srv = make_server(
+                    "127.0.0.1",
+                    requested_port,
+                    app,
+                    threaded=True,
                 )
-                with self._spatial_session_lock:
-                    self._spatial_session_id = credentials.session_id
-                    publish_spatial_session_descriptor(
-                        self._spatial_session_path,
-                        port=self._port,
-                        credentials=credentials,
+            except (OSError, SystemExit) as bind_error:
+                address_in_use = (
+                    (
+                        isinstance(bind_error, SystemExit)
+                        and bind_error.code == 1
                     )
+                    or getattr(bind_error, "winerror", None) == 10048
+                    or getattr(bind_error, "errno", None)
+                    in {48, 98, 10048}
+                    or "address already in use"
+                    in str(bind_error).lower()
+                    or "10048" in str(bind_error)
+                )
+                if (
+                    self._spatial_bootstrap is None
+                    or requested_port == 0
+                    or requested_port != PORT_GHOSTRIGGER
+                    or not address_in_use
+                ):
+                    raise
+                try:
+                    srv = make_server(
+                        "127.0.0.1",
+                        0,
+                        app,
+                        threaded=True,
+                    )
+                except SystemExit as ephemeral_exit:
+                    raise RuntimeError(
+                        "spatial bootstrap ephemeral coordinator bind failed"
+                    ) from ephemeral_exit
+                log.warning(
+                    "GhostRigger IPC port %d is already in use; "
+                    "the spatial bootstrap coordinator is using ephemeral "
+                    "loopback port %d. AppContainer spatial traffic remains "
+                    "on the named-pipe transport.",
+                    requested_port,
+                    int(srv.server_port),
+                )
+            self._http_server = srv
+            self._port = int(srv.server_port)
+            if self._spatial_session_path is not None:
+                if self._spatial_transport == WINDOWS_SPATIAL_TRANSPORT:
+                    if self._uses_windows_spatial_session_lease():
+                        self._prepare_windows_spatial_session_lease_storage()
+                        self._try_acquire_windows_spatial_session_ownership(
+                            app
+                        )
+                    else:
+                        self._rotate_windows_spatial_session(app)
+                    self._start_spatial_renewal(app)
+                else:
+                    credentials = SpatialSessionCredentials.create(
+                        ttl_seconds=self._spatial_session_ttl_seconds
+                    )
+                    authenticator = SpatialRequestAuthenticator(credentials)
+                    with self._spatial_session_lock:
+                        publish_spatial_session_descriptor(
+                            self._spatial_session_path,
+                            port=self._port,
+                            credentials=credentials,
+                        )
+                        self._spatial_authenticator = authenticator
+                        self._spatial_credentials = credentials
+                        self._spatial_session_id = credentials.session_id
             if self._stop_requested.is_set():
                 return
             self._running = True
@@ -1409,8 +2357,10 @@ class GhostRiggerIPCServer:
                 log.exception("GhostRigger IPC server failed")
         finally:
             self._running = False
+            self._stop_requested.set()
             self._startup_complete.set()
-            self._remove_owned_spatial_session_descriptor()
+            if self._stop_spatial_renewal():
+                self._shutdown_spatial_session()
             if srv is not None:
                 try:
                     close_server = getattr(srv, "server_close", None)
@@ -1419,8 +2369,6 @@ class GhostRiggerIPCServer:
                 except Exception:
                     log.exception("GhostRigger IPC server close failed")
             self._http_server = None
-            if self._spatial_session_path is not None:
-                self._spatial_authenticator = None
 
     def _schedule_callback(self, cb: Callable, *args):
         """Execute a callback through Qt when active, otherwise directly."""

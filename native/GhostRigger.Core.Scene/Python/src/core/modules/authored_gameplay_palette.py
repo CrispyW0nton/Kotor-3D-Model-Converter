@@ -135,9 +135,12 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
     if not kind:
         return None
     confidence = "template" if restype in _RESTYPE_KIND else "model_or_resref"
-    if confidence != "template" and kind in {"placeable", "door"}:
+    if confidence != "template" and kind in {"creature", "placeable", "door"}:
         # Geometry models remain useful in the asset browser, but cannot seed a
-        # runtime GIT row until a real UTP/UTD template identity is known.
+        # runtime GIT row until a real UTC/UTP/UTD template identity is known.
+        # In particular, a creature model such as ``c_gizka`` is an appearance,
+        # not a placeable UTC. Advertising it here makes placement fail later
+        # while trying to resolve a UTC that never existed.
         return None
     warning = ""
     if confidence != "template":

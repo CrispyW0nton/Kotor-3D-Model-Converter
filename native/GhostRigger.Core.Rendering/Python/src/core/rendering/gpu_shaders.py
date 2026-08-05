@@ -119,8 +119,12 @@ void main() {
     vec2 base_uv = scrolled_uv * u_flipbook_size + u_flipbook_off;
     // If flipbook is inactive (size==0,0) fall back to unscaled UVs
     v_uv = (u_flipbook_size.x > 0.0001) ? base_uv : scrolled_uv;
-    // Lightmap UVs stay on their own channel and keep the D3D→OpenGL V-flip.
-    v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv_lm.y);
+    // Native Odyssey lightmaps in K1/K2 are uncompressed RGB/RGBA TPC atlases.
+    // PyKotor's reference GL renderer uploads those rows directly and samples
+    // the MDX UV2 values unchanged. Applying the diffuse-map V conversion here
+    // selects the atlas island from the opposite half of the image, producing
+    // the characteristic per-triangle black/white patchwork on module rooms.
+    v_uv_lm = in_uv_lm;
     v_color  = in_color;
 
     // ── v7.2 GPU Dangly Mesh Animation (Finding 5.10 — reone v_model.glsl) ──────
@@ -439,36 +443,20 @@ void main() {
     //     vec3 outgoingLight = reflectedLight.indirectDiffuse + ...;
     //   The directDiffuse (Phong shade) is NOT included in the lightmapped path.
     //
-    // Our simplified single-pass equivalent:
-    //   lit_color = diffuse_tex.rgb * lightmap.rgb * OVERBRIGHT
-    //
-    // FIX-LMBRIGHT: The original ×2.0 overbright factor produced visibly
-    // dark scenes because KotOR module lightmaps have a mean intensity of
-    // only ~0.25.  With ×2.0: 0.4 × 0.25 × 2.0 = 0.20 (far too dark).
-    //
-    // KotOR.js effective path (ShaderOdysseyModel.ts USE_LIGHTMAP):
-    //   indirectDiffuse = PI * lightmap * lightMapIntensity * BRDF_Lambert
-    // The PI factor (~3.14) plus Lambert normalization (/PI) cancel, but
-    // lightMapIntensity is tuned to produce visually correct results at
-    // approximately ×2.5 effective overbright.
-    //
-    // xoreos uses multi-pass BLEND_MULTIPLY with an implicit gamma boost
-    // that also results in ~2.5× effective brightness.
-    //
-    // We raise the single-pass overbright from 2.0 → 2.5 to match these
-    // reference implementations, plus add a small ambient floor (0.03) to
-    // prevent fully black areas in unlit corners of modules.
+    // Since BRDF_Lambert(diffuse) is diffuse / PI, the PI terms in the
+    // reference expression cancel. At normal intensity the single-pass
+    // equivalent is exactly diffuse * lightmap. Do not add an overbright
+    // multiplier or ambient floor: K1 room lightmaps such as m14aa_01c
+    // average about 0.6, so the old 2.5x + 0.03 curve clipped pale
+    // architecture into a featureless white silhouette.
 
     if (u_lm_shade == 1 && u_has_lm == 1) {
         // ── Lightmap-only path (module/area geometry) ─────────────────
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
         debug_lightmap_rgb = lm_samp.rgb;
         float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
-        // Preserve the user-facing intensity blend, but restore the validated
-        // pre-lighting-system KotOR preview target.  The May lightmap audit
-        // used 2.5x overbright plus a 0.03 floor; the later generic-lighting
-        // rewrite accidentally replaced that target with 2.0x and no floor.
-        vec3 baked_target = lm_samp.rgb * 2.5 + vec3(0.03);
+        // Intensity blends from unlit diffuse (0) to the authored lightmap (1).
+        vec3 baked_target = lm_samp.rgb;
         vec3 baked_light = mix(vec3(1.0), baked_target, clamp(lm_strength, 0.0, 1.0));
         if (u_lightmap_mode == 1) {
             float ndotl  = max(dot(N, u_light_dir),  0.0);
@@ -488,7 +476,7 @@ void main() {
             // Diagnostic: documented original overbright 2.0, no ambient floor.
             lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
         } else {
-            // FIX-LMBRIGHT: 2.5x overbright + 0.03 ambient floor.
+            // Reference baked-lightmap multiply.
             lit_color = diffuse_samp.rgb * baked_light;
             if (u_lm_composite_mode == 3) {
                 lit_color = clamp(lit_color, 0.0, 1.0);
@@ -580,7 +568,7 @@ void main() {
             vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
             debug_lightmap_rgb = lm_samp.rgb;
             float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
-            vec3 baked_target = lm_samp.rgb * 2.5 + vec3(0.03);
+            vec3 baked_target = lm_samp.rgb;
             vec3 baked_light = mix(vec3(1.0), baked_target, clamp(lm_strength, 0.0, 1.0));
             if (u_lightmap_mode == 2) {
                 lit_color += lm_samp.rgb * lm_strength;

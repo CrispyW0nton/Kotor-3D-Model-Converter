@@ -10,10 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
 import sys
+import time
 from typing import Any, Callable, Mapping, TextIO
 import urllib.error
 import urllib.request
@@ -46,6 +48,29 @@ SpatialRequestSigner = _SPATIAL_AUTH.SpatialRequestSigner
 SpatialSessionDescriptor = _SPATIAL_AUTH.SpatialSessionDescriptor
 default_spatial_session_path = _SPATIAL_AUTH.default_spatial_session_path
 load_spatial_session_descriptor = _SPATIAL_AUTH.load_spatial_session_descriptor
+spatial_transport_marker = _SPATIAL_AUTH.spatial_transport_marker
+WINDOWS_SPATIAL_TRANSPORT = _SPATIAL_AUTH.WINDOWS_SPATIAL_TRANSPORT
+LOOPBACK_SPATIAL_TRANSPORT = _SPATIAL_AUTH.LOOPBACK_SPATIAL_TRANSPORT
+
+
+def _load_spatial_pipe_module():
+    module_name = "_ghoststudio_spatial_pipe_contract"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+    module_path = Path(__file__).resolve().parents[1] / "ipc" / "spatial_pipe.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Ghost Studio spatial pipe contract is unavailable.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_SPATIAL_PIPE = _load_spatial_pipe_module()
+SpatialPipeError = _SPATIAL_PIPE.SpatialPipeError
+call_windows_spatial_pipe = _SPATIAL_PIPE.call_windows_spatial_pipe
 
 
 SERVER_NAME = "ghoststudio-spatial"
@@ -66,6 +91,14 @@ HTTP_TIMEOUT_SECONDS = 8.0
 CAPTURE_ID_PATTERN = r"^[A-Za-z0-9_-]{16,128}$"
 _CAPTURE_ID_RE = re.compile(CAPTURE_ID_PATTERN)
 _SESSION_PATH_ENV = "GHOSTSTUDIO_SPATIAL_SESSION_PATH"
+_REVISION_PATTERN = r"^sha256:[0-9a-f]{64}$"
+MAX_SPATIAL_ENTITIES = 1024
+SPATIAL_CAPABILITIES = (
+    "health",
+    "spatial-snapshot",
+    "capture",
+    "evidence-gaps",
+)
 
 
 class SpatialAdapterError(RuntimeError):
@@ -115,13 +148,554 @@ TOOL_ROUTES: Mapping[str, _ToolRoute] = {
 }
 
 
+_GUI_READINESS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "ready": {"type": "boolean"},
+        "mainThreadObserved": {"type": "boolean"},
+        "windowVisible": {"type": "boolean"},
+        "windowMinimized": {"type": "boolean"},
+        "viewport": {
+            "type": "object",
+            "properties": {
+                "stateAvailable": {"type": "boolean"},
+                "visible": {"type": "boolean"},
+                "width": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 32768,
+                },
+                "height": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 32768,
+                },
+            },
+            "required": [
+                "stateAvailable",
+                "visible",
+                "width",
+                "height",
+            ],
+            "additionalProperties": False,
+        },
+        "grid": {
+            "type": "object",
+            "properties": {
+                "stateAvailable": {"type": "boolean"},
+                "visible": {"type": "boolean"},
+            },
+            "required": ["stateAvailable", "visible"],
+            "additionalProperties": False,
+        },
+        "reason": {
+            "type": ["string", "null"],
+            "enum": [
+                None,
+                "gui-main-thread-unobserved",
+                "window-not-visible",
+                "window-minimized",
+                "viewport-state-unavailable",
+                "viewport-not-visible",
+                "grid-state-unavailable",
+                "gui-readiness-callback-unavailable",
+                "gui-readiness-check-failed",
+            ],
+        },
+    },
+    "required": [
+        "ready",
+        "mainThreadObserved",
+        "windowVisible",
+        "windowMinimized",
+        "viewport",
+        "grid",
+        "reason",
+    ],
+    "additionalProperties": False,
+}
+
+_MATRIX_SCHEMA: dict[str, Any] = {
+    "type": "array",
+    "minItems": 4,
+    "maxItems": 4,
+    "items": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 4,
+        "items": {"type": "number"},
+    },
+}
+
+_HEALTH_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "status": {"const": "ok"},
+        "schema": {"const": "ghoststudio-spatial-health/v2"},
+        "program": {"type": "string", "minLength": 1, "maxLength": 64},
+        "endpoint": {
+            "type": "object",
+            "properties": {
+                "authenticated": {"const": True},
+                "transport": {
+                    "enum": [
+                        WINDOWS_SPATIAL_TRANSPORT,
+                        LOOPBACK_SPATIAL_TRANSPORT,
+                    ]
+                },
+            },
+            "required": ["authenticated", "transport"],
+            "additionalProperties": False,
+        },
+        "gui": _GUI_READINESS_SCHEMA,
+        "capabilities": {
+            "type": "array",
+            "minItems": len(SPATIAL_CAPABILITIES),
+            "maxItems": len(SPATIAL_CAPABILITIES),
+            "items": {"enum": list(SPATIAL_CAPABILITIES)},
+        },
+    },
+    "required": [
+        "status",
+        "schema",
+        "program",
+        "endpoint",
+        "gui",
+        "capabilities",
+    ],
+    "additionalProperties": False,
+}
+
+_SNAPSHOT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "status": {"const": "ok"},
+        "schema": {"const": "ghoststudio-spatial-response/v1"},
+        "snapshot": {
+            "type": "object",
+            "properties": {
+                "schemaVersion": {"const": "1.0"},
+                "application": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"const": "ghoststudio"},
+                        "version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                        },
+                        "apiVersion": {
+                            "const": "ghoststudio-spatial/v1"
+                        },
+                    },
+                    "required": ["id", "version", "apiVersion"],
+                    "additionalProperties": False,
+                },
+                "sceneRevision": {
+                    "type": "string",
+                    "pattern": _REVISION_PATTERN,
+                },
+                "capturedAt": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                },
+                "coordinateFrames": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"const": "ghoststudio-world"},
+                            "semanticSpace": {"const": "world"},
+                            "handedness": {"const": "right"},
+                            "metersPerUnit": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                            },
+                            "originMeters": {
+                                "type": "array",
+                                "minItems": 3,
+                                "maxItems": 3,
+                                "items": {"type": "number"},
+                            },
+                            "basis": {
+                                "type": "array",
+                                "minItems": 3,
+                                "maxItems": 3,
+                                "items": {
+                                    "type": "array",
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                    "items": {"type": "number"},
+                                },
+                            },
+                            "upAxis": {"const": "+Z"},
+                            "forwardAxis": {"const": "+Y"},
+                        },
+                        "required": [
+                            "id",
+                            "semanticSpace",
+                            "handedness",
+                            "metersPerUnit",
+                            "originMeters",
+                            "basis",
+                            "upAxis",
+                            "forwardAxis",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "entities": {
+                    "type": "array",
+                    "maxItems": MAX_SPATIAL_ENTITIES,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "stableId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                            },
+                            "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1024,
+                            },
+                            "type": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128,
+                            },
+                            "visible": {"type": "boolean"},
+                            "locked": {"type": "boolean"},
+                            "selected": {"type": "boolean"},
+                            "coordinateFrameId": {
+                                "const": "ghoststudio-world"
+                            },
+                            "localMatrix": _MATRIX_SCHEMA,
+                            "worldMatrix": _MATRIX_SCHEMA,
+                            "pivot": {
+                                "type": "object",
+                                "properties": {
+                                    "coordinateFrameId": {
+                                        "const": "ghoststudio-world"
+                                    },
+                                    "semanticSpace": {"const": "local"},
+                                    "position": {
+                                        "type": "array",
+                                        "minItems": 3,
+                                        "maxItems": 3,
+                                        "items": {"type": "number"},
+                                    },
+                                    "rotationEulerDegreesXYZ": {
+                                        "type": "array",
+                                        "minItems": 3,
+                                        "maxItems": 3,
+                                        "items": {"type": "number"},
+                                    },
+                                    "enabled": {"type": "boolean"},
+                                },
+                                "required": [
+                                    "coordinateFrameId",
+                                    "semanticSpace",
+                                    "position",
+                                    "rotationEulerDegreesXYZ",
+                                    "enabled",
+                                ],
+                                "additionalProperties": False,
+                            },
+                            "transformSemantics": {
+                                "type": "object",
+                                "properties": {
+                                    "matrixLayout": {"const": "row-major"},
+                                    "vectorConvention": {
+                                        "const": "column-vector"
+                                    },
+                                    "composition": {
+                                        "const": "T*Rz*Ry*Rx*S"
+                                    },
+                                    "rotationInput": {
+                                        "const": "Euler XYZ degrees"
+                                    },
+                                },
+                                "required": [
+                                    "matrixLayout",
+                                    "vectorConvention",
+                                    "composition",
+                                    "rotationInput",
+                                ],
+                                "additionalProperties": False,
+                            },
+                            "bounds": {
+                                "type": "object",
+                                "properties": {
+                                    "minimum": {
+                                        "type": "array",
+                                        "minItems": 3,
+                                        "maxItems": 3,
+                                        "items": {"type": "number"},
+                                    },
+                                    "maximum": {
+                                        "type": "array",
+                                        "minItems": 3,
+                                        "maxItems": 3,
+                                        "items": {"type": "number"},
+                                    },
+                                },
+                                "required": ["minimum", "maximum"],
+                                "additionalProperties": False,
+                            },
+                            "materials": {
+                                "type": "array",
+                                "maxItems": 64,
+                                "uniqueItems": True,
+                                "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256,
+                                },
+                            },
+                        },
+                        "required": [
+                            "stableId",
+                            "path",
+                            "type",
+                            "visible",
+                            "locked",
+                            "coordinateFrameId",
+                            "localMatrix",
+                            "worldMatrix",
+                            "pivot",
+                            "transformSemantics",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "hierarchy": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"const": "unavailable"},
+                        "reason": {
+                            "const": "scene-parent-hierarchy-unavailable"
+                        },
+                    },
+                    "required": ["status", "reason"],
+                    "additionalProperties": False,
+                },
+                "selection": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {"const": "object"},
+                        "stableIds": {
+                            "type": "array",
+                            "maxItems": MAX_SPATIAL_ENTITIES,
+                            "uniqueItems": True,
+                            "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                            },
+                        },
+                    },
+                    "required": ["mode", "stableIds"],
+                    "additionalProperties": False,
+                },
+                "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "kind": {
+                                "enum": [
+                                    "semantic-api",
+                                    "derived-calculation",
+                                    "screenshot",
+                                ]
+                            },
+                            "claim": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 1024,
+                            },
+                            "epistemicStatus": {
+                                "enum": ["observed", "inferred"]
+                            },
+                            "confidence": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                            },
+                            "sourcePath": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 32768,
+                            },
+                            "sourceSha256": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{64}$",
+                            },
+                        },
+                        "required": [
+                            "kind",
+                            "claim",
+                            "epistemicStatus",
+                            "confidence",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "viewports": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256,
+                            },
+                            "rectangle": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "width": {
+                                        "type": "number",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 32768,
+                                    },
+                                    "height": {
+                                        "type": "number",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 32768,
+                                    },
+                                },
+                                "required": ["x", "y", "width", "height"],
+                                "additionalProperties": False,
+                            },
+                            "pixelOrigin": {
+                                "enum": ["top-left", "bottom-left"]
+                            },
+                            "devicePixelRatio": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "maximum": 16,
+                            },
+                            "cameraStableId": {
+                                "type": ["string", "null"],
+                                "maxLength": 256,
+                            },
+                            "projection": {
+                                "enum": [
+                                    "perspective",
+                                    "orthographic",
+                                ]
+                            },
+                            "viewMatrix": _MATRIX_SCHEMA,
+                            "projectionMatrix": _MATRIX_SCHEMA,
+                            "nearClip": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                            },
+                            "farClip": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                            },
+                            "revision": {
+                                "type": "string",
+                                "pattern": _REVISION_PATTERN,
+                            },
+                        },
+                        "required": [
+                            "id",
+                            "rectangle",
+                            "pixelOrigin",
+                            "devicePixelRatio",
+                            "cameraStableId",
+                            "projection",
+                            "viewMatrix",
+                            "projectionMatrix",
+                            "nearClip",
+                            "farClip",
+                            "revision",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+                "grid": {
+                    "type": "object",
+                    "properties": {
+                        "coordinateFrameId": {
+                            "const": "ghoststudio-world"
+                        },
+                        "origin": {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 3,
+                            "items": {"type": "number"},
+                        },
+                        "spacing": {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 3,
+                            "items": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                            },
+                        },
+                        "subdivisions": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000,
+                        },
+                        "visible": {"type": "boolean"},
+                        "snapEnabled": {"type": "boolean"},
+                    },
+                    "required": [
+                        "coordinateFrameId",
+                        "origin",
+                        "spacing",
+                        "subdivisions",
+                        "visible",
+                        "snapEnabled",
+                    ],
+                    "additionalProperties": False,
+                },
+                "guiReadiness": _GUI_READINESS_SCHEMA,
+            },
+            "required": [
+                "schemaVersion",
+                "application",
+                "sceneRevision",
+                "capturedAt",
+                "coordinateFrames",
+                "entities",
+                "evidence",
+                "viewports",
+                "grid",
+                "guiReadiness",
+            ],
+            "additionalProperties": False,
+        },
+    },
+    "required": ["status", "schema", "snapshot"],
+    "additionalProperties": False,
+}
+
+
 TOOLS: tuple[dict[str, Any], ...] = (
     {
         "name": "ghoststudio_health",
         "title": "Ghost Studio Spatial Health",
         "description": (
-            "Verify the live authenticated Ghost Studio spatial session and "
-            "report its narrow capability set."
+            "Verify the authenticated private spatial endpoint and separately report "
+            "whether the live GUI is ready with viewport and grid markers."
         ),
         "inputSchema": {
             "type": "object",
@@ -134,20 +708,41 @@ TOOLS: tuple[dict[str, Any], ...] = (
             "idempotentHint": True,
             "openWorldHint": False,
         },
+        "outputSchema": _HEALTH_OUTPUT_SCHEMA,
     },
     {
         "name": "ghoststudio_spatial_snapshot",
         "title": "Ghost Studio Spatial Snapshot",
         "description": (
-            "Read a revisioned scene, hierarchy, selection, camera, viewport, "
-            "and grid snapshot from the live Ghost Studio process."
+            "Read a bounded revisioned scene, selection, camera, viewport, and "
+            "grid snapshot from a GUI-ready Ghost Studio process. Parent "
+            "hierarchy is currently unavailable and is reported explicitly."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "includeBounds": {"type": "boolean", "default": True},
-                "includeHierarchy": {"type": "boolean", "default": True},
-                "includeSelection": {"type": "boolean", "default": True},
+                "includeBounds": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include observed entity bounds when available.",
+                },
+                "includeHierarchy": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Request the hierarchy capability marker. Ghost Studio "
+                        "v1 reports it as explicitly unavailable and never "
+                        "synthesizes parent relationships."
+                    ),
+                },
+                "includeSelection": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": (
+                        "Include selection and per-entity selected flags. False "
+                        "redacts both surfaces."
+                    ),
+                },
             },
             "additionalProperties": False,
         },
@@ -157,6 +752,7 @@ TOOLS: tuple[dict[str, Any], ...] = (
             "idempotentHint": True,
             "openWorldHint": False,
         },
+        "outputSchema": _SNAPSHOT_OUTPUT_SCHEMA,
     },
     {
         "name": "ghoststudio_capture",
@@ -238,6 +834,224 @@ def _validate_arguments(name: str, arguments: Any) -> dict[str, Any]:
     raise KeyError(name)
 
 
+def _matches_json_type(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "boolean":
+        return type(value) is bool
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+        )
+    if expected == "null":
+        return value is None
+    return False
+
+
+def _validate_output_value(
+    value: Any,
+    schema: Mapping[str, Any],
+    *,
+    path: str = "$",
+    depth: int = 0,
+) -> None:
+    """Validate the strict JSON-Schema subset used by this fixed catalog."""
+
+    if depth > 32:
+        raise ValueError(f"{path} exceeds the output nesting bound")
+    if "const" in schema and value != schema["const"]:
+        raise ValueError(f"{path} does not match its fixed value")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ValueError(f"{path} is outside its fixed values")
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        expected_types = (
+            [expected_type]
+            if isinstance(expected_type, str)
+            else list(expected_type)
+        )
+        if not any(
+            _matches_json_type(value, item)
+            for item in expected_types
+            if isinstance(item, str)
+        ):
+            raise ValueError(f"{path} has the wrong JSON type")
+    if isinstance(value, str):
+        if len(value) < int(schema.get("minLength", 0)):
+            raise ValueError(f"{path} is shorter than allowed")
+        maximum = schema.get("maxLength")
+        if maximum is not None and len(value) > int(maximum):
+            raise ValueError(f"{path} is longer than allowed")
+        pattern = schema.get("pattern")
+        if pattern is not None and re.fullmatch(str(pattern), value) is None:
+            raise ValueError(f"{path} does not match its pattern")
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+    ):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        exclusive_minimum = schema.get("exclusiveMinimum")
+        if minimum is not None and value < minimum:
+            raise ValueError(f"{path} is below its minimum")
+        if maximum is not None and value > maximum:
+            raise ValueError(f"{path} is above its maximum")
+        if exclusive_minimum is not None and value <= exclusive_minimum:
+            raise ValueError(f"{path} is below its exclusive minimum")
+    if isinstance(value, dict):
+        properties = schema.get("properties", {})
+        required = schema.get("required", ())
+        if any(name not in value for name in required):
+            raise ValueError(f"{path} lacks a required field")
+        if schema.get("additionalProperties") is False:
+            if any(name not in properties for name in value):
+                raise ValueError(f"{path} has an unknown field")
+        for name, child in value.items():
+            child_schema = properties.get(name)
+            if isinstance(child_schema, Mapping):
+                _validate_output_value(
+                    child,
+                    child_schema,
+                    path=f"{path}.{name}",
+                    depth=depth + 1,
+                )
+    if isinstance(value, list):
+        if len(value) < int(schema.get("minItems", 0)):
+            raise ValueError(f"{path} has too few items")
+        maximum = schema.get("maxItems")
+        if maximum is not None and len(value) > int(maximum):
+            raise ValueError(f"{path} has too many items")
+        if schema.get("uniqueItems"):
+            canonical = [
+                json.dumps(
+                    item,
+                    ensure_ascii=True,
+                    allow_nan=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                for item in value
+            ]
+            if len(canonical) != len(set(canonical)):
+                raise ValueError(f"{path} contains duplicate items")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, Mapping):
+            for index, child in enumerate(value):
+                _validate_output_value(
+                    child,
+                    item_schema,
+                    path=f"{path}[{index}]",
+                    depth=depth + 1,
+                )
+
+
+def _validate_gui_ready_claim(gui: Mapping[str, Any]) -> None:
+    viewport = gui["viewport"]
+    grid = gui["grid"]
+    positive = (
+        gui["mainThreadObserved"]
+        and gui["windowVisible"]
+        and not gui["windowMinimized"]
+        and viewport["stateAvailable"]
+        and viewport["visible"]
+        and viewport["width"] > 0
+        and viewport["height"] > 0
+        and grid["stateAvailable"]
+    )
+    if gui["ready"] != positive:
+        raise ValueError("GUI readiness claim does not match its markers")
+    if gui["ready"] != (gui["reason"] is None):
+        raise ValueError("GUI readiness reason is inconsistent")
+
+
+def _validate_tool_response(
+    name: str,
+    arguments: Mapping[str, Any],
+    payload: Any,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise SpatialAdapterError("invalid-response")
+    try:
+        if name == "ghoststudio_health":
+            _validate_output_value(payload, _HEALTH_OUTPUT_SCHEMA)
+            if payload["capabilities"] != list(SPATIAL_CAPABILITIES):
+                raise ValueError("health capabilities are not canonical")
+            _validate_gui_ready_claim(payload["gui"])
+        elif name == "ghoststudio_spatial_snapshot":
+            _validate_output_value(payload, _SNAPSHOT_OUTPUT_SCHEMA)
+            snapshot = payload["snapshot"]
+            gui = snapshot["guiReadiness"]
+            _validate_gui_ready_claim(gui)
+            if not gui["ready"]:
+                raise ValueError("snapshot lacks positive GUI readiness")
+            include_selection = arguments.get("includeSelection", True)
+            include_hierarchy = arguments.get("includeHierarchy", True)
+            include_bounds = arguments.get("includeBounds", True)
+            entities = snapshot["entities"]
+            if include_selection:
+                selection = snapshot.get("selection")
+                if not isinstance(selection, dict):
+                    raise ValueError("selection is missing")
+                if any("selected" not in entity for entity in entities):
+                    raise ValueError("entity selection marker is missing")
+                selected_ids = sorted(
+                    entity["stableId"]
+                    for entity in entities
+                    if entity["selected"]
+                )
+                if selection["stableIds"] != selected_ids:
+                    raise ValueError("selection does not match entity markers")
+            elif (
+                "selection" in snapshot
+                or any("selected" in entity for entity in entities)
+            ):
+                raise ValueError("selection was not redacted")
+            if include_hierarchy:
+                if snapshot.get("hierarchy") != {
+                    "status": "unavailable",
+                    "reason": "scene-parent-hierarchy-unavailable",
+                }:
+                    raise ValueError("hierarchy capability marker is missing")
+            elif "hierarchy" in snapshot:
+                raise ValueError("hierarchy was not redacted")
+            if not include_bounds and any(
+                "bounds" in entity for entity in entities
+            ):
+                raise ValueError("bounds were not redacted")
+            viewport = snapshot["viewports"][0]
+            if viewport["farClip"] <= viewport["nearClip"]:
+                raise ValueError("viewport clip range is invalid")
+    except SpatialAdapterError:
+        raise
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        raise SpatialAdapterError("invalid-response") from exc
+    return payload
+
+
+def _serialize_tool_payload(payload: Mapping[str, Any]) -> str:
+    try:
+        text = json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise SpatialAdapterError("invalid-response") from exc
+    if len(text.encode("utf-8")) > MAX_HTTP_RESPONSE_BYTES:
+        raise SpatialAdapterError("response-too-large")
+    return text
+
+
 def _descriptor_path(environ: Mapping[str, str] | None = None) -> Path:
     values = os.environ if environ is None else environ
     configured = str(values.get(_SESSION_PATH_ENV) or "").strip()
@@ -250,7 +1064,7 @@ def _descriptor_path(environ: Mapping[str, str] | None = None) -> Path:
 
 
 class GhostStudioSpatialClient:
-    """Signed, proxy-free client for the loopback-only GUI bridge."""
+    """Signed client for the approval-bound GUI spatial bridge."""
 
     def __init__(
         self,
@@ -260,17 +1074,19 @@ class GhostStudioSpatialClient:
             load_spatial_session_descriptor
         ),
         opener: Any | None = None,
+        pipe_caller: Callable[..., Any] = call_windows_spatial_pipe,
+        environ: Mapping[str, str] | None = None,
         timeout_seconds: float = HTTP_TIMEOUT_SECONDS,
     ):
         self._session_path = session_path or _descriptor_path()
         self._descriptor_loader = descriptor_loader
-        self._opener = opener or urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),
-            _NoRedirectHandler(),
-        )
+        self._opener = opener
+        self._pipe_caller = pipe_caller
+        self._environ = os.environ if environ is None else environ
         self._timeout_seconds = float(timeout_seconds)
 
     def call(self, name: str, arguments: Any) -> dict[str, Any]:
+        absolute_deadline = time.monotonic() + self._timeout_seconds
         route = TOOL_ROUTES.get(name)
         if route is None:
             raise KeyError(name)
@@ -294,6 +1110,36 @@ class GhostStudioSpatialClient:
             )
         except (OSError, SpatialAuthenticationError, ValueError) as exc:
             raise SpatialAdapterError("ghoststudio-unavailable") from exc
+        if os.name == "nt":
+            try:
+                spatial_transport_marker(
+                    self._environ,
+                    required=True,
+                )
+            except SpatialAuthenticationError as exc:
+                raise SpatialAdapterError("ghoststudio-unavailable") from exc
+            if not self._is_windows_pipe_descriptor(descriptor):
+                raise SpatialAdapterError("ghoststudio-unavailable")
+            try:
+                response = self._call_windows_pipe(
+                    descriptor=descriptor,
+                    headers=headers,
+                    method=route.method,
+                    path=route.path,
+                    body=body,
+                    absolute_deadline=absolute_deadline,
+                )
+            except SpatialAdapterError:
+                raise
+            except ValueError as exc:
+                raise SpatialAdapterError("spatial-request-failed") from exc
+            return self._decode_pipe_json(response)
+        if (
+            descriptor.schema != "ghoststudio-spatial-session/v1"
+            or descriptor.transport != LOOPBACK_SPATIAL_TRANSPORT
+            or not isinstance(descriptor.port, int)
+        ):
+            raise SpatialAdapterError("ghoststudio-unavailable")
         if route.method != "GET":
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
@@ -304,9 +1150,129 @@ class GhostStudioSpatialClient:
         )
         return self._open_json(request)
 
-    def _open_json(self, request: urllib.request.Request) -> dict[str, Any]:
+    @staticmethod
+    def _is_windows_pipe_descriptor(
+        descriptor: SpatialSessionDescriptor,
+    ) -> bool:
+        return bool(
+            descriptor.schema == "ghoststudio-spatial-session/v2"
+            and descriptor.transport == WINDOWS_SPATIAL_TRANSPORT
+            and descriptor.pipe_name
+            and descriptor.port is None
+        )
+
+    def _call_windows_pipe(
+        self,
+        *,
+        descriptor: SpatialSessionDescriptor,
+        headers: Mapping[str, str],
+        method: str,
+        path: str,
+        body: bytes,
+        absolute_deadline: float,
+    ) -> Any:
+        remaining = absolute_deadline - time.monotonic()
+        if remaining <= 0:
+            raise SpatialAdapterError("spatial-request-failed")
+        initial_failure: BaseException | None = None
         try:
-            with self._opener.open(
+            return self._pipe_caller(
+                descriptor.pipe_name,
+                method=method,
+                path=path,
+                headers=headers,
+                body=body,
+                timeout_seconds=remaining,
+                expected_server_pid=descriptor.pid,
+                response_secret=descriptor.credentials.secret,
+            )
+        except SpatialAdapterError:
+            raise
+        except (OSError, SpatialPipeError, TimeoutError) as exc:
+            initial_failure = exc
+        except ValueError as exc:
+            raise SpatialAdapterError("spatial-request-failed") from exc
+
+        try:
+            replacement = self._descriptor_loader(self._session_path)
+        except (OSError, SpatialAuthenticationError, ValueError) as exc:
+            raise SpatialAdapterError("spatial-request-failed") from exc
+        if not self._is_windows_pipe_descriptor(replacement):
+            raise SpatialAdapterError("spatial-request-failed")
+        descriptor_changed = (
+            replacement.credentials.session_id
+            != descriptor.credentials.session_id
+            or replacement.pipe_name != descriptor.pipe_name
+        )
+        if not descriptor_changed:
+            raise SpatialAdapterError(
+                "spatial-request-failed"
+            ) from initial_failure
+        try:
+            replacement_headers = SpatialRequestSigner(
+                replacement.credentials
+            ).sign(
+                method=method,
+                path=path,
+                body=body,
+            )
+        except (SpatialAuthenticationError, ValueError) as exc:
+            raise SpatialAdapterError("spatial-request-failed") from exc
+        remaining = absolute_deadline - time.monotonic()
+        if remaining <= 0:
+            raise SpatialAdapterError(
+                "spatial-request-failed"
+            ) from initial_failure
+        try:
+            return self._pipe_caller(
+                replacement.pipe_name,
+                method=method,
+                path=path,
+                headers=replacement_headers,
+                body=body,
+                timeout_seconds=remaining,
+                expected_server_pid=replacement.pid,
+                response_secret=replacement.credentials.secret,
+            )
+        except SpatialAdapterError:
+            raise
+        except (
+            OSError,
+            SpatialPipeError,
+            TimeoutError,
+            ValueError,
+        ) as exc:
+            raise SpatialAdapterError("spatial-request-failed") from exc
+
+    @staticmethod
+    def _decode_pipe_json(response: Any) -> dict[str, Any]:
+        try:
+            status = int(response.status)
+            content_type = str(response.content_type)
+            raw = response.body
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise SpatialAdapterError("invalid-response") from exc
+        if status != 200:
+            raise SpatialAdapterError("spatial-request-failed")
+        if content_type != "application/json" or not isinstance(raw, bytes):
+            raise SpatialAdapterError("invalid-response")
+        if len(raw) > MAX_HTTP_RESPONSE_BYTES:
+            raise SpatialAdapterError("response-too-large")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise SpatialAdapterError("invalid-response") from exc
+        if not isinstance(payload, dict) or payload.get("status") != "ok":
+            raise SpatialAdapterError("invalid-response")
+        return payload
+
+    def _open_json(self, request: urllib.request.Request) -> dict[str, Any]:
+        opener = self._opener or urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _NoRedirectHandler(),
+        )
+        try:
+            with opener.open(
                 request,
                 timeout=self._timeout_seconds,
             ) as response:
@@ -425,6 +1391,8 @@ class GhostStudioSpatialMcpServer:
         try:
             arguments = _validate_arguments(name, params.get("arguments"))
             payload = self._client_factory().call(name, arguments)
+            payload = _validate_tool_response(name, arguments, payload)
+            text = _serialize_tool_payload(payload)
         except ValueError as exc:
             return self._tool_error(request_id, "invalid-arguments", str(exc))
         except SpatialAdapterError as exc:
@@ -434,13 +1402,6 @@ class GhostStudioSpatialMcpServer:
                 request_id,
                 "spatial-request-failed",
                 "Ghost Studio spatial request failed.",
-            )
-        text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        if len(text.encode("utf-8")) > MAX_HTTP_RESPONSE_BYTES:
-            return self._tool_error(
-                request_id,
-                "response-too-large",
-                "Ghost Studio spatial response exceeds the bounded MCP frame.",
             )
         return self._result(
             request_id,

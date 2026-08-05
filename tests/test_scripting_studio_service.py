@@ -179,6 +179,62 @@ def test_k2_imported_display_inactive_edits_preserve_unknown_fields() -> None:
     assert not any(row.blocking for row in disabled_diagnostics)
 
 
+def test_k2_imported_dialogue_opens_with_detached_raw_nodes() -> None:
+    from pykotor.common.language import LocalizedString
+    from pykotor.resource.formats.gff import GFFList, bytes_gff, read_gff
+    from pykotor.resource.generics.dlg import DLGEntry, DLGLink, DLGReply
+
+    service = ScriptingStudioService()
+    authored = service.new_dialogue(game="K2", resref="gs_detached")
+    _add_player_reply(authored)
+
+    second_entry = DLGEntry()
+    second_entry.speaker = "SECOND"
+    second_starter = DLGLink(second_entry)
+    authored.dialogue.starters.append(second_starter)
+    second_reply = DLGReply()
+    second_reply.text = LocalizedString.from_english("Second player reply")
+    second_link = DLGLink(second_reply)
+    second_link.display_inactive = True
+    second_entry.links.append(second_link)
+
+    canonical_payload, diagnostics = _quiet_call(service.dialogue_bytes, authored)
+    assert canonical_payload and not any(row.blocking for row in diagnostics)
+
+    source_gff = read_gff(canonical_payload)
+    entry_list = source_gff.root.acquire("EntryList", GFFList())
+    reply_list = source_gff.root.acquire("ReplyList", GFFList())
+
+    detached_entry = entry_list.add(2)
+    detached_reply = reply_list.add(2)
+
+    entry_list[1].get_list("RepliesList")[0].set_uint8("DisplayInactive", 1)
+    detached_entry.set_string("Comment", "Detached editor entry")
+    detached_reply.set_string("Comment", "Detached editor reply")
+    source_payload = bytes(bytes_gff(source_gff))
+    source_readback = read_gff(source_payload)
+
+    assert len(source_readback.root.get_list("EntryList")) == 3
+    assert len(source_readback.root.get_list("ReplyList")) == 3
+
+    document = _quiet_call(
+        service.dialogue_from_bytes,
+        source_payload,
+        game="K2",
+        resref="gs_detached",
+    )
+
+    assert dialogue_structure_summary(document.dialogue) == {
+        "starters": 2,
+        "links": 4,
+        "nodes": 4,
+        "entries": 2,
+        "replies": 2,
+    }
+    assert document.dialogue.starters[1].node.links[0].display_inactive is True
+    assert service.dialogue_topology_requires_editable_copy(document) is True
+
+
 def test_k1_display_inactive_is_not_added_and_reports_k2_only_warning() -> None:
     from pykotor.resource.formats.gff import read_gff
 

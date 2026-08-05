@@ -157,10 +157,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Delete Selected" in panel_source
     assert "Focus Selected" in panel_source
     assert "Open Geometry Tools" in panel_source
-    assert "Create Starter Room" in panel_source
+    assert "Interior: Create Room" in panel_source
     assert "Create Doorway Blockout" in panel_source
     assert "Create Corridor" in panel_source
-    assert "Create Terrain Patch" in panel_source
+    assert "Exterior: Create Terrain" in panel_source
     assert "Open Terrain Tools" in panel_source
     assert "Open Lighting Tools" in panel_source
     assert "Open Placement Tools" in panel_source
@@ -209,6 +209,30 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     ) in panel_source
     assert "Lighting/lightmaps:" in panel_source
     assert '"Lighting"' in panel_source
+
+
+def test_t2907_default_build_surface_exposes_interior_and_exterior_starters() -> None:
+    builder_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
+
+    assert 'QGroupBox("Start here: choose the kind of level"' in builder_source
+    assert '"The viewport grid is only a guide.' in builder_source
+    assert 'QPushButton("Interior: Create Room"' in builder_source
+    assert 'QPushButton("Exterior: Create Terrain"' in builder_source
+    assert "self.buildSectionTabs.setCurrentWidget(self.roomBuildingPage)" in builder_source
+    assert "self.buildSectionTabs.setCurrentWidget(self.terrainBuildingPage)" in builder_source
+    assert (
+        "self.builder_tab.starterRoomRequested.connect(self.create_map_studio_starter_room)"
+        in window_source
+    )
+    assert (
+        "self.builder_tab.starterTerrainRequested.connect(self.create_map_studio_starter_terrain)"
+        in window_source
+    )
 
 
 def test_t2600_map_studio_new_project_dialog_exposes_module_identity() -> None:
@@ -597,8 +621,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "class MapStudioViewportPerformancePolicy" in source
         assert "available_map_studio_terrain_brushes" in source
         assert "map_studio_viewport_performance_policy" in source
-        assert "target_frame_ms=8.33" in source
-        assert "terrain_brush_budget_ms=4.0" in source
+        assert '"portable": _performance_policy(' in source
+        assert "target_fps=30" in source
+        assert "interactive_scale=0.72" in source
         assert "drop stale stroke frames" in source
         assert "available_map_studio_tool_belt_actions" in source
         assert "available_map_studio_tool_belt_presets" in source
@@ -1832,11 +1857,24 @@ def test_t2907_build_workspace_has_three_task_sections_and_direct_terrain_sculpt
         assert builder.terrainAdvancedWidget.isHidden()
         assert builder.terrainRadiusSpinBox.value() == 3
         assert builder.terrainSculptEnabledCheckBox.isChecked() is True
+        assert builder.startHereGroup.title() == "Start here: choose the kind of level"
+        assert builder.startInteriorButton.text() == "Interior: Create Room"
+        assert builder.startExteriorButton.text() == "Exterior: Create Terrain"
 
         create_requests: list[bool] = []
         builder.terrainCreateRequested.connect(lambda: create_requests.append(True))
         builder.createTerrainSurfaceButton.click()
         assert create_requests == [True]
+
+        starter_requests: list[str] = []
+        builder.starterRoomRequested.connect(lambda: starter_requests.append("room"))
+        builder.starterTerrainRequested.connect(lambda: starter_requests.append("terrain"))
+        builder.startExteriorButton.click()
+        assert starter_requests == ["terrain"]
+        assert builder.buildSectionTabs.currentWidget() is builder.terrainBuildingPage
+        builder.startInteriorButton.click()
+        assert starter_requests == ["terrain", "room"]
+        assert builder.buildSectionTabs.currentWidget() is builder.roomBuildingPage
 
         builder.adopt_skybox_tools(environment.sky_group, environment.sky_traffic_group)
         environment.adopt_room_lighting_tools(builder.roomLightingGroup)
@@ -2572,7 +2610,7 @@ def test_t2600_map_studio_workflow_panel_guides_first_playable_smoke_test() -> N
         assert "one test placeable" in source
         assert "Treat larger maps as experimental until this path passes in-game." in source
         assert "New KMAP" in source
-        assert "Create Starter Room" in source
+        assert "Create Room or Terrain Surface" in source
         assert "Add Test Placeable" in source
         assert "Validate" in source
         assert "Stage or Install for Game Test" in source

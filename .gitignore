@@ -67,6 +67,10 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_mcp_resource_exposure.py
 !/tests/test_mcp_textures.py
 !/tests/test_mcp_skinning.py
+!/tests/test_ghost_studio_spatial_adapter.py
+!/tests/test_spatial_auth_appcontainer_acl.py
+!/tests/test_spatial_embedded_bootstrap.py
+!/tests/test_spatial_named_pipe_transport.py
 !/tests/test_qt_only_imports.py
 !/tests/test_theme_layout_loading.py
 !/tests/test_pygfx_renderer_backend.py

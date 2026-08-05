@@ -103,36 +103,18 @@ PRIVATE_BLADE = "xt_blade"
 PRODUCTION_DIALOGUE = "xaria"
 PRODUCTION_GLOBAL_STATE = "KPM_XARIA_STATE"
 PRODUCTION_GLOBAL_SLOT = "KPM_XARIA_SLOT"
-PRIVATE_SCHEMA = 12
+PRIVATE_SCHEMA = 14
 PRIVATE_POWER_ROWS = (287, 290, 291)
 PRIVATE_POWER_TOKENS = (1, 2, 3)
-PRIVATE_DIALOGUE_DWELL_SECONDS = 30
+PRIVATE_CAMERA_POLL_SECONDS = 1
 PRIVATE_BEAT_FINISH_SECONDS = (2.60, 2.80, 3.10)
 PRIVATE_DEATH_SETTLE_SECONDS = 0.20
 PRIVATE_DEATH_RETRY_SECONDS = 0.25
-PRIVATE_OUTGOING_DEATH_HOLD_SECONDS = 0.85
 PRIVATE_CAMERA_PREROLL_SECONDS = 1.25
-PRIVATE_FINAL_CAMERA_HOLD_SECONDS = 2.25
-PRIVATE_DIALOGUE_END_SETTLE_SECONDS = 0.25
-PRIVATE_NEXT_BEAT_DELAY_SECONDS = (
-    PRIVATE_OUTGOING_DEATH_HOLD_SECONDS + PRIVATE_CAMERA_PREROLL_SECONDS
-)
-PRIVATE_DIALOGUE_END_DELAY_SECONDS = (
-    PRIVATE_OUTGOING_DEATH_HOLD_SECONDS + PRIVATE_FINAL_CAMERA_HOLD_SECONDS
-)
-PRIVATE_POST_HANDOFF_DELAY_SECONDS = (
-    PRIVATE_DIALOGUE_END_DELAY_SECONDS + PRIVATE_DIALOGUE_END_SETTLE_SECONDS
-)
 PRIVATE_MAX_COMBAT_TIMELINE_SECONDS = (
     sum(PRIVATE_BEAT_FINISH_SECONDS)
-    + 3
-    * (
-        PRIVATE_DEATH_SETTLE_SECONDS
-        + PRIVATE_DEATH_RETRY_SECONDS
-        + PRIVATE_OUTGOING_DEATH_HOLD_SECONDS
-    )
+    + 3 * (PRIVATE_DEATH_SETTLE_SECONDS + PRIVATE_DEATH_RETRY_SECONDS)
     + 3 * PRIVATE_CAMERA_PREROLL_SECONDS
-    + PRIVATE_FINAL_CAMERA_HOLD_SECONDS
 )
 # Retail K2 stores creature LocalNumbers in byte-sized slots 12..28. Keep the
 # private encounter inside that range and store compact proof tokens instead
@@ -149,6 +131,7 @@ PRIVATE_STATE_LOCAL = 28
 PRIVATE_CAMERA_HANDOFF_LOCAL = 60
 PRIVATE_RECRUIT_ORIGIN_LOCAL = 62
 PRIVATE_DIALOGUE_STARTED_LOCAL = 61
+PRIVATE_DIALOGUE_PENDING_LOCAL = 63
 DIRECTOR_POWER_SCRIPT_RESREFS = (
     "kxar_d_mamb",
     "kxar_d_ilight",
@@ -184,7 +167,7 @@ BUNDLED_ENCOUNTER_RESOURCES = (
     {
         "resref": PRIVATE_DIALOGUE,
         "type": "dlg",
-        "purpose": "Single-node camera-owned combat timeline.",
+        "purpose": "Three-camera death-gated combat timeline.",
     },
     {"resref": PRIVATE_BLADE, "type": "uti", "purpose": "Private Xaria's Blade copy."},
     {
@@ -220,7 +203,27 @@ BUNDLED_ENCOUNTER_RESOURCES = (
     {
         "resref": "xt_dead",
         "type": "ncs",
-        "purpose": "Confirm each scripted death, advance the presentation camera, and dispatch the next beat.",
+        "purpose": "Confirm each scripted death and release the active beat latch.",
+    },
+    {
+        "resref": "xt_c1done",
+        "type": "ncs",
+        "purpose": "Advance the silent director dialogue after Wraid 1 is proven dead.",
+    },
+    {
+        "resref": "xt_c2done",
+        "type": "ncs",
+        "purpose": "Advance the silent director dialogue after Wraids 1 and 2 are proven dead.",
+    },
+    {
+        "resref": "xt_c3done",
+        "type": "ncs",
+        "purpose": "End the silent director dialogue after all three deaths are proven.",
+    },
+    {
+        "resref": "xt_camend",
+        "type": "ncs",
+        "purpose": "Perform the once-only production dialogue handoff after camera 113 ends naturally.",
     },
     {
         "resref": "xt_post",
@@ -252,11 +255,49 @@ BUNDLED_ENCOUNTER_RESOURCES = (
     ),
 )
 
+def _parse_streamvoice_resref(resref: str) -> tuple[str, str, str]:
+    match = re.fullmatch(
+        r"(?P<voice_id>[0-9]{3})(?P<speaker>[A-Za-z0-9_]+)"
+        r"(?P<suffix>[0-9]{3})",
+        resref,
+    )
+    if (
+        match is None
+        or len(resref) > 16
+        or int(match.group("voice_id")) <= 0
+    ):
+        raise RuntimeError(
+            "Xaria VO ResRef cannot be resolved by the retail StreamVoice "
+            f"loader: {resref}"
+        )
+    return (
+        match.group("voice_id"),
+        match.group("speaker").casefold(),
+        match.group("suffix"),
+    )
+
+
+def _streamvoice_relative_path(resref: str) -> str:
+    voice_id, speaker, _suffix = _parse_streamvoice_resref(resref)
+    return f"StreamVoice/{voice_id}/{speaker}/{resref}.wav"
+
+
 PRODUCTION_SCRIPT_RESREFS = (
     "cxar_post",
+    "kxar_dlgack",
     "cxar_wait",
     "cxar_party",
     "cxar_decide",
+    "cxar_atton_m",
+    "cxar_atton_f",
+    "cxar_kreia",
+    "cxar_react",
+    "cxar_pfirst",
+    "cxar_pgrove",
+    "cxar_phawk",
+    "cxar_pother",
+    "cxar_d_ready",
+    "cxar_d_busy",
     "cxar_q_name",
     "cxar_q_ichor",
     "cxar_q_recog",
@@ -280,6 +321,7 @@ PRODUCTION_SCRIPT_RESREFS = (
     "kxar_d_begin",
     "kxar_d_clean",
     "kxar_d_tick",
+    "kxar_d_queue",
     "kxar_d_veil",
     "kxar_d_heal",
     "kxar_d_drain",
@@ -292,6 +334,9 @@ PRODUCTION_SCRIPT_RESREFS = (
     "kxar_l_mist",
     "kxar_l_ilight",
     "kxar_l_raise",
+    "kxar_talkup",
+    "kxar_rel_good",
+    "kxar_rel_soft",
 )
 
 PRODUCTION_VOICE_SOURCE_TO_RUNTIME = {
@@ -311,6 +356,28 @@ PRODUCTION_VOICE_SOURCE_TO_RUNTIME = {
     "xv_lmist": "997xaria014",
     "xv_llight": "997xaria015",
     "xv_lraise": "997xaria016",
+    "xv_warn": "997xaria017",
+    "xv_hunger": "997xaria018",
+    "xv_threat": "997xaria019",
+    "xv_stories": "997xaria020",
+    "xv_strife": "997xaria021",
+    "xv_demand": "997xaria022",
+    "xv_soulfound": "997xaria023",
+    "xv_hero": "997xaria024",
+    "xv_seeker": "997xaria025",
+    "xv_soulmouth": "997xaria026",
+    "xv_property": "997xaria027",
+    "xv_askquick": "997xaria028",
+    "xv_nydak": "997xaria029",
+    "xv_magick": "997xaria030",
+    "xv_withhold": "997xaria031",
+    **{
+        f"997xaria{index:03d}": f"997xaria{index:03d}"
+        for index in range(101, 116)
+    },
+    "997atton001": "997atton001",
+    "997atton002": "997atton002",
+    "997kreia001": "997kreia001",
 }
 PRODUCTION_VOICE_SOURCE_RESREFS = tuple(
     PRODUCTION_VOICE_SOURCE_TO_RUNTIME
@@ -320,14 +387,14 @@ PRODUCTION_VOICE_RESREFS = tuple(
 )
 
 PRODUCTION_VOICE_SHA256 = {
-    "xv_intro": "A7BB68B3DDDEAC52912B8742E04CE4BFAE74AB3FA287BBF6EE4B488847F25D92",
-    "xv_name": "7F508E78C2A88D0174D46F74D38F7F0C2C2819103F35488A16F0B143B1688307",
-    "xv_ichor": "AAD66AE80F8E169A98E2730FA7E6DF3B254FCF475568D82BBE4C3F59519EC48A",
-    "xv_recog": "6990D528CCDAD7CC6AC3B073A800C13E5C8043A926D1B90F577531FD9994E818",
+    "xv_intro": "9D8C8E47C4E469F25CCE31AEE05B8320C6B66152EC3DBF959AAFD198ACA35364",
+    "xv_name": "E5B2427337EE95E3DA82AEC442C91E6AB4463D6568EEDA63E5F2C15E86EFDA9F",
+    "xv_ichor": "1A947E42F241E1611C0BAF447A4F6528C17319BE05E03EE77C3BBCD70957C717",
+    "xv_recog": "ED0D0AD58CD1B436C858309070C48D0FC0A5EBBBFD641D9EAC86E32874448187",
     "xv_war": "64DE970866182FD1E39BC4C3401E5B7C233C7B12191CA0540F4821E80C9D4DC0",
     "xv_sphere": "641A797642280E67136E0BE802C236BC5637FE8F0B430EED5A0DE5B5A9292B19",
-    "xv_join": "684FF5ADEA44F1B0343FF2503F4635A15E03FA3BCF165D2789CDF59E8EBDC066",
-    "xv_leave": "7B48D6339298A5AC187CC4BD249AD7461433ADF8DA8C9DC2F062839D84D55A44",
+    "xv_join": "41532C763EF2BF9F45BD715570233B714840399641A9924222081725169D810A",
+    "xv_leave": "5D93921CDCD45E83E4C9C7E80E1E70FC7CCC51E7F9C31C488A95791B895FD995",
     "xv_return": "9AEB1ADF4D892D1E5A19849B072F535E7C3F62EAB924F3E4BC1396A7F939C9E1",
     "xv_lhub": "270B9C86D6181A0B7005F065D618B35172D36E8584D294795F9933BD125F7237",
     "xv_lveil": "E86D910616ECB25F893FF29A2B0DB55773F87E6FA37BE0BF527AD799447D56CB",
@@ -336,17 +403,50 @@ PRODUCTION_VOICE_SHA256 = {
     "xv_lmist": "4F9F80375F5E6ADFBCF457FF95E147A9E9E898989FB320E23019916E13D57367",
     "xv_llight": "2B6417FD9F71C32EC33C5EAE66EA1CE719E1D62B0D787E9456EAAEE5F230916D",
     "xv_lraise": "5C6575F0D2FF78F8C76321E6CBDF2AA80B961737F7AE258A3FD3E26C872AD441",
+    "xv_warn": "9609D7611D35041F46F8C25D995B742663D979E8FD55DEA52C75A02CD2022DCF",
+    "xv_hunger": "B29CDB74777F2F9EE7E0BAC2687790DE2E57B912AFC7AF7C9B3A7E5A6167B06D",
+    "xv_threat": "A0BD68F0DD8C26CD4F269CFB9CFE7208945CEE23EE58A4FF8067C066D4AA3765",
+    "xv_stories": "CBFDD6C2477A456A057B452538687515668924D9D35F3D0A81483D9FBC4E3FC6",
+    "xv_strife": "0F6574B54B7D9B39842AB85BB53042F5DA5C94D9ED8590CE794E3AFAA2C5E102",
+    "xv_demand": "58C6E5A955298A97AA4100B57433E5E1563E9C4F2641680A76DDC85687759EB5",
+    "xv_soulfound": "5C046237A8AAF576B9F85F85C154CC72551D6D1A2A3F6293CC86B7AED88EA4F8",
+    "xv_hero": "F2ECDBA8DAB4AAB4603902C526FE2E7679D5EC09A5F19D08559C71AC58E6953A",
+    "xv_seeker": "E1B59FCE77389B833F72416C6B0F07DC5E8CB79A521D1631702B375290A7C419",
+    "xv_soulmouth": "E69435B1479A816CF0391527E35EB95A31AC55FF469BA4DEEF8E0355C31B3C5A",
+    "xv_property": "146B93B2775FAB8C68AF596413F5A1F45440AD8C8679F7D5F8CD95DCE24C4ECF",
+    "xv_askquick": "FD4205A5BC9C2D7054130FBE624FFA31F78AE75EC8BB15E7DCA14E4E6EDA5751",
+    "xv_nydak": "9E8D059DB4DB911E98AB59BF7E62461A584ABA31D3C2F444071EA8070A91799F",
+    "xv_magick": "C0A227BB35D4D4F4B3B33CD29CE0D72CE314E0B48C8DA0420E783E1BFE5E9ED7",
+    "xv_withhold": "3E5973ADBCEC3CC7A280650169782DBE44B9E8B7B6E2D3D16CB060C5D83BB6A7",
+    "997xaria101": "A0FF6CBC93E5CA160993195AD6731554D615CC94A7153E1AFC8B4C39BD3DC33F",
+    "997xaria102": "6E9DF40EF6762354C3F6CCC9AADA2A9A9477928E80D07783D1663F13F2BFEAB4",
+    "997xaria103": "E0D30868B3D7466F74E0CCB9520D9C72B1989732715F2E4F38490DCC66D85474",
+    "997xaria104": "238F1DDDF5986EB70636FA08D9F10FF4938BD30C258220337DA9F9E128B4A253",
+    "997xaria105": "D67712C4723B1A45699814A5CDFE272F9F1881A9899C96F4154170BF04E5CCE4",
+    "997xaria106": "C26D04E8D950C3E80A60E27E628F43DD8234E371CED959B48FFA565970E1BA11",
+    "997xaria107": "A8F3628F6B288EF090043F60EABE2F80C7E36902643CF3160199F325A50A5B65",
+    "997xaria108": "7F6296C5D26018EB34401AA7FA736FCE078D4CDA66C36A599F2006EE054797E4",
+    "997xaria109": "351830CF6E4D501758B9053F9D66668D59EE16BA0A7DAF2E35B1EEED7C2414CD",
+    "997xaria110": "CCA940630A5E60AC9FDFEE6636F5175A317E82E4B6FDA3BD3D329ADCC0527D78",
+    "997xaria111": "6C9577663A0BD066DC05DE97DBADFAD27C4EB3C977BD71B42ADB33294E01AA36",
+    "997xaria112": "736BC9BAF49161FC3EFA75308617F3D848ED92D45B836D311C4E421CA832F0E6",
+    "997xaria113": "40342051DDE7A3F95D25E87111A156840853C038B20E862D0E80590422B75F22",
+    "997xaria114": "851EE59C262C915373D0ED964767ED415E0CB786DF63C628DA6A21A1030F4C5F",
+    "997xaria115": "D9E03D008A265D1FD0F8F3B3E750ED6577E5D28F02DCBD73A8B90D0B47A82A99",
+    "997atton001": "649A9B6E6E99C303B0C5C7C8F08A1F859F427D20641846FFF54477DB689BC166",
+    "997atton002": "85537C0998CFDC12ED552C4FCCBD0706B6A8A234C5A292A5642B65F921995AEE",
+    "997kreia001": "ACB887D5C24B49BB02237CEFAF82E89AF80CF11E6E96E3B23C121CB5EDF41B46",
 }
 
 PRODUCTION_LIP_SHA256 = {
-    "xv_intro": "3291BE14E0D6409DB13CD7C49F5A7D5B4BEFA43DD8ADA3ADFA15DB0CB31A0195",
-    "xv_name": "BD5B68A761DE36ED754FF5D57ED3F0A6260C7093640E3FD567D95C7F63F57714",
-    "xv_ichor": "FD00DA6A413955AE41CC00C808F352796B07028F50016AACD7BB698DF1412B6A",
-    "xv_recog": "D0E4DAC141D803585F3CD1780D39D41C4C2DFFD2954344D2C674F43D88BD91E1",
+    "xv_intro": "8821C6E9C61B221B0896C0247FCA1125E6725E001313AB8BEE663587847BEEFF",
+    "xv_name": "6F0B1FF2C89661CAFA00A28A23320B68F32EC452B5AA1E1705BE0FD45A82BD07",
+    "xv_ichor": "37C9B41F790E6C677D1574DF35CC3ECA42A8E9131F3124FC796BE866CB1AA21B",
+    "xv_recog": "480C4ED1300E692A7E94178894CFF70C69B279617370353FC44F97B73DD447FF",
     "xv_war": "D5DE4CC59E45B33BCBC880F47D7E62AB97961871A58FD2BFB6758563393C2D13",
     "xv_sphere": "0B6058A73990514D51F8C60E393ECC2B66B21D83A78FA101ED64A4BE48065860",
-    "xv_join": "2A6EE4705C3AC99D312B35F4A6BCBAA3658EB0F33C05CFC94C1E5F364A06A91C",
-    "xv_leave": "DC3F662A424F2EDC62BA5FB4F93E1B5A9B5B856EE870FE1E1310FD3D1DD3C1E8",
+    "xv_join": "38B46C1F1669762BB7EAC32FBF9CD3202CB3320A95656CB18851B3B8024C3370",
+    "xv_leave": "B254804E1FD34B04E9C71EF2256662C3D17DD42403DD4C54CCF8F134DE7B6363",
     "xv_return": "F9E55CAC8B96A45E3D06816C79C9CBFFA060B17CE1DC9AD4B0DBC287ECD65C64",
     "xv_lhub": "43C1728EF41FA8A229B74AFDE2E269BC4D54B6E148AC03D241F64B4081CC1DA5",
     "xv_lveil": "518E44332EC138582808154DABF184FE58D3FEC176F690B28477E6624E518447",
@@ -355,6 +455,39 @@ PRODUCTION_LIP_SHA256 = {
     "xv_lmist": "9CC27B5942035940053D2DC419BF52F2FA0D7E4EBF86877030771B2C43A6FE72",
     "xv_llight": "03277F5FC52B79D4F67F4365D3A909B556EB7FA2A99DD5CB42CF5C3996C1AFA3",
     "xv_lraise": "B28958BF8CDD276F9AA2C043B452C537DE29DFA6BBDCE6C917A313289F1FA297",
+    "xv_warn": "FE2841522F29DE30A3C166F3EA1E215CED4E1008320F2D3E2FC173A69C9A6A0B",
+    "xv_hunger": "C05548D3CB6400FFBD69C3B61F13061F21754662F5A4659476D68012D8B293E1",
+    "xv_threat": "E4EC9D57A4D2D2DFD282233F46C799BC5EDCC4B3EC573121F76A742A1FE19FD0",
+    "xv_stories": "BD6C305A2B1B68AD05B1B8A8CFE15224E371F4CC64C2A4EB2ADCD13D573AD339",
+    "xv_strife": "A2FE2638D947F13A8F66A0EFB98BC6BF631627E62D08C40AF06DC464FD6B51F2",
+    "xv_demand": "915D00BAA5D48AEFF9135402C2034E5FE6ED1F4E0E67869C6A93A0DD86891082",
+    "xv_soulfound": "8AA7B8F49A0010A993381B48E894CF6402831196ADD55F37D265FE359EEEDEB3",
+    "xv_hero": "E9D03702757906086C0427FCCBA6B69B7A237216BCFF5247CDB69EB2296A6592",
+    "xv_seeker": "C3A3D47CE953ABA8BF85B3FCB55716493091E076C7F2560A34C51E236782DF99",
+    "xv_soulmouth": "D7F23122AA15F333FDDDCC1D804D0D0D8C23F217AF9D1CDD42CCABFAB74FDB7F",
+    "xv_property": "DA6C125C6BB6BE2D41B0255635847702746589ACB2C27C321669165549612AF0",
+    "xv_askquick": "5F6AAE539DADCF43117272D7E90702F5274BD71CE15C9E284DFBC538F6F098FC",
+    "xv_nydak": "7378335A51A74508C2BDF945B9C0B600D7FA3FED180382192EEDB5205D8F4E04",
+    "xv_magick": "CBD3EF09519C9300DBADBDC60D938B041F3B44EE77CB127A2469AD1E79152ACD",
+    "xv_withhold": "D214885785A1804C43F20FBFB9EE5A9A0022A3C174416F178C8481B0DD894F14",
+    "997xaria101": "4AC0B2BDB473FF87B1B5790D674C6B85A9E9A3C2040BFEB5CFBAACEB95C38B23",
+    "997xaria102": "EC411548809F77D9160653F1CD9AE93AA33D847AE886217723D1845B73EDE61D",
+    "997xaria103": "9BCF3952759C1CBD278710B3337094763A13D695DE21E39BD218448AE6A17B86",
+    "997xaria104": "3AEE4041580B8D0146215D34B49DD3FE01AA1F0C77A1ACAB3BEA913AD4FAC15E",
+    "997xaria105": "F9E2D5BB2AC02E78A7D20E8C28841D084545785A767FFF61F497AA5BF351856B",
+    "997xaria106": "0C19BAA1401E4E4E7F67142F1EAB4D136F708C559F0F6BDA5A85FAB7F046F7FC",
+    "997xaria107": "0543C13A1F3C02BAD56B921EE26CAC96D243CBC37543F3D4791855913FDB79C2",
+    "997xaria108": "570995AB20F14C1B61BDBC16CD991EFED4161076B771B25B21FE56346225F8F8",
+    "997xaria109": "224CCBA8F214C5482D4D74368A9F36F68E1426CCD096DFEBBF4514F85D9CB2EE",
+    "997xaria110": "49C53221B03107DE5E910CC95B3960C6BADA4AF2E6DF00BC326055621FDFE811",
+    "997xaria111": "3091E8D541F901E2694F6D70E8F7C719866013AA6712DB5A660C3314A9BEA23A",
+    "997xaria112": "C5D425D59F7748C68E6C0CA7C481CC8943AD6201A9EAB64D7ED018CDA1E114CD",
+    "997xaria113": "56E6BBC96D5F2675B6EF3448C6B4D8887E4A979876D4E9766A5D50F0A074CA28",
+    "997xaria114": "13427C0F67AB5030E09130E4E710A765EB58F8F7F5FB12D99F3AF4108513164A",
+    "997xaria115": "BF8FA3D6BA2009FEBA4ECE7067ABF3C6C5ED4EF5E4F116C62A108974FFF3CE65",
+    "997atton001": "A4D67480F3424C4FAC58590C7001F74AFE76117BE1E847516B7D7015CC6A158B",
+    "997atton002": "F2F4AA61CF32012C5F084B087EA8DA68F7ADA83069829D94155ABA4DFBD5AFE3",
+    "997kreia001": "15FA2FDF1D812002107CB15C294F02C37EF1BE1366F51E8A44C30FCA52EF5FD9",
 }
 
 EXTERNAL_XARIA_FILES = (
@@ -402,6 +535,30 @@ EXTERNAL_XARIA_FILES = (
         "name": "kxar_h_imp.mdl",
         "purpose": "Ichor Heal impact effect.",
     },
+    {
+        "name": "kxar_s_mist.wav",
+        "purpose": "Authored Miststep activation sound.",
+    },
+    {
+        "name": "kxar_s_ilight.wav",
+        "purpose": "Authored Ichor Lightning cast sound.",
+    },
+    {
+        "name": "kxar_s_idrain.wav",
+        "purpose": "Authored Ichor Drain cast sound.",
+    },
+    {
+        "name": "kxar_s_raise.wav",
+        "purpose": "Authored Raise Dead cast sound.",
+    },
+    {
+        "name": "kxar_s_veil.wav",
+        "purpose": "Authored Veil of the Clanless activation sound.",
+    },
+    {
+        "name": "kxar_s_veild.wav",
+        "purpose": "Reversed Veil of the Clanless deactivation sound.",
+    },
     *(
         {
             "name": f"{resref}.tga",
@@ -443,10 +600,7 @@ EXTERNAL_XARIA_FILES = (
 
 EXTERNAL_XARIA_STREAMVOICE_FILES = tuple(
     {
-        "name": (
-            f"StreamVoice/{VOICE_STREAM_ID}/{VOICE_DIALOGUE_RESREF}/"
-            f"{runtime_resref}.wav"
-        ),
+        "name": _streamvoice_relative_path(runtime_resref),
         "sha256": PRODUCTION_VOICE_SHA256[source_resref],
         "purpose": (
             "Voice Design 1 retail StreamVoice audio for "
@@ -461,11 +615,19 @@ TEASER_VOICE_LOOKUP = {
     "module_voice_id": VOICE_STREAM_ID,
     "module_folder": VOICE_STREAM_ID,
     "dialogue_resref": PRODUCTION_DIALOGUE,
+    "speaker_folders": tuple(
+        sorted(
+            {
+                _parse_streamvoice_resref(resref)[1]
+                for resref in PRODUCTION_VOICE_RESREFS
+            }
+        )
+    ),
     "source_files": tuple(
         row["name"] for row in EXTERNAL_XARIA_STREAMVOICE_FILES
     ),
     "runtime_files": tuple(
-        f"StreamVoice/{VOICE_STREAM_ID}/{PRODUCTION_DIALOGUE}/{resref}.wav"
+        _streamvoice_relative_path(resref)
         for resref in PRODUCTION_VOICE_RESREFS
     ),
 }
@@ -758,10 +920,10 @@ CAMERA_MARKERS = (
         "camera_id": 112,
         "role": "ichor_lightning_hero",
         "position": (9.0, -13.0, 9.986575),
-        "target": (2.5, -17.5, 11.0),
-        "field_of_view": 39.0,
+        "target": (5.5, -20.0, 11.0),
+        "field_of_view": 58.0,
         "height": 1.85,
-        "pitch": 83.959481,
+        "pitch": 83.8986142652013,
         "zone_id": "hero_clearing",
         "purpose": "Capture Xaria and Wraid 2 in one clean green-lightning profile.",
         "rationale": "The camera sits beyond the target and keeps both endpoints against the dark left background.",
@@ -771,10 +933,10 @@ CAMERA_MARKERS = (
         "camera_id": 113,
         "role": "ichor_drain_profile",
         "position": (-2.0, -10.0, 10.048286),
-        "target": (1.8, -15.0, 10.9),
-        "field_of_view": 41.0,
+        "target": (4.5, -17.5, 11.0),
+        "field_of_view": 58.0,
         "height": 1.80,
-        "pitch": 81.413326,
+        "pitch": 85.11468497387739,
         "zone_id": "hero_clearing",
         "purpose": "Show the diagonal green Drain beam with the vine curtain behind the victim.",
         "rationale": "The lens is north-west of the caster and does not overlap either prior beat.",
@@ -946,6 +1108,28 @@ def _validate_prepared_candidate_manifest(root: Path) -> None:
         raise RuntimeError(
             "Prepared Xaria stage-manifest has no voice_audio.files audit."
         )
+    if not all(isinstance(name, str) for name in voice_records):
+        raise RuntimeError(
+            "Prepared Xaria stage-manifest voice_audio.files keys must be paths."
+        )
+    actual_voice_names = {
+        str(name).replace("\\", "/") for name in voice_records
+    }
+    expected_voice_names = {
+        str(row["name"]).replace("\\", "/")
+        for row in EXTERNAL_XARIA_STREAMVOICE_FILES
+    }
+    if (
+        len(actual_voice_names) != len(voice_records)
+        or actual_voice_names != expected_voice_names
+    ):
+        missing = sorted(expected_voice_names - actual_voice_names)
+        unexpected = sorted(actual_voice_names - expected_voice_names)
+        raise RuntimeError(
+            "Prepared Xaria stage-manifest voice_audio.files does not match "
+            "the complete production voice contract "
+            f"(missing={missing}, unexpected={unexpected})."
+        )
     for row in EXTERNAL_XARIA_STREAMVOICE_FILES:
         name = str(row["name"]).replace("\\", "/")
         _require_candidate_manifest_record(
@@ -992,8 +1176,8 @@ void main() {
 """,
     "xt_begin": r"""
 void EnsureCurrentSchema(object oXaria) {
-    if (GetLocalNumber(oXaria, 24) == 12) return;
-    SetLocalNumber(oXaria, 24, 12);
+    if (GetLocalNumber(oXaria, 24) == 14) return;
+    SetLocalNumber(oXaria, 24, 14);
     SetLocalNumber(oXaria, 27, 0);
     SetLocalNumber(oXaria, 26, 0);
     SetLocalNumber(oXaria, 25, 0);
@@ -1001,6 +1185,7 @@ void EnsureCurrentSchema(object oXaria) {
     SetLocalBoolean(oXaria, 60, FALSE);
     SetLocalBoolean(oXaria, 61, FALSE);
     SetLocalBoolean(oXaria, 62, FALSE);
+    SetLocalBoolean(oXaria, 63, FALSE);
     SetLocalNumber(oXaria, 28, 0);
 }
 
@@ -1063,6 +1248,7 @@ void main() {
     SetLocalNumber(oXaria, 25, 0);
     SetLocalNumber(oXaria, 21, 0);
     SetLocalBoolean(oXaria, 61, FALSE);
+    SetLocalBoolean(oXaria, 63, FALSE);
     CancelCombat(oPC);
     CancelCombat(oXaria);
     CancelCombat(oWraid1);
@@ -1112,8 +1298,8 @@ void main() {
 """,
     "xt_click": r"""
 void EnsureCurrentSchema(object oXaria) {
-    if (GetLocalNumber(oXaria, 24) == 12) return;
-    SetLocalNumber(oXaria, 24, 12);
+    if (GetLocalNumber(oXaria, 24) == 14) return;
+    SetLocalNumber(oXaria, 24, 14);
     SetLocalNumber(oXaria, 27, 0);
     SetLocalNumber(oXaria, 26, 0);
     SetLocalNumber(oXaria, 25, 0);
@@ -1156,12 +1342,17 @@ void main() {
     }
     int nGlobalState = GetGlobalNumber("KPM_XARIA_STATE");
     if (nState == 2 && nGlobalState == 3) {
+        object oPC = GetFirstPC();
+        if (GetIsObjectValid(oPC)) {
+            ExecuteScript("kxar_cleanup", oPC, 0);
+        }
         SendMessageToPC(GetFirstPC(), "Xaria is already recruited in this campaign save.");
         return;
     }
-    if (nState == 2 && (nGlobalState == 2 || nGlobalState == 4)) {
-        // A click may request the shared handoff, but it cannot bypass camera
-        // 114, the director-dialogue teardown, or the once-only latch.
+    if (nState == 2 && nGlobalState != 3) {
+        // The completed three-kill proof is authoritative. A click retries
+        // the shared handoff even if the camera DLG missed its OnEnd callback
+        // and therefore never promoted the production global to state 2.
         ExecuteScript("xt_post", oXaria, -1);
         return;
     }
@@ -1194,6 +1385,15 @@ void ApplyAuthoredMiststep(object oXaria, object oTarget) {
     SetLocalNumber(oXaria, 26, 1);
 }
 
+void ApplyBladeImpact(object oTarget) {
+    if (!TargetIsAlive(oTarget)) return;
+    AssignCommand(oTarget, ClearAllActions());
+    AssignCommand(
+        oTarget,
+        PlayAnimation(ANIMATION_LOOPING_SPASM, 1.0, 0.65)
+    );
+}
+
 void FinishFirstTarget(object oXaria, object oTarget) {
     if (
         !GetIsObjectValid(oXaria) ||
@@ -1205,7 +1405,9 @@ void FinishFirstTarget(object oXaria, object oTarget) {
         SetMinOneHP(oTarget, FALSE);
         ApplyEffectToObject(
             DURATION_TYPE_INSTANT,
-            EffectDeath(FALSE, FALSE, FALSE),
+            EffectDamage(
+                1000, DAMAGE_TYPE_UNIVERSAL, DAMAGE_POWER_NORMAL
+            ),
             oTarget,
             0.0
         );
@@ -1217,22 +1419,16 @@ void main() {
     object oXaria = GetObjectByTag("XT_Xaria", 0);
     if (!GetIsObjectValid(oXaria) || GetLocalNumber(oXaria, 28) != 1) return;
 
-    // Camera 111's long-lived dialogue node is the sole entry into the combat
-    // timeline. The node outlives every scripted beat, so no queued pause is
-    // required and recovery can return through this same gate.
+    // Camera 111 owns only beat one. Its polling node can loop while the
+    // reaction/death settles, so arm this delayed dispatch exactly once.
     if (GetRunScriptVar() == 0) {
         int nProof = GetLocalNumber(oXaria, 25);
-        if ((nProof & 1) == 0) {
+        if (
+            (nProof & 1) == 0 &&
+            GetLocalNumber(oXaria, 21) == 0
+        ) {
             SetLocalNumber(oXaria, 21, 11);
             DelayCommand(1.25, ExecuteScript("xt_b1", oXaria, 1));
-        } else if ((nProof & 2) == 0) {
-            SetDialogPlaceableCamera(112);
-            SetLocalNumber(oXaria, 21, 12);
-            DelayCommand(1.25, ExecuteScript("xt_b2", oXaria, 2));
-        } else if ((nProof & 4) == 0) {
-            SetDialogPlaceableCamera(113);
-            SetLocalNumber(oXaria, 21, 13);
-            DelayCommand(1.25, ExecuteScript("xt_b3", oXaria, 3));
         }
         return;
     }
@@ -1267,12 +1463,31 @@ void main() {
         oXaria,
         ActionAttack(oWraid1, FALSE)
     );
+    DelayCommand(1.75, ApplyBladeImpact(oWraid1));
     DelayCommand(2.60, FinishFirstTarget(oXaria, oWraid1));
 }
 """,
     "xt_b2": r"""
 int TargetIsAlive(object oTarget) {
     return GetIsObjectValid(oTarget) && !GetIsDead(oTarget);
+}
+
+void ClearLingeringIchorEffects(object oXaria, object oTarget) {
+    effect eEffect = GetFirstEffect(oTarget);
+    int nSafety = 0;
+    while (GetIsEffectValid(eEffect) && nSafety < 64) {
+        int nType = GetEffectType(eEffect);
+        if (
+            (nType == EFFECT_TYPE_BEAM || nType == EFFECT_TYPE_POISON) &&
+            GetEffectCreator(eEffect) == oXaria
+        ) {
+            RemoveEffect(oTarget, eEffect);
+            eEffect = GetFirstEffect(oTarget);
+        } else {
+            eEffect = GetNextEffect(oTarget);
+        }
+        nSafety++;
+    }
 }
 
 void ApplyLightningImpact(object oXaria, object oTarget) {
@@ -1292,6 +1507,11 @@ void ApplyLightningImpact(object oXaria, object oTarget) {
     } else {
         SetLocalNumber(oXaria, 27, GetLocalNumber(oXaria, 27) | 2);
     }
+    AssignCommand(oTarget, ClearAllActions());
+    AssignCommand(
+        oTarget,
+        PlayAnimation(ANIMATION_LOOPING_SPASM, 1.0, 0.65)
+    );
 }
 
 void FinishSecondTarget(object oXaria, object oTarget) {
@@ -1301,11 +1521,14 @@ void FinishSecondTarget(object oXaria, object oTarget) {
         GetLocalNumber(oXaria, 21) != 2
     ) return;
     if (TargetIsAlive(oTarget)) {
+        ClearLingeringIchorEffects(oXaria, oTarget);
         SetPlotFlag(oTarget, FALSE);
         SetMinOneHP(oTarget, FALSE);
         ApplyEffectToObject(
             DURATION_TYPE_INSTANT,
-            EffectDeath(FALSE, FALSE, FALSE),
+            EffectDamage(
+                1000, DAMAGE_TYPE_UNIVERSAL, DAMAGE_POWER_NORMAL
+            ),
             oTarget,
             0.0
         );
@@ -1320,6 +1543,17 @@ void main() {
     if (!GetIsObjectValid(oXaria)) return;
     if (GetLocalNumber(oXaria, 28) != 1) return;
     int nProof = GetLocalNumber(oXaria, 25);
+    if (GetRunScriptVar() == 0) {
+        if (
+            (nProof & 1) != 0 &&
+            (nProof & 2) == 0 &&
+            GetLocalNumber(oXaria, 21) == 0
+        ) {
+            SetLocalNumber(oXaria, 21, 12);
+            DelayCommand(1.25, ExecuteScript("xt_b2", oXaria, 2));
+        }
+        return;
+    }
     if ((nProof & 1) == 0) {
         ExecuteScript("xt_dead", oXaria, 1);
         return;
@@ -1357,6 +1591,24 @@ int TargetIsAlive(object oTarget) {
     return GetIsObjectValid(oTarget) && !GetIsDead(oTarget);
 }
 
+void ClearLingeringIchorEffects(object oXaria, object oTarget) {
+    effect eEffect = GetFirstEffect(oTarget);
+    int nSafety = 0;
+    while (GetIsEffectValid(eEffect) && nSafety < 64) {
+        int nType = GetEffectType(eEffect);
+        if (
+            (nType == EFFECT_TYPE_BEAM || nType == EFFECT_TYPE_POISON) &&
+            GetEffectCreator(eEffect) == oXaria
+        ) {
+            RemoveEffect(oTarget, eEffect);
+            eEffect = GetFirstEffect(oTarget);
+        } else {
+            eEffect = GetNextEffect(oTarget);
+        }
+        nSafety++;
+    }
+}
+
 void ApplyDrainImpact(object oXaria, object oTarget) {
     if (
         !GetIsObjectValid(oXaria) ||
@@ -1373,6 +1625,11 @@ void ApplyDrainImpact(object oXaria, object oTarget) {
     } else {
         SetLocalNumber(oXaria, 27, GetLocalNumber(oXaria, 27) | 4);
     }
+    AssignCommand(oTarget, ClearAllActions());
+    AssignCommand(
+        oTarget,
+        PlayAnimation(ANIMATION_LOOPING_SPASM, 1.0, 0.65)
+    );
 }
 
 void FinishThirdTarget(object oXaria, object oTarget) {
@@ -1382,11 +1639,14 @@ void FinishThirdTarget(object oXaria, object oTarget) {
         GetLocalNumber(oXaria, 21) != 3
     ) return;
     if (TargetIsAlive(oTarget)) {
+        ClearLingeringIchorEffects(oXaria, oTarget);
         SetPlotFlag(oTarget, FALSE);
         SetMinOneHP(oTarget, FALSE);
         ApplyEffectToObject(
             DURATION_TYPE_INSTANT,
-            EffectDeath(FALSE, FALSE, FALSE),
+            EffectDamage(
+                1000, DAMAGE_TYPE_UNIVERSAL, DAMAGE_POWER_NORMAL
+            ),
             oTarget,
             0.0
         );
@@ -1402,6 +1662,17 @@ void main() {
     if (!GetIsObjectValid(oXaria)) return;
     if (GetLocalNumber(oXaria, 28) != 1) return;
     int nProof = GetLocalNumber(oXaria, 25);
+    if (GetRunScriptVar() == 0) {
+        if (
+            (nProof & 3) == 3 &&
+            (nProof & 4) == 0 &&
+            GetLocalNumber(oXaria, 21) == 0
+        ) {
+            SetLocalNumber(oXaria, 21, 13);
+            DelayCommand(1.25, ExecuteScript("xt_b3", oXaria, 3));
+        }
+        return;
+    }
     if ((nProof & 3) != 3) {
         if ((nProof & 1) == 0) {
             ExecuteScript("xt_dead", oXaria, 1);
@@ -1449,7 +1720,9 @@ void ForceDeath(object oTarget) {
     SetMinOneHP(oTarget, FALSE);
     ApplyEffectToObject(
         DURATION_TYPE_INSTANT,
-        EffectDeath(FALSE, FALSE, FALSE),
+        EffectDamage(
+            1000, DAMAGE_TYPE_UNIVERSAL, DAMAGE_POWER_NORMAL
+        ),
         oTarget,
         0.0
     );
@@ -1457,11 +1730,10 @@ void ForceDeath(object oTarget) {
 
 void main() {
     object oXaria = GetObjectByTag("XT_Xaria", 0);
-    object oDirector = GetObjectByTag("XT_Director", 0);
     object oWraid1 = GetObjectByTag("XT_Wraid_1", 0);
     object oWraid2 = GetObjectByTag("XT_Wraid_2", 0);
     object oWraid3 = GetObjectByTag("XT_Wraid_3", 0);
-    if (!GetIsObjectValid(oXaria) || !GetIsObjectValid(oDirector)) return;
+    if (!GetIsObjectValid(oXaria)) return;
     if (GetLocalNumber(oXaria, 28) != 1) return;
 
     int nBeat = GetRunScriptVar();
@@ -1490,40 +1762,69 @@ void main() {
     if ((nProof & nBit) != 0) return;
     nProof = nProof | nBit;
     SetLocalNumber(oXaria, 25, nProof);
-
-    if (nBeat == 1) {
-        SetLocalNumber(oXaria, 21, 12);
-        // Hold the outgoing composition long enough to read the death, then
-        // establish the new camera before the next power begins.
-        DelayCommand(0.85, SetDialogPlaceableCamera(112));
-        DelayCommand(2.10, ExecuteScript("xt_b2", oXaria, 2));
-        return;
-    }
-    if (nBeat == 2) {
-        SetLocalNumber(oXaria, 21, 13);
-        DelayCommand(0.85, SetDialogPlaceableCamera(113));
-        DelayCommand(2.10, ExecuteScript("xt_b3", oXaria, 3));
-        return;
-    }
+    // Releasing this latch lets the next death-gated DLG node arm its own
+    // 1.25-second camera preroll. xt_dead never changes cameras or dispatches
+    // another beat.
+    SetLocalNumber(oXaria, 21, 0);
 
     if (nProof == 7) {
-        SetLocalNumber(oXaria, 21, 0);
         SetLocalNumber(oXaria, 28, 2);
-        DelayCommand(0.85, SetDialogPlaceableCamera(114));
-        DelayCommand(0.85, SetLocalBoolean(oXaria, 60, TRUE));
         object oTrigger = GetObjectByTag("XT_Intro_Trigger", 0);
         if (GetIsObjectValid(oTrigger)) {
             DestroyObject(oTrigger, 0.0, TRUE, 0.0, TRUE);
         }
-        DelayCommand(
-            3.10,
-            ExecuteScript("k_oei_endconv", oDirector, -1)
-        );
-        DelayCommand(
-            3.35,
-            ExecuteScript("xt_post", oXaria, -1)
-        );
+        // Camera OnEnd is a useful fast path, not the sole authorization for
+        // recruitment. This independent retry was the retail-proven schema-8
+        // handoff and survives a missed final-camera callback.
+        DelayCommand(0.90, ExecuteScript("xt_post", oXaria, -1));
     }
+}
+""",
+    "xt_c1done": r"""
+int StartingConditional() {
+    object oXaria = GetObjectByTag("XT_Xaria", 0);
+    if (!GetIsObjectValid(oXaria)) return FALSE;
+    return (GetLocalNumber(oXaria, 25) & 1) == 1;
+}
+""",
+    "xt_c2done": r"""
+int StartingConditional() {
+    object oXaria = GetObjectByTag("XT_Xaria", 0);
+    if (!GetIsObjectValid(oXaria)) return FALSE;
+    return (GetLocalNumber(oXaria, 25) & 3) == 3;
+}
+""",
+    "xt_c3done": r"""
+int StartingConditional() {
+    object oXaria = GetObjectByTag("XT_Xaria", 0);
+    if (!GetIsObjectValid(oXaria)) return FALSE;
+    return (GetLocalNumber(oXaria, 25) & 7) == 7;
+}
+""",
+    "xt_camend": r"""
+int TargetIsAlive(object oTarget) {
+    return GetIsObjectValid(oTarget) && !GetIsDead(oTarget);
+}
+
+void main() {
+    object oXaria = GetObjectByTag("XT_Xaria", 0);
+    object oWraid1 = GetObjectByTag("XT_Wraid_1", 0);
+    object oWraid2 = GetObjectByTag("XT_Wraid_2", 0);
+    object oWraid3 = GetObjectByTag("XT_Wraid_3", 0);
+    if (
+        !GetIsObjectValid(oXaria) ||
+        GetLocalNumber(oXaria, 28) != 2 ||
+        GetLocalNumber(oXaria, 25) != 7 ||
+        GetLocalNumber(oXaria, 21) != 0 ||
+        TargetIsAlive(oWraid1) ||
+        TargetIsAlive(oWraid2) ||
+        TargetIsAlive(oWraid3) ||
+        GetLocalBoolean(oXaria, 60) == TRUE
+    ) {
+        return;
+    }
+    SetLocalBoolean(oXaria, 60, TRUE);
+    ExecuteScript("xt_post", oXaria, -1);
 }
 """,
     "xt_post": r"""
@@ -1547,7 +1848,6 @@ void main() {
     int nState = GetLocalNumber(oXaria, 28);
     if (
         nState != 2 ||
-        GetLocalBoolean(oXaria, 60) != TRUE ||
         GetLocalNumber(oXaria, 25) != 7 ||
         GetLocalNumber(oXaria, 21) != 0 ||
         GetLocalNumber(oXaria, 26) != 3 ||
@@ -1564,18 +1864,28 @@ void main() {
         GetIsObjectValid(oDirector) &&
         GetIsInConversation(oDirector)
     ) {
+        // Let the silent camera owner end naturally. k_oei_endconv is an
+        // event wrapper, not an operation that closes the active DLG.
         DelayCommand(0.50, ExecuteScript("xt_post", oXaria, -1));
         return;
     }
-    if (GetLocalBoolean(oXaria, 61) == TRUE) return;
-    SetLocalBoolean(oXaria, 61, TRUE);
+    // Telemetry only: reaching this point proves camera ownership has been
+    // released. Recovery must never require this boolean up front.
+    SetLocalBoolean(oXaria, 60, TRUE);
+    int nGlobalState = GetGlobalNumber("KPM_XARIA_STATE");
+    if (nGlobalState != 4 && GetLocalBoolean(oXaria, 61) == TRUE) return;
+    if (nGlobalState != 4 && GetLocalBoolean(oXaria, 63) == TRUE) {
+        if (GetRunScriptVar() != 1) return;
+        SetLocalBoolean(oXaria, 63, FALSE);
+    }
     SetLocalNumber(oXaria, 27, 0);
-    AssignCommand(oXaria, ClearAllActions());
-    object oArea = GetArea(oXaria);
-    MusicBattleStop(oArea);
-    DelayCommand(0.10, MusicBackgroundPlay(oArea));
-    if (GetGlobalNumber("KPM_XARIA_STATE") == 3) {
+    MusicBattleStop(GetArea(oXaria));
+    DelayCommand(0.10, MusicBackgroundPlay(GetArea(oXaria)));
+    if (nGlobalState == 3) {
         SetLocalBoolean(oXaria, 62, FALSE);
+        if (GetIsObjectValid(oPC)) {
+            ExecuteScript("kxar_cleanup", oPC, 0);
+        }
         SendMessageToPC(
             oPC,
             "Xaria is already recruited in this campaign save."
@@ -1583,30 +1893,67 @@ void main() {
         return;
     }
     SetLocalBoolean(oXaria, 62, TRUE);
-    SetGlobalNumber("KPM_XARIA_STATE", 2);
+    if (
+        !GetIsObjectValid(oPC) ||
+        GetIsInConversation(oPC) ||
+        GetIsInConversation(oXaria)
+    ) {
+        if (nGlobalState != 4) {
+            DelayCommand(0.50, ExecuteScript("xt_post", oXaria, -1));
+        }
+        return;
+    }
+    // Mirror stock K2 combat-to-dialogue teardown before launching the
+    // production conversation. The dialogue itself confirms success.
+    AssignCommand(oPC, SurrenderToEnemies());
+    AssignCommand(oXaria, SurrenderToEnemies());
+    AssignCommand(oPC, ClearAllActions());
+    AssignCommand(oXaria, ClearAllActions());
+    ChangeToStandardFaction(oXaria, STANDARD_FACTION_FRIENDLY_1);
+    CancelCombat(oPC);
+    CancelCombat(oXaria);
+    SetCommandable(TRUE, oXaria);
+    if (nGlobalState != 4) {
+        SetGlobalNumber("KPM_XARIA_STATE", 2);
+        SetLocalBoolean(oXaria, 63, TRUE);
+    }
+    // The shared Xaria body keys its eye and foot mist emitters from
+    // locomotion. Force a stable idle and let its one-second hold outlive
+    // every embedded particle before the close dialogue camera begins.
     AssignCommand(
         oXaria,
-        DelayCommand(
-            0.35,
-            ActionStartConversation(
-                oPC,
-                "xaria",
-                FALSE,
-                CONVERSATION_TYPE_CINEMATIC,
-                TRUE,
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                FALSE,
-                -1,
-                -1,
-                FALSE
-            )
+        PlayAnimation(
+            ANIMATION_LOOPING_PAUSE,
+            1.0,
+            1.0
         )
     );
+    AssignCommand(
+        oXaria,
+        ActionStartConversation(
+            oPC,
+            "xaria",
+            FALSE,
+            CONVERSATION_TYPE_CINEMATIC,
+            TRUE,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            FALSE,
+            -1,
+            -1,
+            FALSE
+        )
+    );
+    if (nGlobalState != 4) {
+        // ActionStartConversation can fail silently while the engine finishes
+        // tearing down the camera DLG. kxar_dlgack sets local 61 only after the
+        // production intro really begins, so retry until that acknowledgement.
+        DelayCommand(3.00, ExecuteScript("xt_post", oXaria, 1));
+    }
 }
 """,
     "xt_enddlg": r"""
@@ -1614,8 +1961,7 @@ void main() {
     ExecuteScript("k_oei_endconv", OBJECT_SELF, -1);
     if (
         GetGlobalNumber("KPM_XARIA_STATE") != 3 ||
-        GetTag(OBJECT_SELF) != "XT_Xaria" ||
-        GetLocalBoolean(OBJECT_SELF, 62) != TRUE
+        GetTag(OBJECT_SELF) != "XT_Xaria"
     ) {
         return;
     }
@@ -1655,8 +2001,8 @@ void main() {
 """,
     "xt_hb": r"""
 void EnsureCurrentSchema(object oXaria) {
-    if (GetLocalNumber(oXaria, 24) == 12) return;
-    SetLocalNumber(oXaria, 24, 12);
+    if (GetLocalNumber(oXaria, 24) == 14) return;
+    SetLocalNumber(oXaria, 24, 14);
     SetLocalNumber(oXaria, 27, 0);
     SetLocalNumber(oXaria, 26, 0);
     SetLocalNumber(oXaria, 25, 0);
@@ -1683,14 +2029,17 @@ void main() {
         }
         return;
     }
-    if (nState == 2 && GetLocalBoolean(OBJECT_SELF, 61) == FALSE) {
+    if (
+        nState == 2 &&
+        GetGlobalNumber("KPM_XARIA_STATE") != 4 &&
+        GetLocalBoolean(OBJECT_SELF, 61) == FALSE
+    ) {
         ExecuteScript("xt_post", OBJECT_SELF, -1);
         return;
     }
     if (
         nState == 2 &&
-        GetGlobalNumber("KPM_XARIA_STATE") == 3 &&
-        GetLocalBoolean(OBJECT_SELF, 62) == TRUE
+        GetGlobalNumber("KPM_XARIA_STATE") == 3
     ) {
         ExecuteScript("kxar_cleanup", GetFirstPC(), 0);
         return;
@@ -1701,7 +2050,7 @@ void main() {
 
 
 def _private_dialogue_bytes() -> bytes:
-    """Build the linked director camera advanced by confirmed actor deaths."""
+    """Build a cyclic three-camera director gated by confirmed actor deaths."""
 
     from pykotor.common.language import LocalizedString
     from pykotor.common.misc import Game, ResRef
@@ -1715,58 +2064,70 @@ def _private_dialogue_bytes() -> bytes:
 
     dlg = DLG()
     dlg.skippable = False
+    dlg.on_end = ResRef("xt_camend")
+    dlg.on_abort = ResRef("xt_camend")
     dlg.comment = (
-        "Camera-owned xartease combat timeline. One long-lived, nonterminal "
-        "camera-111 node dispatches the first unfinished beat; confirmed deaths "
-        "advance cameras 112, 113, and 114 before the director closes the "
-        "dialogue explicitly. A silent linked sentinel keeps the root in the "
-        "retail dialogue graph and is only reached if scripted teardown fails."
+        "Camera-owned xartease combat timeline. Cameras 111, 112, and 113 "
+        "poll the private proof mask. Each camera dispatches only its own "
+        "idempotent beat; the terminal proof-7 reply ends naturally and "
+        "xt_camend performs the guarded production-dialogue handoff."
     )
-    dlg.on_end = ResRef("")
-    dlg.next_node_id = 3
+    dlg.next_node_id = 9
 
-    combat_entry = DLGEntry()
-    combat_entry.list_index = 0
-    combat_entry.node_id = 0
-    combat_entry.plot_index = -1
-    combat_entry.plot_xp_percentage = 0.0
-    combat_entry.camera_angle = 6
-    combat_entry.camera_id = 111
-    combat_entry.script1 = ResRef("xt_b1")
-    # The dialogue must remain active for every script-driven camera cut.
-    # Explicit end-of-conversation logic closes this safety dwell after camera
-    # 114; there is deliberately no automatic reply or finish-node progression.
-    combat_entry.delay = PRIVATE_DIALOGUE_DWELL_SECONDS
-    combat_entry.text = LocalizedString.from_invalid()
-    combat_entry.sound_exists = 0
-    combat_entry.unskippable = True
+    entries: list[DLGEntry] = []
+    for index, (camera_id, beat_script) in enumerate(
+        ((111, "xt_b1"), (112, "xt_b2"), (113, "xt_b3"))
+    ):
+        entry = DLGEntry()
+        entry.list_index = index
+        entry.node_id = index
+        entry.plot_index = -1
+        entry.plot_xp_percentage = 0.0
+        entry.camera_angle = 6
+        entry.camera_id = camera_id
+        entry.script1 = ResRef(beat_script)
+        entry.delay = PRIVATE_CAMERA_POLL_SECONDS
+        entry.text = LocalizedString.from_invalid()
+        entry.sound_exists = 0
+        entry.unskippable = True
+        entries.append(entry)
 
-    bridge_reply = DLGReply()
-    bridge_reply.list_index = 0
-    bridge_reply.node_id = 1
-    bridge_reply.plot_index = -1
-    bridge_reply.plot_xp_percentage = 0.0
-    bridge_reply.text = LocalizedString.from_invalid()
-    bridge_reply.sound_exists = 0
-    bridge_reply.unskippable = True
+    replies: list[DLGReply] = []
+    for index in range(6):
+        reply = DLGReply()
+        reply.list_index = index
+        reply.node_id = 3 + index
+        reply.plot_index = -1
+        reply.plot_xp_percentage = 0.0
+        reply.text = LocalizedString.from_invalid()
+        reply.sound_exists = 0
+        reply.unskippable = True
+        replies.append(reply)
 
-    sentinel_entry = DLGEntry()
-    sentinel_entry.list_index = 1
-    sentinel_entry.node_id = 2
-    sentinel_entry.plot_index = -1
-    sentinel_entry.plot_xp_percentage = 0.0
-    sentinel_entry.camera_angle = 6
-    sentinel_entry.camera_id = 114
-    sentinel_entry.delay = 1
-    sentinel_entry.text = LocalizedString.from_invalid()
-    sentinel_entry.sound_exists = 0
-    sentinel_entry.unskippable = True
+    for stage, condition in enumerate(
+        ("xt_c1done", "xt_c2done", "xt_c3done")
+    ):
+        advance_reply = replies[stage * 2]
+        hold_reply = replies[stage * 2 + 1]
 
-    # Retail K2 silent fixed-camera sequences retain a linked graph. These are
-    # owned nodes, so IsChild deliberately remains false on both links.
-    combat_entry.links.append(DLGLink(bridge_reply, 0))
-    bridge_reply.links.append(DLGLink(sentinel_entry, 0))
-    dlg.starters.append(DLGLink(combat_entry, 0))
+        # Link order is deliberate: take the proven-death advance first, then
+        # the negated polling loop. Camera 113's proof-7 advance is terminal.
+        advance_link = DLGLink(advance_reply, 0)
+        advance_link.active1 = ResRef(condition)
+        entries[stage].links.append(advance_link)
+
+        hold_link = DLGLink(hold_reply, 1)
+        hold_link.active1 = ResRef(condition)
+        hold_link.active1_not = True
+        entries[stage].links.append(hold_link)
+
+        loop_back = DLGLink(entries[stage], 0)
+        loop_back.is_child = True
+        hold_reply.links.append(loop_back)
+        if stage < 2:
+            advance_reply.links.append(DLGLink(entries[stage + 1], 0))
+
+    dlg.starters.append(DLGLink(entries[0], 0))
     return bytes(bytes_dlg(dlg, Game.K2))
 
 
@@ -2231,9 +2592,9 @@ def _private_encounter_resources(
     )
     required_sources = (
         "p_xaria.utc",
-        "xar_wraid1.utc",
-        "xar_wraid2.utc",
-        "xar_wraid3.utc",
+        "xar_nydak1.utc",
+        "xar_nydak2.utc",
+        "xar_nydak3.utc",
         "xaria_blade.uti",
     )
     missing = tuple(name for name in required_sources if not (override / name).is_file())
@@ -2286,7 +2647,7 @@ def _private_encounter_resources(
     resources.extend(_director_wrapper_resources(override))
     for index, (source_name, resref, tag) in enumerate(
         zip(
-            ("xar_wraid1.utc", "xar_wraid2.utc", "xar_wraid3.utc"),
+            ("xar_nydak1.utc", "xar_nydak2.utc", "xar_nydak3.utc"),
             PRIVATE_WRAID_TEMPLATES,
             PRIVATE_WRAID_TAGS,
         ),
@@ -2411,17 +2772,19 @@ def _external_dependency_evidence(
     )
     evidence: list[dict[str, Any]] = []
     for runtime_resref in PRODUCTION_VOICE_RESREFS:
-        if (
-            runtime_resref[:3] != VOICE_STREAM_ID
-            or not runtime_resref[:3].isdecimal()
-            or int(runtime_resref[:3]) <= 0
-            or runtime_resref[3:-3] != VOICE_DIALOGUE_RESREF
-            or not runtime_resref[-3:].isdecimal()
-            or len(runtime_resref) > 16
-        ):
+        try:
+            voice_id, _speaker, _suffix = _parse_streamvoice_resref(
+                runtime_resref
+            )
+        except RuntimeError as exc:
             raise RuntimeError(
                 "Xaria Voice Design 1 runtime ResRef cannot be resolved by "
                 f"the retail StreamVoice loader: {runtime_resref}"
+            ) from exc
+        if voice_id != VOICE_STREAM_ID:
+            raise RuntimeError(
+                "Xaria Voice Design 1 runtime ResRef uses the wrong module "
+                f"voice namespace: {runtime_resref}"
             )
     for row in EXTERNAL_XARIA_FILES:
         path = override / str(row["name"])
@@ -3430,25 +3793,22 @@ Add a subtle green hero-clearing point light and a dim cool arrival fill. The ga
    `{PRIVATE_DIALOGUE}`. It owns the DLG so Xaria remains free to animate and
    fight, matching the K1 Jolee encounter architecture.
 5. Leave the reserved Miststep arrival pocket at `{SHOWCASE_BEATS[0]["arrival"]}` completely clear.
-6. Build `xt_dlg` with a silent, unskippable camera-`111` root, a blank reply
-   bridge, and an inert camera-`114` sentinel. The root has a
-   `{PRIVATE_DIALOGUE_DWELL_SECONDS}`-second safety dwell so the linked node
-   keeps the placed-camera dialogue alive while `xt_b1` dispatches the first
-   unfinished combat beat. Confirmed deaths hold the
-   outgoing composition for `{PRIVATE_OUTGOING_DEATH_HOLD_SECONDS:.2f}`
-   seconds, advance to cameras `112`, `113`, and `114`, and give the two combat
-   cameras `{PRIVATE_CAMERA_PREROLL_SECONDS:.2f}` seconds of pre-roll. After
-   camera `114` holds for `{PRIVATE_FINAL_CAMERA_HOLD_SECONDS:.2f}` seconds,
-   `xt_dead` explicitly closes the director dialogue before `xt_post`. Click
-   and heartbeat recovery must reacquire this director conversation instead of
+6. Build `xt_dlg` as three silent, unskippable camera entries `111`, `112`,
+   and `113`. Each entry polls its confirmed-death condition every
+   `{PRIVATE_CAMERA_POLL_SECONDS}` second, loops while false, and
+   dispatches only its own idempotent beat after
+   `{PRIVATE_CAMERA_PREROLL_SECONDS:.2f}` seconds of pre-roll. The proof-7
+   reply under camera `113` has no child, so the DLG ends naturally and
+   `xt_camend` performs the guarded one-time `xt_post` handoff. Click and
+   heartbeat recovery must reacquire this director conversation instead of
    launching combat under the gameplay camera.
 7. Leave every private wraid OnDeath script blank. The three idempotent beat
-   scripts clear Plot and MinOneHP, apply explicit `EffectDeath`, and call
-   `xt_dead` themselves. Confirmed deaths advance cameras `112`, `113`, and
-   `114`; dispatch the next beat on the area; and end the camera dialogue only
-   after the third death. Each beat uses the bundled production-effect wrapper, but
-   wrapper rejection selects the same authored VFX fallback rather than
-   blocking cleanup.
+   scripts play readable `cspasm` reactions, clear Plot and MinOneHP, apply
+   lethal universal damage so native `cdie` can play, and call `xt_dead`
+   themselves. `xt_dead` proves the death and releases the beat latch; the DLG
+   owns every camera transition and next-beat dispatch. Each beat uses the
+   bundled production-effect wrapper, but wrapper rejection selects the same
+   authored VFX fallback rather than blocking cleanup.
 8. Keep `xt_hb` idempotent: state `1` retries only the first unfinished beat;
    state `2` retries only the guarded post-combat handoff. It never starts the
    encounter by distance. `xt_click` invokes the same guarded start path,
@@ -3462,10 +3822,10 @@ Add a subtle green hero-clearing point light and a dim cool arrival fill. The ga
 
 {camera_rows}
 
-Cameras `111`–`113` begin only when their combat nodes run. Camera `114`
-holds the final silent handoff after all three deaths. Production `xaria.dlg`
-owns its own dialogue close-ups and reverse shots. Camera orientation is GFF
-`w,x,y,z`, and pitch is stored in degrees.
+Cameras `111`–`113` are the complete private combat sequence. Camera `114`
+remains a production-dialogue marker only and is never entered by `xt_dlg`.
+Production `xaria.dlg` owns its dialogue close-ups and reverse shots. Camera
+orientation is GFF `w,x,y,z`, and pitch is stored in degrees.
 
 ## Exit
 
@@ -3645,7 +4005,7 @@ def _build_once(
             "Private xt_* encounter templates, dialogue, state, and scripts are bundled in this MOD.",
             "Xaria production dialogue/recruitment scripts, models, 2DA rows, and runtime patches remain external dependencies.",
             "Three-beat order: Miststep Ambush, Ichor Lightning, Ichor Drain.",
-            "A stock invisible placeable owns a linked silent 30-second safety node under camera 111. Its blank reply and camera-114 sentinel keep the retail dialogue graph nonterminal while confirmed deaths drive the cuts. Confirmed deaths linger for 0.85 seconds before script-driven cuts; cameras 112 and 113 establish for 1.25 seconds; camera 114 holds for 2.25 seconds before the director dialogue ends explicitly and the guarded production handoff begins.",
+            "A stock invisible placeable owns a cyclic silent three-camera DLG. Cameras 111, 112, and 113 poll confirmed death masks every one second; each camera dispatches only its own beat after 1.25 seconds of pre-roll. Camera 113's proof-7 reply ends naturally and xt_camend performs the guarded production handoff. Camera marker 114 remains available to production dialogue but is absent from the private combat graph.",
             "The untouched 402dxna room keeps its eight stock 402dxna_lm0 channels so retail rendering does not collapse into green fog over black geometry.",
             "Visual terrain-kit dressing has zero WOK faces and cannot alter collision.",
         ),
@@ -3997,56 +4357,71 @@ def _build_once(
         if len(private_dialogue.starters) == 1
         else None
     )
-    dialogue_bridge = (
-        dialogue_root.links[0].node
-        if dialogue_root is not None and len(dialogue_root.links) == 1
-        else None
-    )
-    dialogue_sentinel = (
-        dialogue_bridge.links[0].node
-        if dialogue_bridge is not None and len(dialogue_bridge.links) == 1
-        else None
-    )
     dialogue_graph_ok = bool(
         private_dialogue.skippable is False
         and len(private_dialogue.starters) == 1
-        and len(dialogue_entries) == 2
-        and len(dialogue_replies) == 1
-        and not str(private_dialogue.on_end)
+        and len(dialogue_entries) == 3
+        and len(dialogue_replies) == 6
+        and str(private_dialogue.on_end).casefold() == "xt_camend"
+        and str(private_dialogue.on_abort).casefold() == "xt_camend"
         and dialogue_root is dialogue_entries[0]
-        and dialogue_bridge is dialogue_replies[0]
-        and dialogue_sentinel is dialogue_entries[1]
-        and dialogue_root.camera_angle == 6
-        and dialogue_root.camera_id == 111
-        and str(dialogue_root.script1) == "xt_b1"
-        and dialogue_root.delay == PRIVATE_DIALOGUE_DWELL_SECONDS
-        and dialogue_root.delay > PRIVATE_MAX_COMBAT_TIMELINE_SECONDS
-        and dialogue_root.links[0].is_child is False
-        and dialogue_bridge.links[0].is_child is False
-        and dialogue_sentinel.camera_angle == 6
-        and dialogue_sentinel.camera_id == 114
-        and dialogue_sentinel.delay == 1
-        and not str(dialogue_sentinel.script1)
-        and not str(dialogue_sentinel.script2)
-        and not dialogue_sentinel.links
+        and [entry.camera_id for entry in dialogue_entries] == [111, 112, 113]
+        and [entry.camera_angle for entry in dialogue_entries] == [6, 6, 6]
+        and [str(entry.script1).casefold() for entry in dialogue_entries]
+        == ["xt_b1", "xt_b2", "xt_b3"]
+        and [entry.delay for entry in dialogue_entries]
+        == [PRIVATE_CAMERA_POLL_SECONDS] * 3
+        and all(len(entry.links) == 2 for entry in dialogue_entries)
         and all(entry.text.stringref == -1 for entry in dialogue_entries)
         and all(not entry.text.get(0, 0) for entry in dialogue_entries)
-        and dialogue_bridge.text.stringref == -1
-        and not dialogue_bridge.text.get(0, 0)
+        and all(reply.text.stringref == -1 for reply in dialogue_replies)
+        and all(not reply.text.get(0, 0) for reply in dialogue_replies)
         and all(entry.unskippable for entry in dialogue_entries)
-        and dialogue_bridge.unskippable
+        and all(reply.unskippable for reply in dialogue_replies)
         and all(not str(entry.vo_resref) for entry in dialogue_entries)
-        and not str(dialogue_bridge.vo_resref)
+        and all(not str(reply.vo_resref) for reply in dialogue_replies)
         and all(int(entry.sound_exists) == 0 for entry in dialogue_entries)
-        and int(dialogue_bridge.sound_exists) == 0
+        and all(int(reply.sound_exists) == 0 for reply in dialogue_replies)
         and all(entry.plot_index == -1 for entry in dialogue_entries)
-        and dialogue_bridge.plot_index == -1
+        and all(reply.plot_index == -1 for reply in dialogue_replies)
         and all(entry.plot_xp_percentage == 0.0 for entry in dialogue_entries)
-        and dialogue_bridge.plot_xp_percentage == 0.0
+        and all(reply.plot_xp_percentage == 0.0 for reply in dialogue_replies)
     )
+    if dialogue_graph_ok:
+        for stage, condition in enumerate(
+            ("xt_c1done", "xt_c2done", "xt_c3done")
+        ):
+            advance_link, hold_link = dialogue_entries[stage].links
+            advance_reply = dialogue_replies[stage * 2]
+            hold_reply = dialogue_replies[stage * 2 + 1]
+            dialogue_graph_ok = bool(
+                advance_link.node is advance_reply
+                and str(advance_link.active1).casefold() == condition
+                and advance_link.active1_not is False
+                and advance_link.is_child is False
+                and hold_link.node is hold_reply
+                and str(hold_link.active1).casefold() == condition
+                and hold_link.active1_not is True
+                and hold_link.is_child is False
+                and len(hold_reply.links) == 1
+                and hold_reply.links[0].node is dialogue_entries[stage]
+                and hold_reply.links[0].is_child is True
+                and (
+                    (
+                        stage < 2
+                        and len(advance_reply.links) == 1
+                        and advance_reply.links[0].node
+                        is dialogue_entries[stage + 1]
+                        and advance_reply.links[0].is_child is False
+                    )
+                    or (stage == 2 and not advance_reply.links)
+                )
+            )
+            if not dialogue_graph_ok:
+                break
     if not dialogue_graph_ok:
         raise RuntimeError(
-            "Private teaser DLG lost its linked, nonterminal camera owner."
+            "Private teaser DLG lost its cyclic three-camera death gate."
         )
     readback["dialogue"] = {
         "skippable": private_dialogue.skippable,
@@ -4054,6 +4429,7 @@ def _build_once(
         "entry_scripts": [str(entry.script1) for entry in dialogue_entries],
         "entry_delays": [entry.delay for entry in dialogue_entries],
         "on_end_script": str(private_dialogue.on_end),
+        "on_abort_script": str(private_dialogue.on_abort),
         "silent_combat_entry_count": sum(
             entry.text.stringref == -1 and not entry.text.get(0, 0)
             for entry in dialogue_entries
@@ -4064,7 +4440,7 @@ def _build_once(
         "production_dialogue_resref": PRODUCTION_DIALOGUE,
         "voice_lookup": dict(TEASER_VOICE_LOOKUP),
         "maximum_combat_timeline_seconds": PRIVATE_MAX_COMBAT_TIMELINE_SECONDS,
-        "dialogue_dwell_seconds": PRIVATE_DIALOGUE_DWELL_SECONDS,
+        "dialogue_poll_seconds": PRIVATE_CAMERA_POLL_SECONDS,
         "graph_ok": dialogue_graph_ok,
     }
     readback["encounter_schema"] = {

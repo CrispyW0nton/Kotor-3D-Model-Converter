@@ -95,6 +95,7 @@ from src.core.rendering.mesh_render_data import (
     _animated_node_world_transform,
     _bas_attachment_world_transform,
     _effective_animation_pose_for_node,
+    _node_is_embedded_walkmesh,
     _pose_node_for_transform,
     animation_pose_applies_to_node,
     animation_pose_for_node,
@@ -2426,6 +2427,12 @@ class GpuRenderer:
                 cutout_nodes      = []
                 transparent_nodes = []
                 for node in nodes:
+                    # Stock room MDLs embed AABB/pathing geometry in the same
+                    # hierarchy as their visual meshes.  It has no diffuse map
+                    # and must be presented only by the walkmesh overlay; drawing
+                    # it here creates a white, slightly offset duplicate room.
+                    if _node_is_embedded_walkmesh(node):
+                        continue
                     if getattr(node, '_gr_hidden', False):
                         continue
                     if not getattr(node, 'render', True):

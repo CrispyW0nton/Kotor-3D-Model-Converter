@@ -132,7 +132,7 @@ class AuthoredRoomOpeningIntentUpdate:
 
 @dataclass(frozen=True)
 class AuthoredRoomDragSnapPreview:
-    """Disposable doorway magnet solution for dragging one complete room."""
+    """Disposable doorway or terrain-edge solution for one whole-room drag."""
 
     magnet_snapped: bool
     source_room_resref: str
@@ -151,6 +151,9 @@ class AuthoredRoomDragSnapPreview:
     opening_height: float = 0.0
     target_label: str = ""
     reason: str = ""
+    snap_kind: str = "doorway"
+    source_terrain_edge: str = ""
+    target_terrain_edge: str = ""
 
     def as_payload(self) -> dict[str, object]:
         return {
@@ -171,12 +174,368 @@ class AuthoredRoomDragSnapPreview:
             "opening_height": float(self.opening_height),
             "target_label": self.target_label,
             "reason": self.reason,
+            "snap_kind": self.snap_kind,
+            "source_terrain_edge": self.source_terrain_edge,
+            "target_terrain_edge": self.target_terrain_edge,
         }
 
 
 def _floor_plan_room_primitive(room: AuthoredRoomSpec) -> FloorPlanRoomPrimitive | None:
     primitive = room.primitive
     return primitive if isinstance(primitive, FloorPlanRoomPrimitive) else None
+
+
+def _terrain_room_primitive(room: AuthoredRoomSpec) -> Any | None:
+    from .authored_terrain_builder import TerrainHeightfieldPrimitive
+
+    primitive = room.primitive
+    return primitive if isinstance(primitive, TerrainHeightfieldPrimitive) else None
+
+
+_TERRAIN_EDGE_PAIRS = (
+    ("left", "right"),
+    ("right", "left"),
+    ("bottom", "top"),
+    ("top", "bottom"),
+)
+
+
+def _terrain_edge_sample_count(primitive: Any, edge: str) -> int:
+    rows = tuple(tuple(float(value) for value in row) for row in tuple(primitive.heights or ()))
+    if not rows:
+        return 0
+    return len(rows) if edge in {"left", "right"} else len(rows[0])
+
+
+def _terrain_edge_length(primitive: Any, edge: str) -> float:
+    return float(primitive.depth if edge in {"left", "right"} else primitive.width)
+
+
+def _terrain_edge_midpoint_local(primitive: Any, edge: str) -> tuple[float, float, float]:
+    rows = tuple(tuple(float(value) for value in row) for row in tuple(primitive.heights or ()))
+    if edge == "left":
+        heights = tuple(row[0] for row in rows)
+        return (-float(primitive.width) * 0.5, 0.0, sum(heights) / len(heights))
+    if edge == "right":
+        heights = tuple(row[-1] for row in rows)
+        return (float(primitive.width) * 0.5, 0.0, sum(heights) / len(heights))
+    heights = rows[0] if edge == "bottom" else rows[-1]
+    return (
+        0.0,
+        (-1.0 if edge == "bottom" else 1.0) * float(primitive.depth) * 0.5,
+        sum(heights) / len(heights),
+    )
+
+
+def _preview_terrain_room_drag_snap(
+    project: AuthoredModuleProject,
+    *,
+    source_room: AuthoredRoomSpec,
+    world_delta: tuple[float, float, float],
+    snap_distance: float,
+    target_room_resref: str,
+) -> AuthoredRoomDragSnapPreview:
+    source_primitive = _terrain_room_primitive(source_room)
+    source_name = _room_name(source_room)
+    source_origin = tuple(float(value) for value in source_room.position)
+    proposed = tuple(source_origin[index] + world_delta[index] for index in range(3))
+    wanted_target = normalise_resref(target_room_resref)
+    best: AuthoredRoomDragSnapPreview | None = None
+    incompatible = False
+    for target_room in project.rooms:
+        target_name = _room_name(target_room)
+        target_primitive = _terrain_room_primitive(target_room)
+        if (
+            target_name == source_name
+            or target_primitive is None
+            or (wanted_target and target_name != wanted_target)
+        ):
+            continue
+        target_origin = tuple(float(value) for value in target_room.position)
+        for source_edge, target_edge in _TERRAIN_EDGE_PAIRS:
+            source_count = _terrain_edge_sample_count(source_primitive, source_edge)
+            target_count = _terrain_edge_sample_count(target_primitive, target_edge)
+            if (
+                source_count != target_count
+                or source_count < 2
+                or not math.isclose(
+                    _terrain_edge_length(source_primitive, source_edge),
+                    _terrain_edge_length(target_primitive, target_edge),
+                    abs_tol=1.0e-5,
+                )
+            ):
+                incompatible = True
+                continue
+            snapped = [proposed[0], proposed[1], proposed[2]]
+            if source_edge == "left":
+                snapped[0] = target_origin[0] + float(target_primitive.width) * 0.5 + float(source_primitive.width) * 0.5
+                snapped[1] = target_origin[1]
+            elif source_edge == "right":
+                snapped[0] = target_origin[0] - float(target_primitive.width) * 0.5 - float(source_primitive.width) * 0.5
+                snapped[1] = target_origin[1]
+            elif source_edge == "bottom":
+                snapped[0] = target_origin[0]
+                snapped[1] = target_origin[1] + float(target_primitive.depth) * 0.5 + float(source_primitive.depth) * 0.5
+            else:
+                snapped[0] = target_origin[0]
+                snapped[1] = target_origin[1] - float(target_primitive.depth) * 0.5 - float(source_primitive.depth) * 0.5
+            distance = math.hypot(snapped[0] - proposed[0], snapped[1] - proposed[1])
+            within = distance <= max(0.05, float(snap_distance))
+            candidate = AuthoredRoomDragSnapPreview(
+                magnet_snapped=within,
+                source_room_resref=source_name,
+                target_room_resref=target_name,
+                source_opening_name=f"terrain_{source_edge}",
+                position=tuple(snapped),
+                world_delta=tuple(snapped[index] - source_origin[index] for index in range(3)),
+                snap_distance=distance,
+                opening_width=_terrain_edge_length(source_primitive, source_edge) / float(source_count - 1),
+                opening_height=0.0,
+                target_label=f"{target_name} — {target_edge} terrain edge",
+                reason=(
+                    f"Release to weld the {source_edge} edge to {target_name}'s {target_edge} edge; matching WOK traversal is automatic."
+                    if within
+                    else "Move the terrain patch closer to a compatible edge."
+                ),
+                snap_kind="terrain_seam",
+                source_terrain_edge=source_edge,
+                target_terrain_edge=target_edge,
+            )
+            if best is None or candidate.snap_distance < best.snap_distance:
+                best = candidate
+    if best is None:
+        reason = (
+            "Terrain edges need the same physical length and sample count before they can be welded safely."
+            if incompatible
+            else "Create another terrain surface, then move this patch near one of its edges."
+        )
+        return AuthoredRoomDragSnapPreview(
+            False,
+            source_name,
+            position=proposed,
+            world_delta=world_delta,
+            reason=reason,
+            snap_kind="terrain_seam",
+        )
+    if best.magnet_snapped:
+        return best
+    return replace(best, position=proposed, world_delta=world_delta)
+
+
+def _terrain_edge_values(primitive: Any, edge: str) -> tuple[float, ...]:
+    rows = tuple(tuple(float(value) for value in row) for row in tuple(primitive.heights or ()))
+    if edge == "left":
+        return tuple(row[0] for row in rows)
+    if edge == "right":
+        return tuple(row[-1] for row in rows)
+    return tuple(rows[0] if edge == "bottom" else rows[-1])
+
+
+def _replace_terrain_edge_values(primitive: Any, edge: str, values: tuple[float, ...]) -> Any:
+    rows = [list(float(value) for value in row) for row in tuple(primitive.heights or ())]
+    if edge in {"left", "right"}:
+        column = 0 if edge == "left" else -1
+        for index, value in enumerate(values):
+            rows[index][column] = float(value)
+    else:
+        row = 0 if edge == "bottom" else -1
+        rows[row] = [float(value) for value in values]
+    return replace(primitive, heights=tuple(tuple(row) for row in rows))
+
+
+def _terrain_edge_portal_metadata(primitive: Any, edge: str, magnet_id: str) -> dict[str, Any]:
+    rows = tuple(tuple(float(value) for value in row) for row in tuple(primitive.heights or ()))
+    sample_count = _terrain_edge_sample_count(primitive, edge)
+    segment = max(0, min(sample_count - 2, (sample_count - 1) // 2))
+    if edge in {"left", "right"}:
+        x = (-1.0 if edge == "left" else 1.0) * float(primitive.width) * 0.5
+        step = float(primitive.depth) / float(sample_count - 1)
+        y0 = -float(primitive.depth) * 0.5 + step * segment
+        start = (x, y0, rows[segment][0 if edge == "left" else -1])
+        end = (x, y0 + step, rows[segment + 1][0 if edge == "left" else -1])
+    else:
+        y = (-1.0 if edge == "bottom" else 1.0) * float(primitive.depth) * 0.5
+        step = float(primitive.width) / float(sample_count - 1)
+        x0 = -float(primitive.width) * 0.5 + step * segment
+        row = rows[0 if edge == "bottom" else -1]
+        start = (x0, y, row[segment])
+        end = (x0 + step, y, row[segment + 1])
+    midpoint = tuple((start[index] + end[index]) * 0.5 for index in range(3))
+    return {
+        "magnet_id": magnet_id,
+        "start": list(start),
+        "end": list(end),
+        "midpoint": list(midpoint),
+        "width_m": math.dist(start, end),
+        "terrain_edge": edge,
+        "auto_generated": True,
+    }
+
+
+def _terrain_connection_point(edge: str, portal: dict[str, Any], magnet_id: str) -> dict[str, Any]:
+    angle = {"left": math.pi, "right": 0.0, "bottom": -math.pi * 0.5, "top": math.pi * 0.5}[edge]
+    return {
+        "door": magnet_id,
+        "local_position": list(portal["midpoint"]),
+        "orientation": [0.0, 0.0, math.sin(angle * 0.5), math.cos(angle * 0.5)],
+        "opening_kind": "terrain_seam",
+        "auto_generated": True,
+    }
+
+
+def _replace_named_metadata_row(rows: Any, key: str, value: str, row: dict[str, Any]) -> list[dict[str, Any]]:
+    wanted = str(value or "").strip().lower()
+    kept = [
+        dict(existing or {})
+        for existing in tuple(rows or ())
+        if str(dict(existing or {}).get(key) or "").strip().lower() != wanted
+    ]
+    kept.append(row)
+    return kept
+
+
+def _connect_terrain_room_drag_snap(
+    project: AuthoredModuleProject,
+    values: dict[str, Any],
+) -> AuthoredRoomConnectionUpdate:
+    source_name = normalise_resref(values.get("source_room_resref"))
+    target_name = normalise_resref(values.get("target_room_resref"))
+    source_edge = str(values.get("source_terrain_edge") or "").strip().lower()
+    target_edge = str(values.get("target_terrain_edge") or "").strip().lower()
+    source_room = next((room for room in project.rooms if _room_name(room) == source_name), None)
+    target_room = next((room for room in project.rooms if _room_name(room) == target_name), None)
+    source_primitive = _terrain_room_primitive(source_room) if source_room is not None else None
+    target_primitive = _terrain_room_primitive(target_room) if target_room is not None else None
+    if (
+        source_primitive is None
+        or target_primitive is None
+        or (source_edge, target_edge) not in _TERRAIN_EDGE_PAIRS
+    ):
+        raise ValueError("The terrain seam changed before the patch was released.")
+    if (
+        _terrain_edge_sample_count(source_primitive, source_edge)
+        != _terrain_edge_sample_count(target_primitive, target_edge)
+        or not math.isclose(
+            _terrain_edge_length(source_primitive, source_edge),
+            _terrain_edge_length(target_primitive, target_edge),
+            abs_tol=1.0e-5,
+        )
+    ):
+        raise ValueError("Terrain seams require matching edge length and sample count.")
+    position = tuple(float(value) for value in tuple(values.get("position") or ())[:3])
+    if len(position) != 3:
+        raise ValueError("The snapped terrain position is incomplete.")
+    target_world_heights = tuple(
+        float(value) + float(target_room.position[2])
+        for value in _terrain_edge_values(target_primitive, target_edge)
+    )
+    source_local_heights = tuple(value - position[2] for value in target_world_heights)
+    source_primitive = _replace_terrain_edge_values(source_primitive, source_edge, source_local_heights)
+    source_magnet = f"terrain_{source_edge}"
+    target_magnet = f"terrain_{target_edge}"
+    source_portal = _terrain_edge_portal_metadata(source_primitive, source_edge, source_magnet)
+    target_portal = _terrain_edge_portal_metadata(target_primitive, target_edge, target_magnet)
+    source_primitive_metadata = dict(source_primitive.metadata or {})
+    source_primitive_metadata["walkmesh_portals"] = _replace_named_metadata_row(
+        source_primitive_metadata.get("walkmesh_portals"), "magnet_id", source_magnet, source_portal
+    )
+    source_primitive_metadata["terrain_seams_auto_welded"] = True
+    source_primitive = replace(source_primitive, metadata=source_primitive_metadata)
+    target_primitive_metadata = dict(target_primitive.metadata or {})
+    target_primitive_metadata["walkmesh_portals"] = _replace_named_metadata_row(
+        target_primitive_metadata.get("walkmesh_portals"), "magnet_id", target_magnet, target_portal
+    )
+    target_primitive_metadata["terrain_seams_auto_welded"] = True
+    target_primitive = replace(target_primitive, metadata=target_primitive_metadata)
+    source_room_metadata = dict(source_room.metadata or {})
+    source_room_metadata["connection_points"] = _replace_named_metadata_row(
+        source_room_metadata.get("connection_points"),
+        "door",
+        source_magnet,
+        _terrain_connection_point(source_edge, source_portal, source_magnet),
+    )
+    target_room_metadata = dict(target_room.metadata or {})
+    target_room_metadata["connection_points"] = _replace_named_metadata_row(
+        target_room_metadata.get("connection_points"),
+        "door",
+        target_magnet,
+        _terrain_connection_point(target_edge, target_portal, target_magnet),
+    )
+    rooms = []
+    for room in project.rooms:
+        room_name = _room_name(room)
+        if room_name == source_name:
+            rooms.append(
+                replace(
+                    room,
+                    primitive=source_primitive,
+                    position=position,
+                    visible_rooms=tuple(
+                        dict.fromkeys((*tuple(room.visible_rooms or ()), source_name, target_name))
+                    ),
+                    metadata=source_room_metadata,
+                )
+            )
+        elif room_name == target_name:
+            rooms.append(
+                replace(
+                    room,
+                    primitive=target_primitive,
+                    visible_rooms=tuple(
+                        dict.fromkeys((*tuple(room.visible_rooms or ()), target_name, source_name))
+                    ),
+                    metadata=target_room_metadata,
+                )
+            )
+        else:
+            rooms.append(room)
+    updated = replace(project, rooms=tuple(rooms))
+    from .authored_module_walkmesh import (
+        compile_authored_room_connection_walkmeshes,
+        upsert_authored_walkmesh_room_connection,
+    )
+
+    updated = upsert_authored_walkmesh_room_connection(
+        updated,
+        source_room_resref=source_name,
+        source_hook_name=source_magnet,
+        target_room_resref=target_name,
+        target_hook_name=target_magnet,
+        connection_source="map_studio_terrain_edge_snap",
+    )
+    build = compile_authored_room_connection_walkmeshes(updated)
+    if not build.ready:
+        raise ValueError(" ".join(build.blocking_issues))
+    extra = dict(updated.extra or {})
+    extra["last_walkmesh_build"] = {
+        "operation": "connect_terrain_edges",
+        "auto_generated": True,
+        "portal_count": len(build.portals),
+        "room_face_counts": {
+            room_resref: len(tuple(wok.faces or ())) for room_resref, wok in build.room_woks.items()
+        },
+        "midpoint_gaps_m": [float(portal.midpoint_gap) for portal in build.portals],
+        "ready": True,
+    }
+    updated = replace(updated, extra=extra)
+    hooks = {
+        (hook.room_resref, hook.opening_name.lower()): hook
+        for hook in authored_room_connection_hooks(updated)
+    }
+    source_hook = hooks[(source_name, source_magnet)]
+    target_hook = hooks[(target_name, target_magnet)]
+    translation = tuple(position[index] - float(source_room.position[index]) for index in range(3))
+    return AuthoredRoomConnectionUpdate(
+        project=updated,
+        source_hook=source_hook,
+        target_hook=target_hook,
+        rotation_degrees=0.0,
+        translation=translation,
+        summary=(
+            f"Welded {source_name}'s {source_edge} terrain edge to {target_name}'s {target_edge} edge "
+            "and generated a reciprocal WOK portal."
+        ),
+    )
 
 
 def _opening_kind(opening: FloorPlanWallOpening) -> str:
@@ -1024,11 +1383,19 @@ def preview_authored_room_drag_snap(
     target_edge_index: int = -1,
     target_opening_name: str = "",
 ) -> AuthoredRoomDragSnapPreview:
-    """Solve the closest exact doorway connection for a whole-room drag."""
+    """Solve the closest exact doorway or terrain-edge connection for a room drag."""
 
     clean_source = normalise_resref(source_room_resref)
     source_room = next((room for room in project.rooms if _room_name(room) == clean_source), None)
     delta_values = tuple(float(value) for value in tuple(world_delta or ())[:3])
+    if source_room is not None and _terrain_room_primitive(source_room) is not None and len(delta_values) == 3:
+        return _preview_terrain_room_drag_snap(
+            project,
+            source_room=source_room,
+            world_delta=delta_values,
+            snap_distance=float(snap_distance),
+            target_room_resref=target_room_resref,
+        )
     if source_room is None or _floor_plan_room_primitive(source_room) is None or len(delta_values) != 3:
         return AuthoredRoomDragSnapPreview(False, clean_source, reason="Only one authored floor-plan room can doorway-snap at a time.")
     source_origin = tuple(float(value) for value in source_room.position)
@@ -1145,11 +1512,13 @@ def connect_authored_room_drag_snap(
     project: AuthoredModuleProject,
     preview: AuthoredRoomDragSnapPreview | dict[str, Any],
 ) -> AuthoredRoomConnectionUpdate:
-    """Commit the exact previewed room magnet, including an automatic source cut."""
+    """Commit the exact previewed doorway magnet or terrain edge weld."""
 
     values = preview.as_payload() if isinstance(preview, AuthoredRoomDragSnapPreview) else dict(preview or {})
     if not bool(values.get("magnet_snapped", False)):
         raise ValueError("Move the room close enough for a doorway magnet before releasing it.")
+    if str(values.get("snap_kind") or "doorway").strip().lower() == "terrain_seam":
+        return _connect_terrain_room_drag_snap(project, values)
     working = project
     source_hook_id = str(values.get("source_hook_id") or "")
     target_hook_id = str(values.get("target_hook_id") or "")

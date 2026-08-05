@@ -49,6 +49,7 @@ class RetargetPreviewExportRequest:
     verify_roundtrip: bool = True
     write_manifest: bool = True
     roundtrip_tolerance: float = 1e-4
+    max_size_multiplier: float = 5.0
     kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
     requires_custom_animation_patch: bool = False
     target_mdl_bytes: bytes | None = None
@@ -131,6 +132,7 @@ def export_retarget_preview_override(
                 overwrite_existing=request.replace_existing,
                 verify_roundtrip=request.verify_roundtrip,
                 roundtrip_tolerance=request.roundtrip_tolerance,
+                max_size_multiplier=float(request.max_size_multiplier),
                 target_model_override=copy.deepcopy(request.original_target_model),
                 resource_manager=request.resource_manager,
                 kotor_output_name_mode=output_mode,

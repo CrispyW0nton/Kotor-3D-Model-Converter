@@ -128,6 +128,37 @@ def test_interactive_library_exposes_true_utd_rows_and_rejects_unbacked_door_mod
     ) is None
 
 
+def test_creature_palette_requires_a_real_utc_instead_of_advertising_a_model() -> None:
+    from src.core.modules.authored_gameplay_palette import gameplay_palette_entry_from_library_row
+
+    gizka_model = gameplay_palette_entry_from_library_row(
+        {
+            "game": "K1",
+            "resref": "c_gizka",
+            "restype": "mdl",
+            "category": "Creatures",
+            "subcategory": "Gizka",
+            "source": "models.bif",
+        }
+    )
+    gizka_utc = gameplay_palette_entry_from_library_row(
+        {
+            "game": "K1",
+            "resref": "tat_gizka_01",
+            "restype": "utc",
+            "category": "Creatures",
+            "subcategory": "Gizka",
+            "source": "module:tat_m17aa.rim",
+        }
+    )
+
+    assert gizka_model is None
+    assert gizka_utc is not None
+    assert gizka_utc.kind == "creature"
+    assert gizka_utc.template_resref == "tat_gizka_01"
+    assert gizka_utc.confidence == "template"
+
+
 def test_non_core_interactive_templates_bundle_declared_utp_utd_dlg_ncs_uti_graph() -> None:
     from pykotor.common.misc import InventoryItem, ResRef
     from pykotor.resource.generics.dlg import DLG, DLGEntry, DLGLink, bytes_dlg

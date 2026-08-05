@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from src.core.export.export_job import (
     ExportJobContext,
@@ -302,3 +306,175 @@ def test_manifest_writer_output_is_promoted(tmp_path: Path) -> None:
     assert result.manifest_path == manifest
     assert manifest.exists()
     assert json.loads(manifest.read_text(encoding="utf-8"))["job_id"] == "job1"
+
+
+def _selected_export_triangle_model(name: str, texture: str):
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    mesh = ModelNode(
+        name=f"{name}_mesh",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(math.sqrt(0.5), math.sqrt(0.5), 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[(0.1, 0.2), (0.8, 0.2), (0.1, 0.9)],
+        faces=[(0, 1, 2)],
+        face_mats=[0],
+        texture=texture,
+        texture_names=[texture],
+        tex_count=1,
+    )
+    return KotorModel(name=name, classification="tile", root_node=mesh)
+
+
+def test_selected_fbx_merge_bakes_transforms_and_preserves_material_uv_channels() -> None:
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    first = _selected_export_triangle_model("first", "stone")
+    first.root_node.position = (1.0, 0.0, 0.0)
+    second = _selected_export_triangle_model("second", "sky")
+    objects = [
+        SimpleNamespace(
+            name="First Room",
+            metadata={"_runtime_model": first},
+            transform=SimpleNamespace(
+                position=(10.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(2.0, 1.0, 1.0),
+            ),
+        ),
+        SimpleNamespace(
+            name="Skybox",
+            metadata={"_runtime_model": second},
+            transform=SimpleNamespace(
+                position=(0.0, 5.0, 0.0),
+                rotation=(0.0, 0.0, 90.0),
+                scale=(1.0, 2.0, 1.0),
+            ),
+        ),
+    ]
+
+    merged = merge_selected_scene_objects(objects, name="module_selection")
+    mesh = merged.root_node
+
+    assert mesh is not None
+    assert merged.name == "module_selection"
+    assert len(merged.mesh_nodes()) == 1
+    assert len(mesh.faces) == 2
+    assert len(mesh.vertices) == 6
+    expected_vertices = [
+        (12.0, 0.0, 0.0),
+        (14.0, 0.0, 0.0),
+        (12.0, 1.0, 0.0),
+        (0.0, 5.0, 0.0),
+        (0.0, 6.0, 0.0),
+        (-2.0, 5.0, 0.0),
+    ]
+    for actual, expected in zip(mesh.vertices, expected_vertices):
+        assert actual == pytest.approx(expected)
+    assert mesh.normals[0] == pytest.approx((math.sqrt(0.2), math.sqrt(0.8), 0.0))
+    assert mesh.normals[3] == pytest.approx((-math.sqrt(0.2), math.sqrt(0.8), 0.0))
+    assert mesh.uvs == first.root_node.uvs + second.root_node.uvs
+    assert mesh.uvs_lm == first.root_node.uvs_lm + second.root_node.uvs_lm
+    assert mesh.face_mats == [0, 1]
+    assert [slot.texture for slot in mesh._gr_fbx_material_slots] == ["stone", "sky"]
+
+
+def test_builtin_ascii_fbx_exports_selected_objects_as_one_multimaterial_mesh(
+    tmp_path: Path,
+) -> None:
+    from src.converters.mesh_converter import FBXExporter
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    selected = [
+        SimpleNamespace(
+            name=f"Room {index + 1}",
+            metadata={
+                "_runtime_model": _selected_export_triangle_model(
+                    f"room_{index}",
+                    texture,
+                )
+            },
+            transform=SimpleNamespace(
+                position=(float(index) * 2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+        for index, texture in enumerate(("stone", "sky"))
+    ]
+    merged = merge_selected_scene_objects(selected)
+    output = tmp_path / "selection.fbx"
+
+    assert FBXExporter().export(
+        merged,
+        str(output),
+        export_rigging=False,
+        export_manifest=False,
+        force_ascii=True,
+    )
+
+    text = output.read_text(encoding="utf-8")
+    assert text.count("\tGeometry:") == 1
+    assert text.count("\tMaterial:") == 2
+    assert 'MappingInformationType: "ByPolygon"' in text
+    assert "Materials: *2" in text
+    assert "\t\t\t\ta: 0,1" in text
+
+
+def test_export_selected_module_routes_marquee_selection_to_one_mesh_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.gui.windows.application_core.shared import model_io
+
+    room = SimpleNamespace(
+        id="room-id",
+        name="m14aa_01c",
+        metadata={"module_group": {"module_root": "m14aa_01"}},
+    )
+    sky = SimpleNamespace(
+        id="sky-id",
+        name="m14aa_01h",
+        metadata={"module_group": {"module_root": "m14aa_01"}},
+    )
+    captured: dict[str, object] = {}
+    output = tmp_path / "module_selection.fbx"
+
+    class _Harness(model_io.ModelIoMixin):
+        scene_manager = SimpleNamespace(
+            active_scene=SimpleNamespace(objects=[room, sky]),
+            get_selected_objects=lambda: [sky],
+        )
+        viewport = SimpleNamespace(
+            _selected_viewport_nodes=[
+                SimpleNamespace(_gr_scene_object_id="room-id"),
+                SimpleNamespace(_gr_scene_object_id="sky-id"),
+            ]
+        )
+        settings_data = {"fbx_sdk": {}}
+
+        def _get_tex_cache_for_export(self):
+            return "texture-cache"
+
+        def _run_io_async(self, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+
+        def _log(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        model_io.QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output), "Standard FBX (*.fbx)"),
+    )
+
+    _Harness()._export_selected_fbx()
+
+    args = captured["args"]
+    kwargs = captured["kwargs"]
+    assert args[1] is model_io._work_export_selected_fbx
+    assert args[2] == [room, sky]
+    assert args[3] == str(output)
+    assert kwargs["tex_cache"] == "texture-cache"

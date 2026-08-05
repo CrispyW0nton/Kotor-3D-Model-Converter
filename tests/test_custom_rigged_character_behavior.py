@@ -301,6 +301,7 @@ def test_creature_sound_uses_native_ssf_without_wrapping_zakkeg_ai_hooks(tmp_pat
     assert prepared.report["creature_sounds"]["delivery"] == "native_ssf_soundset"
     assert prepared.report["creature_sounds"]["preserves_direct_utc_event_hooks"] is True
     assert prepared.report["creature_sounds"]["cues"][0]["ssf_slots"] == ["PAIN_GRUNT_1"]
+    assert prepared.report["template"]["sha256"] == template.sha256
 
     model = tmp_path / "sound-model"
     model.mkdir()

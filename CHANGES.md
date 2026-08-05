@@ -9,7 +9,427 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-08-05
+
+### [2026-08-05] fix K1 room lightmaps and add one-mesh Export Selected FBX
+
+Owner: LordVaderCW
+
+Subsystem: ModernGL KOTOR materials, KMAX scene selection, and FBX export.
+
+Corrected K1 module rendering so authored RGB/RGBA lightmap atlases use their
+raw MDX UV2 coordinates instead of the diffuse texture's vertical conversion.
+The baked-lightmap path now follows the reference diffuse-times-lightmap
+composite without the former overbright multiplier and ambient floor.
+
+Removed the remaining white, slightly offset duplicate surfaces by excluding
+embedded AABB walkmesh nodes from the standard visual draw list. Stock room
+MDLs keep those pathing meshes beside the visual geometry; they have no diffuse
+map and must appear only through Ghost Studio's dedicated walkmesh overlay.
+
+Added `File > Export Selected FBX...`. A clicked room/skybox or a marquee
+selection is resolved back to its scene objects, scene and node transforms are
+baked, and the static selection is flattened into one FBX geometry while
+retaining polygon materials, diffuse UVs, lightmap UVs, normals, and texture
+sidecars.
+
+Affected files:
+
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/gpu_shaders.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/mesh_render_data.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_exporter.py`
+- `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_scene_adapter.py`
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py`
+- native payload manifests for Rendering, IO, and GUI Display
+- focused renderer/export regressions in `tests/test_regression.py` and
+  `tests/test_export_job.py`
+
+Verification:
+
+- MCP-equivalent PyKotor/GhostRigger comparisons passed for all nine `m14aa`
+  rooms; `m14aa_01c` matched at 134 nodes, 11,750 visual vertices, and 5,727
+  visual faces.
+- Audited all nine `m14aa` rooms: every lightmap is uncompressed RGB/RGBA and
+  PyKotor's reference GL path samples UV2 unchanged.
+- Real Debug application loaded all nine Courtyard rooms with 78,968 vertices,
+  38,945 faces, 727 visual meshes, and 67 textures. The renderer trace identified
+  five erroneous `WalkMesh_*` draws; after the fix the live HUD dropped from 732
+  to the correct 727 meshes and the interior capture contained no white proxy
+  surfaces or per-triangle atlas patchwork.
+- Rebuilt the Native Core Host and staged all 18 manifest-owned Debug DLLs into
+  the repository-root launcher used by artists. The launched root executable
+  loaded the staged Rendering DLL by exact path and SHA-256; with its sky/ground
+  helpers hidden, the same courtyard view dropped from the broken 726 meshes and
+  41,547 triangles to 721 visual meshes and 38,783 source faces, proving that all
+  five embedded walkmesh proxies were excluded from the visible draw list.
+- In the Debug application, selecting `m14aa_01h` enabled
+  `File > Export Selected FBX...` and opened its save dialog.
+- Real nine-room merge produced one geometry with 38,945 faces, 116,835
+  corner-expanded vertices, 25 polygon materials, both UV channels, and the
+  original 2325 x 2325 x 1005 bounds.
+- Focused lightmap and selection-export regressions passed; individual Debug
+  Rendering, IO, and GUI Display payload projects built successfully.
+
+## 2026-08-03
+
+### [2026-08-03] synchronize revised Atton and Kreia Xaria reactions
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser production voice dependency validation.
+
+Intersects: Kotor Patch Manager installed PLCaa receipt
+`logs/k2-plcaa-xaria-staging/20260803T115441/stage-manifest.json`.
+
+The private xartease encounter now hash-pins and packages the revised local
+VoxCPM performances for `997atton001` and `997kreia001`, together with their
+new LIP files. Atton's take is authored as sarcastic and Kreia's as measured.
+Stable dialogue ResRefs and the production conditional reaction order are
+unchanged.
+
+Affected files:
+
+- `scripts/build_xaria_teaser_map.py`
+- generated `artifacts/xaria_teaser/xartease.mod` and proof/manifest artifacts
+
+Verification:
+
+- 30 focused Ghost Studio teaser-map tests passed.
+- The builder rejected the old audio/LIP hashes and accepted only the revised
+  PLCaa candidate.
+- `xartease.mod`: 1,248,049 bytes, SHA-256
+  `50F34095BCE9722B4F8991B28C1B97B52BAE8C62CABF54DEE74A0A36D2B34B32`.
+- KPM installed the module transactionally and verified 361 live dependencies;
+  receipt:
+  `logs/k2-xaria-teaser-staging/20260803T121512796118/stage-manifest.json`.
+- Runtime acting, audibility, and LIP synchronization remain pending an
+  in-game recruitment test with Atton and Kreia present.
+
+### [2026-08-03] package authored Xaria power sounds with xartease
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser production dependency validation and deterministic
+packaging.
+
+Intersects: Kotor Patch Manager no-install candidate
+`logs/k2-plcaa-xaria-staging/20260803T093759/candidates`; no live-game staging
+or installation was performed.
+
+The teaser's exact external-dependency contract now includes the six retail
+PCM WAV resources used by the production power scripts: Miststep, Ichor
+Lightning, Ichor Drain, Raise Dead, Veil activation, and the sample-reversed
+Veil deactivation cue. This keeps `xartease` on the same audio path as PLCaa
+and normal gameplay instead of relying on stock showcase sounds.
+
+Affected files:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- generated `artifacts/xaria_teaser/xartease.mod` and proof/manifest artifacts
+
+Verification:
+
+- Focused external-dependency contract test passed.
+- Built twice with `XARIA_CANDIDATE_ROOT` set to the exact no-install KPM
+  candidate; determinism and structural proof passed.
+- Structural proof hash-binds all six WAVs with `verified: true`.
+- `xartease.mod`: 1,248,049 bytes, SHA-256
+  `50F34095BCE9722B4F8991B28C1B97B52BAE8C62CABF54DEE74A0A36D2B34B32`.
+- KPM's xartease stager accepted the expanded exact dependency set in
+  no-install validation.
+
+## 2026-08-02
+
+### [2026-08-02] refresh the 48-line Xaria production voice contract
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser production dependency validation and deterministic
+packaging.
+
+Intersects: Kotor Patch Manager dry-run candidate
+`logs/k2-plcaa-xaria-staging/20260802T230526/candidates`; no live-game staging
+or installation was performed.
+
+Expanded the production voice map from 33 to 48 WAV/LIP pairs. The new
+`xv_warn` through `xv_withhold` sources map in order to `997xaria017` through
+`997xaria031`, and every WAV/LIP SHA-256 pin now matches the exact dry-run
+candidate. Private encounter cloning now consumes the candidate's
+`xar_nydak1.utc` through `xar_nydak3.utc` sources while preserving the private
+`xt_wr1` through `xt_wr3` module resource names. The workflow documentation and
+focused contract tests now describe and enforce the current 48-line package.
+
+Affected files:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- generated `artifacts/xaria_teaser/xartease.mod` and proof/manifest artifacts
+
+Verification:
+
+- Rehashed all 48 candidate WAVs and all 48 candidate LIPs against the builder
+  pins with no mismatches.
+- Built `xartease` with `XARIA_CANDIDATE_ROOT` set to the exact `20260802T230526`
+  dry-run candidate; the two-build determinism proof and structural proof both
+  passed. `xartease.mod` SHA-256:
+  `EA6F0E1AB59CFC27811C14003050B02921F19E43EA7302101A9E6C8AAC7088A6`.
+- `py -m pytest tests/test_xaria_teaser_map.py -q` — 30 passed.
+- `py -m ruff check scripts/build_xaria_teaser_map.py tests/test_xaria_teaser_map.py`
+  — passed.
+- `py -m py_compile scripts/build_xaria_teaser_map.py tests/test_xaria_teaser_map.py`
+  — passed.
+- Confirmed the source KPM session reports `installed: false` and
+  `install_state: not_requested`; no stage/install command was run.
+
+### [2026-08-02] T3405 open imported DLGs with detached editor nodes
+
+Owner: LordVaderCW
+
+Task: T3405
+
+Subsystem: Scripting Suite DLG import and Core Workflow embedded payload.
+
+Intersects: existing GhostRigger.Core.Workflow retargeting and character payload
+edits in the shared working tree.
+
+Ghost Studio now opens structurally valid imported DLGs whose raw `EntryList`
+or `ReplyList` includes detached editor records. K2 `DisplayInactive` hydration
+maps reachable dialogue nodes through their original GFF list indices, while
+compact authored/writer output retains positional mapping. Detached source
+records remain protected, so topology changes still require **Make Editable
+Copy** and the imported bytes and path remain untouched.
+
+Affected files:
+
+- `src/core/scripting/studio.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/scripting/studio.py`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`
+- `tests/test_scripting_studio_service.py`
+
+Verification:
+
+- Opened the supplied `xaria_meet.dlg` through the service: 6 starters, 247
+  links, and 115 reachable nodes; source-topology protection enabled.
+- `python -m py_compile src/core/scripting/studio.py native/GhostRigger.Core.Workflow/Python/src/core/scripting/studio.py tests/test_scripting_studio_service.py`
+- `python -m pytest tests/test_scripting_studio_service.py -q` — 17 passed.
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q` — 1 passed.
+- Built `GhostRigger.Core.Workflow.vcxproj` in `Debug|x64` successfully.
+- Launched the actual Debug application, opened the Scripting Suite, and
+  visibly confirmed that `xaria_meet.dlg` renders its conversation graph with
+  topology protection and **Make Editable Copy** available.
+
+## 2026-07-30
+
+## 2026-08-01
+
+### [2026-08-01] add anatomy-safe performance and dance segment correction
+
+Owner: LordVaderCW
+
+Subsystem: Ghost Rigger R3.B UE-to-Aurora animation retargeting.
+
+Intersects: the Kotor Patch Manager Twi'lek dance expansion and its 2026-08-01 anatomical rebuild.
+
+Added the explicit `performance_anatomical` segment policy for authored
+full-body performance clips. It aligns spine/chest, upper-arm/forearm,
+forearm/hand, and complete leg chains to the receiving Aurora skeleton while
+excluding clavicle, hand/finger, and terminal-twist forcing. This preserves
+readable elbow flexion and KOTOR limb proportions without reintroducing the
+wrist and finger contortions seen under full-humanoid correction.
+
+Follow-up live testing added the `dance_anatomical` policy, which also aligns
+the clavicle-to-upperarm segment. The completed implementation now solves the
+full shoulder/elbow/wrist and hip/knee/ankle chains from a bind-calibrated
+anatomical basis, including axial roll, instead of aligning only joint-to-joint
+directions. Nearly straight elbows and knees use a continuity-safe bend-plane
+fallback so small source noise cannot become a 180-degree limb flip. A strict
+every-frame spatial audit rejects a build if segment direction or bone-basis
+orientation diverges from the converted source anatomy.
+
+Corrected the root-motion contract after final KOTOR integration proved that
+animation position controllers are relative offsets added to the node's static
+local position. Ghost Rigger therefore emits source displacement only; the
+receiving Aurora bind position stays in the model node and is not duplicated in
+the animation controller. This removes the floor-intersection/height error on
+both the direct female carriers and the adapted Twi'lek hierarchy.
+
+Affected files:
+
+- `native/GhostRigger.Core.Workflow/Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py`
+- `tests/test_retarget_preview_gate.py`
+
+Verification:
+
+- `py -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py`
+- `py -3.14 -m pytest tests/test_retarget_preview_gate.py -q` — 35 passed.
+- Kotor Patch Manager rebuilt all 26 source/carrier combinations and passed all
+  42 independent model/fidelity checks across `S_Female03`, `S_Female02`, and
+  `SM_TwiFem`.
+- Ghost Studio's spatial renderer sampled 565 frames in each of front, left-side,
+  and three-quarter views (1,695 renders total), including dense sampling around
+  every blend seam. The complete visual pass found no floor penetration,
+  reversed knee, disconnected limb, or arm corkscrew. Runtime KOTOR acceptance
+  of the newly staged pose quality remains pending.
+
+### [2026-07-30] preserve upper-body performance motion while correcting KOTOR legs
+
+Owner: LordVaderCW
+
+Subsystem: Ghost Rigger R3.B UE-to-Aurora animation retargeting.
+
+Intersects: the Kotor Patch Manager ten-clip Twi'lek dance expansion.
+
+Verified retarget profiles may now set
+`exact_segment_correction_policy = "performance_lower_body"` (also accepted as
+`lower_body_only` or `legs_only`). This limits the late direction-only segment
+correction to thigh/calf/foot/toe chains so KOTOR leg proportions follow the
+authored steps without replacing the continuous local-basis spine, clavicle,
+arm, hand, and finger motion. The established correction policies remain the
+default for existing weapon and locomotion workflows.
+
+Affected files:
+
+- `native/GhostRigger.Core.Workflow/Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py`
+- `tests/test_retarget_preview_gate.py`
+
+Verification:
+
+- `py -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py`
+- `py -m pytest tests/test_retarget_preview_gate.py::test_performance_lower_body_policy_aligns_legs_without_touching_upper_body tests/test_retarget_preview_gate.py::test_verified_ue5_profile_applies_exact_segment_correction tests/test_retarget_preview_gate.py::test_verified_ue5_segment_policy_keeps_spine_and_clavicle_exact_correction -q` — 3 passed.
+- The Kotor Patch Manager package rebuilt 30 clips across three receiving
+  supermodels with a maximum loop seam of 0.04087 degrees and zero terminal
+  root-position delta.
+- Visible KOTOR verification remains pending; no game files were staged while
+  the game was running.
+
 ## 2026-07-28
+
+### [2026-07-28] bind the Xaria teaser to the complete production voice package
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser dependency validation and multi-speaker StreamVoice
+packaging.
+
+Intersects: the KPM Xaria production encounter and xartease staging workflow.
+
+The xartease builder now requires all 33 production voice lines instead of
+silently accepting the original 16-line subset. StreamVoice paths are derived
+from each runtime ResRef, so Xaria, Atton, and Kreia resolve under their three
+retail speaker folders. The candidate validator rejects missing and unexpected
+voice records, packages the 15 post-recruit lines and two recruitment
+reactions, and carries the 13 new dialogue/lesson script dependencies.
+
+Affected files:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- coordinated KPM teaser stager and tests
+
+Verification:
+
+- `py -m pytest tests/test_xaria_teaser_map.py -q` — 30 passed.
+- Current uninstalled KPM production candidate validates with 33 voice files,
+  53 production scripts, and speaker folders `atton`, `kreia`, and `xaria`.
+- No game files were staged or installed by this change.
+
+### [2026-07-28] make Map Studio beginner-readable, terrain-connected, and adaptive
+
+Owner: LordVaderCW
+
+Task: T2907
+
+Subsystem: Map Studio authoring UX, authored terrain/WOK connections, gameplay
+placement resources, and viewport performance.
+
+Intersects: existing Map Studio room, terrain, WOK, placement, viewport, and
+embedded-payload work in the shared working tree.
+
+Map Studio now opens on a visible two-choice starting point: create an interior
+room or create exterior terrain. The screen explains that the viewport grid is
+only a guide; both choices create usable geometry and matching walkmesh.
+Interior guidance describes the intended door-magnet workflow for joining
+rooms and vanilla modules. Exterior terrain patches can magnet-snap compatible
+edges, weld their boundary heights, and generate reciprocal WOK portals
+automatically.
+
+The always-on-top green terrain visualization is now an opt-in
+`X-ray terrain WOK diagnostic` with a walkable/blocked/review legend, making it
+clear that it is an editor overlay rather than floating exported geometry.
+Blueprint and placement copy now distinguish reusable KOTOR object templates
+from rooms, guide users toward verified UTC/UTP/UTD resources, and provide a
+custom creature UTC import path. Model-only creature rows such as `c_gizka`
+are no longer advertised as placeable UTC templates.
+
+Map Studio selects a portable, balanced, or quality viewport policy from the
+machine's CPU/GPU profile. The portable tier targets 30 FPS, reduces only the
+interactive 3D raster to 72 percent, coalesces hover work, and lowers texture
+residency/upload pressure while preserving full-resolution idle frames, UI,
+HUD, and exported resources. The first-screen hierarchy and wording apply
+Jakob's, Fitts's, Hick's, Miller's, Postel's, von Restorff's, Tesler's, and
+Doherty's principles from Jon Yablonski's *Laws of UX*: familiar labels,
+large grouped starters, fewer initial choices, chunked workflows, forgiving
+errors, restrained emphasis, automated complexity, and responsive feedback.
+
+Affected:
+
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/`
+- Map Studio panels and window under
+  `native/GhostRigger.Core.Tools/Python/src/gui/`
+- mirrored Map Studio panels and rendering pipeline under
+  `native/GhostRigger.Core.GUI.Display/Python/src/gui/`
+- `tests/test_authored_terrain_builder.py`
+- `tests/test_game_resource_provider.py`
+- `tests/test_map_studio_workflow_panel.py`
+
+Verification: 11 focused Map Studio tests passed for verified creature
+templates, terrain edge/WOK welding, existing doorway snapping, adaptive
+performance selection, visible starter controls, Blueprint and smoke-test
+guidance, PIE helper masking, and embedded payload identity. Focused Python
+compilation and diff whitespace checks passed. The Debug x64 native host built
+successfully and staged all 18 payload DLLs. In the actual Debug application,
+Map Studio opened responsively; the two starter choices were visible on the
+default Build surface; `Exterior: Create Terrain` created and focused a visible
+terrain patch; and enabling the X-ray WOK diagnostic displayed the green
+triangulation with its editor-only legend. Retail-game proof remains pending.
+
+### [2026-07-28] make Xaria's post-combat dialogue handoff recoverable
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser encounter builder and production-dialogue handoff.
+
+Intersects: Kotor-Patch-Manager's PLCaa Xaria encounter scripts, shared
+production `xaria.dlg` package, and transactional xartease dependency audit.
+
+The teaser no longer treats a scheduled conversation action as proof that
+dialogue started. Its post-combat path performs stock combat teardown, retries
+the production launch until the first dialogue node acknowledges it, recovers
+from state 2 on heartbeat, and routes both normal and aborted camera-dialogue
+exits through the same guarded handoff. The generated structural proof now
+records both exit hooks.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+- Kotor-Patch-Manager's Xaria encounter builder, xartease stager, tests, and
+  durable Xaria record
+
+Verification: 27 focused Ghost tests and 73 focused Patch Manager tests
+passed. Two clean teaser builds matched; structural proof reports `PASS`.
+Patch Manager transactionally installed live `plcaa.mod` SHA-256
+`19724FFCD98C02C30AE566FD4DBB871791D71459A482655E35A2CF4EDEBCA373`
+and live `xartease.mod` SHA-256
+`300EA47A14A2C2215AEA68200EEA8870B015D5FC99EA509A2077B024EF553276`.
+Binary readback confirmed the production dialogue acknowledgement and both
+normal/abort handoff hooks. Retail confirmation remains pending.
 
 ### [2026-07-28] turn tester onboarding into a six-step Ghost-Studio installation guide
 
@@ -53,6 +473,132 @@ Focused correctness and project-standards review found and corrected the custom
 Python-location failure path and added the applicable T3204 roadmap reference;
 an independent validation pass confirmed both findings against the native
 project and repository policy.
+
+### [2026-07-28] correct retail dialogue-delay units in Xaria's camera director
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser encounter builder and Map Studio PIE dialogue timing.
+
+Xaria's death-gated camera graph now polls each Wraid proof once per second.
+Retail executable evidence proved that DLG `Delay` is measured in seconds, so
+the previous value 400 held camera 111 for roughly 400 seconds after the first
+death. The schema-14 builder and validators require `[1, 1, 1]` and reject the
+old value. Map Studio PIE now applies the same seconds contract, and its Core
+Scene/Core Tools embedded payloads were regenerated.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `src/core/modules/map_studio_pie_dialogue.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_pie_dialogue.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_pie_dialogue.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py`
+- `tests/test_xaria_teaser_map.py`
+- `tests/test_map_studio_pie_dialogue.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+
+Verification: 36 focused teaser/PIE tests and 22 payload tests passed. Two
+clean teaser builds matched. The final module SHA-256 is
+`95123423CB3AAD35BF5754B499B95125F58459FFA72AE0EE45FA50C52459259B`;
+Patch Manager transactionally installed that byte-identical candidate for the
+next retail test.
+
+### [2026-07-28] grant the sealed MCP Studio AppContainer read-only spatial-session access
+
+Owner: LordVaderCW
+
+Subsystem: Core Automation spatial-session authentication and Windows ACL
+policy.
+
+Ghost Studio may now receive one canonical AppContainer package SID through
+the fixed `GHOSTSTUDIO_SPATIAL_APP_CONTAINER_SID` process environment. Its
+protected session directory DACL grants that exact SID read/traverse access,
+and its descriptor DACL grants read-only access, while the current user and
+SYSTEM retain full control. ACL audits reject non-canonical SIDs, missing or
+duplicate required principals, unexpected principals, inherited rules,
+incorrect flags, and any rights drift. Read-only descriptor audits now use
+in-process Win32 security APIs, so the capability-none MCP Studio AppContainer
+does not need to launch a PowerShell child before it can authenticate.
+
+Affected:
+
+- `native/GhostRigger.Core.Automation/Python/src/ipc/spatial_auth.py`
+- `native/GhostRigger.Core.Automation/GhostRiggerPythonPayload.json`
+- `tests/test_spatial_auth_appcontainer_acl.py`
+
+Verification: 12 focused AppContainer SID/DACL contracts passed, including
+an explicit no-child-process audit, exact Windows access masks, and a
+mismatched-SID audit failure. The combined spatial adapter, ACL, loopback, and
+Automation payload checks passed 45 tests. Python compilation and diff
+whitespace checks passed. A fresh visible Ghost Studio launch with the
+approval-bound environment remains the live MCP route proof.
+
+### [2026-07-28] harden Ghost Studio's routed spatial evidence contract
+
+Owner: LordVaderCW
+
+Subsystem: Core Automation authenticated spatial IPC/MCP, Core Scene spatial
+serialization, and Core GUI Display readiness evidence.
+
+Ghost Studio now distinguishes authenticated loopback endpoint liveness from
+live-GUI readiness. Positive readiness requires a GUI-thread observation plus
+visible viewport and available grid-state markers. Spatial snapshots are
+strictly validated and size/entity bounded, redact every selection surface
+when requested, and report parent hierarchy as explicitly unavailable instead
+of synthesizing it from grouping metadata. Evidence-gap reporting remains
+available when viewport, grid, or readiness evidence is missing by preserving
+the bounded semantic scene revision and translating the explicit GUI-readiness
+reason into a gap. Spatial callbacks now fail closed when GUI-thread marshalling
+is unavailable, and GUI observation stops before off-thread QWidget reads. The
+two read-only MCP candidates now publish strict output schemas.
+
+Affected:
+
+- `native/GhostRigger.Core.Automation/Python/src/ghoststudio_spatial_mcp/server.py`
+- `native/GhostRigger.Core.Automation/Python/src/ipc/server.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/scene/spatial_snapshot.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py`
+- `tests/test_ghost_studio_spatial_adapter.py`
+- regenerated Automation, Scene, and GUI Display payload manifests
+
+Verification: 30 focused adapter contracts passed, including unavailable-grid
+evidence reporting and failed-GUI-marshalling regressions. Two focused native
+payload manifest/byte-identity checks and the authenticated descriptor/stdio
+loopback passed, along with Python compilation. The earlier combined spatial
+adapter, session-lifecycle, and native-payload run passed 57 tests. A live
+visible Ghost Studio GUI proof remains an integration gate for MCPStudio.
+
+### [2026-07-28] replace Xaria's hanging fourth combat camera with a death-gated three-shot sequence
+
+Owner: LordVaderCW
+
+Subsystem: Xaria teaser encounter builder and retail staging contract.
+
+The Xaria showcase now keeps camera 111 unchanged, widens cameras 112 and
+113, and removes camera 114 from combat. A naturally terminating
+111 -> 112 -> 113 dialogue graph follows the three Wraid deaths, then a
+guarded `OnEnd` handoff opens recruitment exactly once. Wraids now play their
+stock hit reaction before lethal damage and native death animation.
+
+Affected:
+
+- `scripts/build_xaria_teaser_map.py`
+- `tests/test_xaria_teaser_map.py`
+- `docs/knowledgebase/xaria_teaser_map_workflow.md`
+
+Verification:
+
+- two deterministic clean builds matched;
+- 27 focused Ghost tests passed;
+- paired Patch Manager validation passed 66 tests and now rejects malformed
+  private NCS, missing encounter placements, and broken private-Xaria event
+  bindings;
+- installed `xartease.mod` SHA-256:
+  `277AC9611BCCF3CDADEBE55566F96E177BBD42DABA7A9107F3086257C88DADCD`.
+
+Visible retail verification remains pending.
 
 ### [2026-07-28] make application menus content-safe and expand Map Studio's viewport
 

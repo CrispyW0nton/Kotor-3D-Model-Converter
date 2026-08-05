@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -221,6 +222,33 @@ class InstallationAdapter(InstallationPort):
             log.debug("get_resource error for %s.%s: %s", resref, restype, exc)
             return None
 
+    def get_texture_resource(self, resref: str) -> Optional[ResourceEntry]:
+        """Resolve TPC/TGA bytes using the installation's texture-pack order."""
+        if not _PYKOTOR_AVAILABLE:
+            return None
+        try:
+            result, _txi = self._inst.texture_resource_result(resref)
+            if result is None:
+                return None
+            restype = result.restype() if callable(getattr(result, "restype", None)) else result.restype
+            data = _resource_data_bytes(result)
+            return ResourceEntry(
+                resref=(
+                    result.resname()
+                    if callable(getattr(result, "resname", None))
+                    else str(getattr(result, "resname", resref))
+                ),
+                restype=str(getattr(restype, "name", restype) or ""),
+                extension=str(getattr(restype, "extension", "") or "").lower(),
+                size=len(data),
+                source="installation_texture_priority",
+                data=data,
+            )
+        except Exception as exc:
+            log.debug("get_texture_resource error for %s: %s", resref, exc)
+            return None
+
+
     def talktable_string(self, strref: int) -> str:
         return self._inst.talktable().string(strref)
 
@@ -253,6 +281,63 @@ class InstallationAdapter(InstallationPort):
         except Exception:
             pass
         return None
+
+
+class InstallationTextureCache:
+    """Read-only PIL-image provider backed by an InstallationPort."""
+
+    def __init__(self, installation: InstallationPort) -> None:
+        self._installation = installation
+        self._requested: list[str] = []
+        self._decoded: list[str] = []
+        self._missing: list[str] = []
+        self._errors: Dict[str, str] = {}
+
+    def get(self, texture_name: str):
+        name = Path(str(texture_name or "").strip()).stem
+        if not name or name.upper() in {"NULL", "BLACK", "NONE"}:
+            return None
+        if name.lower() not in {item.lower() for item in self._requested}:
+            self._requested.append(name)
+        resource = self._installation.get_texture_resource(name)
+        if resource is None or not resource.data:
+            if name.lower() not in {item.lower() for item in self._missing}:
+                self._missing.append(name)
+            return None
+        try:
+            if resource.extension == "tga":
+                from PIL import Image  # noqa: PLC0415
+
+                with Image.open(BytesIO(resource.data)) as source:
+                    image = source.convert("RGBA").copy()
+            else:
+                from src.core.game.kotor_loader import load_tpc_as_pil  # noqa: PLC0415
+
+                image = load_tpc_as_pil(resource.data)
+                if image is not None and getattr(image, "mode", "") != "RGBA":
+                    image = image.convert("RGBA")
+            if image is None:
+                raise ValueError("decoder returned no image")
+            if name.lower() not in {item.lower() for item in self._decoded}:
+                self._decoded.append(name)
+            return image
+        except Exception as exc:
+            self._errors[name] = f"{type(exc).__name__}: {exc}"
+            return None
+
+    def summary(self) -> Dict[str, Any]:
+        return {
+            "requested": list(self._requested),
+            "decoded": list(self._decoded),
+            "missing": list(self._missing),
+            "errors": dict(self._errors),
+            "counts": {
+                "requested": len(self._requested),
+                "decoded": len(self._decoded),
+                "missing": len(self._missing),
+                "errors": len(self._errors),
+            },
+        }
 
 
 # ── PyKotorRegistryAdapter ─────────────────────────────────────────────────────

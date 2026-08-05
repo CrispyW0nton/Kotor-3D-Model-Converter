@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "a1e21bfd99ccf0ef99e02d5aad6aa8af5d0e2285f71469e46d15eab737cb0cb5"
+            "sha256": "29f4fd1c9dee414ce10d6adf2df333deec0bf4ac3b4d891e1b0eb1fdf57b82ce"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
@@ -195,7 +195,7 @@
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_EXPORTER",
             "source_path": "src/io/fbx/fbx_exporter.py",
             "packaged_path": "Python/src/io/fbx/fbx_exporter.py",
-            "sha256": "439bd70ab6d8822750a87590b15d41c9ef2e9c7198bf040b4d044a1013395b88"
+            "sha256": "6d18356f234b0e57c138df42a2487f119d889aa4a6dcc1bc744c92468f7104c2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_IMPORTER",
@@ -207,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SCENE_ADAPTER",
             "source_path": "src/io/fbx/fbx_scene_adapter.py",
             "packaged_path": "Python/src/io/fbx/fbx_scene_adapter.py",
-            "sha256": "faecc4a5cf70f4a3ea30cd2df09f8ac36a782eb9dca14be9eb99e8a334409a73"
+            "sha256": "4569fe7851c5576cf439c394166e3147727161aa28eb50cd75c3fd4ea8eb3abd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_LOADER",

@@ -80,7 +80,11 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_set
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.ipc.server import GhostRiggerIPCServer
-from src.ipc.spatial_auth import default_spatial_session_path
+from src.ipc.spatial_auth import (
+    SpatialAuthenticationError,
+    SpatialServerBootstrap,
+    resolve_embedded_spatial_server_bootstrap,
+)
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.systems.bas.attachment_alignment import (
@@ -117,6 +121,24 @@ from src.systems.bas.model_recipe import (
     load_bas_model_recipe,
     save_bas_model_recipe,
 )
+
+
+def _resolve_optional_spatial_bootstrap() -> SpatialServerBootstrap | None:
+    if os.name != "nt":
+        return None
+    try:
+        return resolve_embedded_spatial_server_bootstrap()
+    except SpatialAuthenticationError as exc:
+        log.warning(
+            "Ghost Studio spatial IPC disabled: %s",
+            exc.code,
+        )
+    except Exception as exc:
+        log.warning(
+            "Ghost Studio spatial IPC disabled after bootstrap failure: %s",
+            type(exc).__name__,
+        )
+    return None
 
 
 C = dict(LEGACY_MATRIX_COLORS)
@@ -425,7 +447,10 @@ class QtGhostRiggerMainWindow(
         self._sync_reserved_top_rows()
 
     def _start_ipc_server(self) -> None:
-        if self._ipc_server is not None:
+        if (
+            self._ipc_server is not None
+            and self._scripter_compat_ipc_server is not None
+        ):
             return
 
         def load_model_by_resref(game: str, resref: str) -> None:
@@ -783,91 +808,149 @@ class QtGhostRiggerMainWindow(
             window.show_suite_page("project")
             return {"opened": bool(opened), "path": path}
 
-        try:
-            self._ipc_server = GhostRiggerIPCServer(
-                {
-                    "open_utc": open_blueprint_resource("utc"),
-                    "open_utp": open_blueprint_resource("utp"),
-                    "open_utd": open_blueprint_resource("utd"),
-                    "open_mdl": open_mdl,
-                    "load_model_by_resref": load_model_by_resref,
-                    "new_scene": new_scene,
-                    "open_scene": open_scene,
-                    "save_scene": save_scene,
-                    "create_scene_camera": create_scene_camera,
-                    "create_scene_light": create_scene_light,
-                    "select_scene_object": select_scene_object,
-                    "set_scene_object_visibility": set_scene_object_visibility,
-                    "scene_object_command": scene_object_command,
-                    "scene_object_properties": scene_object_properties,
-                    "refresh_viewport": refresh_viewport,
-                    "show_window": show_window,
-                    "show_panel": show_panel,
-                    "open_tool": open_tool,
-                    "viewport_command": viewport_command,
-                    "appearance": appearance,
-                    "animation_command": animation_command,
-                    "sequence_command": sequence_command,
-                    "mesh_tool_command": mesh_tool_command,
-                    "get_state": get_state,
-                    "library_search": library_search,
-                    "library_select": library_select,
-                    "resource_search": resource_search,
-                    "resource_select": resource_select,
-                    "select_module_mesh": select_module_mesh,
-                    "set_renderer_backend": set_renderer_backend,
-                    "set_dummy_helpers": set_dummy_helpers,
-                    "set_light_helpers": set_light_helpers,
-                    "select_helper": select_helper,
-                    "capture_viewport": capture_viewport,
-                    "capture_window": capture_window,
-                    "map_studio_visual_proof": map_studio_visual_proof,
-                    "map_studio_pie_visual_proof": map_studio_pie_visual_proof,
-                    "get_spatial_snapshot": self._ipc_spatial_snapshot,
-                    "capture_spatial_evidence": self._ipc_capture_spatial_evidence,
-                    "get_spatial_evidence_gaps": self._ipc_spatial_evidence_gaps,
-                },
-                spatial_session_path=default_spatial_session_path(),
-            )
-            self._ipc_server.start()
-            self._log(f"IPC server listening on port {self._ipc_server.port}.", "info")
-
+        ipc_callbacks = {
+            "open_utc": open_blueprint_resource("utc"),
+            "open_utp": open_blueprint_resource("utp"),
+            "open_utd": open_blueprint_resource("utd"),
+            "open_mdl": open_mdl,
+            "load_model_by_resref": load_model_by_resref,
+            "new_scene": new_scene,
+            "open_scene": open_scene,
+            "save_scene": save_scene,
+            "create_scene_camera": create_scene_camera,
+            "create_scene_light": create_scene_light,
+            "select_scene_object": select_scene_object,
+            "set_scene_object_visibility": set_scene_object_visibility,
+            "scene_object_command": scene_object_command,
+            "scene_object_properties": scene_object_properties,
+            "refresh_viewport": refresh_viewport,
+            "show_window": show_window,
+            "show_panel": show_panel,
+            "open_tool": open_tool,
+            "viewport_command": viewport_command,
+            "appearance": appearance,
+            "animation_command": animation_command,
+            "sequence_command": sequence_command,
+            "mesh_tool_command": mesh_tool_command,
+            "get_state": get_state,
+            "library_search": library_search,
+            "library_select": library_select,
+            "resource_search": resource_search,
+            "resource_select": resource_select,
+            "select_module_mesh": select_module_mesh,
+            "set_renderer_backend": set_renderer_backend,
+            "set_dummy_helpers": set_dummy_helpers,
+            "set_light_helpers": set_light_helpers,
+            "select_helper": select_helper,
+            "capture_viewport": capture_viewport,
+            "capture_window": capture_window,
+            "map_studio_visual_proof": map_studio_visual_proof,
+            "map_studio_pie_visual_proof": map_studio_pie_visual_proof,
+            "get_spatial_health": self._ipc_spatial_health,
+            "get_spatial_snapshot": self._ipc_spatial_snapshot,
+            "capture_spatial_evidence": self._ipc_capture_spatial_evidence,
+            "get_spatial_evidence_gaps": self._ipc_spatial_evidence_gaps,
+        }
+        if self._ipc_server is None:
+            spatial_bootstrap = _resolve_optional_spatial_bootstrap()
             try:
-                compatibility_port = int(os.environ.get("GHOSTSTUDIO_SCRIPTER_IPC_PORT", "7002"))
+                self._ipc_server = GhostRiggerIPCServer(
+                    ipc_callbacks,
+                    spatial_bootstrap=spatial_bootstrap,
+                )
+                self._ipc_server.start()
+            except Exception as exc:
+                failed_server = self._ipc_server
+                self._ipc_server = None
+                if failed_server is not None:
+                    try:
+                        failed_server.stop()
+                    except Exception:
+                        log.exception("Primary IPC startup cleanup failed")
+                if spatial_bootstrap is not None:
+                    self._log(
+                        "Spatial IPC bootstrap failed; legacy IPC remains enabled.",
+                        "warning",
+                    )
+                    try:
+                        self._ipc_server = GhostRiggerIPCServer(
+                            ipc_callbacks,
+                            spatial_bootstrap=None,
+                        )
+                        self._ipc_server.start()
+                    except Exception as fallback_exc:
+                        failed_server = self._ipc_server
+                        self._ipc_server = None
+                        if failed_server is not None:
+                            try:
+                                failed_server.stop()
+                            except Exception:
+                                log.exception(
+                                    "Legacy IPC fallback cleanup failed"
+                                )
+                        self._log(
+                            "Legacy IPC server failed to start: "
+                            f"{type(fallback_exc).__name__}",
+                            "warning",
+                        )
+                else:
+                    self._log(
+                        "Legacy IPC server failed to start: "
+                        f"{type(exc).__name__}",
+                        "warning",
+                    )
+            if self._ipc_server is not None:
+                self._log(
+                    f"IPC server listening on port {self._ipc_server.port}.",
+                    "info",
+                )
+
+        if self._scripter_compat_ipc_server is None:
+            try:
+                compatibility_port = int(
+                    os.environ.get(
+                        "GHOSTSTUDIO_SCRIPTER_IPC_PORT",
+                        "7002",
+                    )
+                )
             except ValueError:
                 compatibility_port = 7002
-            self._scripter_compat_ipc_server = GhostRiggerIPCServer(
-                {
-                    "status": scripting_status,
-                    "open_script": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "script"}),
-                    "open_dlg": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "dialogue"}),
-                    "open_2da": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "2da"}),
-                    "open_tlk": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "tlk"}),
-                    "open_journal": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "jrl"}),
-                    "open_gff": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "gff"}),
-                    "open_project": open_scripting_project,
-                },
-                port=compatibility_port,
-                program_name="GhostStudio Scripting Suite",
-            )
-            self._scripter_compat_ipc_server.start()
-            self._log(
-                f"Scripting Suite compatibility IPC starting on port {compatibility_port}.",
-                "info",
-            )
-        except Exception as exc:
-            for server in (
-                self._ipc_server,
-                self._scripter_compat_ipc_server,
-            ):
-                if server is not None:
+            try:
+                self._scripter_compat_ipc_server = GhostRiggerIPCServer(
+                    {
+                        "status": scripting_status,
+                        "open_script": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "script"}),
+                        "open_dlg": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "dialogue"}),
+                        "open_2da": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "2da"}),
+                        "open_tlk": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "tlk"}),
+                        "open_journal": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "jrl"}),
+                        "open_gff": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "gff"}),
+                        "open_project": open_scripting_project,
+                    },
+                    port=compatibility_port,
+                    program_name="GhostStudio Scripting Suite",
+                )
+                self._scripter_compat_ipc_server.start()
+                self._log(
+                    "Scripting Suite compatibility IPC starting on port "
+                    f"{compatibility_port}.",
+                    "info",
+                )
+            except Exception as exc:
+                failed_server = self._scripter_compat_ipc_server
+                self._scripter_compat_ipc_server = None
+                if failed_server is not None:
                     try:
-                        server.stop()
+                        failed_server.stop()
                     except Exception:
-                        log.exception("IPC startup cleanup failed")
-            self._ipc_server = None
-            self._scripter_compat_ipc_server = None
-            self._log(f"IPC server failed to start: {exc}", "warning")
+                        log.exception(
+                            "Scripting compatibility IPC cleanup failed"
+                        )
+                self._log(
+                    "Scripting Suite compatibility IPC failed to start: "
+                    f"{type(exc).__name__}",
+                    "warning",
+                )
 
     def _enable_theme_progress_toasts(self) -> None:
         self._suppress_theme_progress_toast = False

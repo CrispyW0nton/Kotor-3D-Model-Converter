@@ -28,6 +28,7 @@ Changes from v2.9:
 from __future__ import annotations
 
 from dataclasses import asdict
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -58,11 +59,13 @@ class _Services:
         parser: ModelParserPort,
         analyzer,  # ModelAnalyzer — not typed to avoid circular import
         registry: InstallationRegistryPort,
+        texture_cache_factory=None,
     ):
         self.locator = locator
         self.parser = parser
         self.analyzer = analyzer
         self.registry = registry
+        self.texture_cache_factory = texture_cache_factory
 
 
 _default_services: Optional[_Services] = None
@@ -78,6 +81,7 @@ def _get_services() -> _Services:
             InstallationModelLocator,
             MDLBinaryParserAdapter,
             ModelAnalyzer,
+            InstallationTextureCache,
             get_default_registry,
         )
         registry = get_default_registry()
@@ -87,7 +91,19 @@ def _get_services() -> _Services:
         ])
         parser = MDLBinaryParserAdapter()
         analyzer = ModelAnalyzer()
-        _default_services = _Services(locator, parser, analyzer, registry)
+        def texture_cache_factory(game_alias, explicit_path=None):
+            resolved = registry.resolve(game_alias)
+            if resolved is None:
+                raise ValueError(f"Unsupported game alias for texture export: {game_alias}")
+            return InstallationTextureCache(registry.load(resolved, explicit_path))
+
+        _default_services = _Services(
+            locator,
+            parser,
+            analyzer,
+            registry,
+            texture_cache_factory=texture_cache_factory,
+        )
     return _default_services
 
 
@@ -306,6 +322,14 @@ def get_tools() -> List[Dict[str, Any]]:
                         "default": True,
                         "description": "Write rigging JSON sidecars next to the FBX",
                     },
+                    "export_textures": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": (
+                            "Extract referenced game textures as PNG sidecars and bind "
+                            "the FBX material references to their relative paths"
+                        ),
+                    },
                     "animation_names": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -431,7 +455,13 @@ def _export_fbx_for_unity(model: Any, out_path: Path, export_rigging: bool) -> b
     )
 
 
-def _export_fbx_for_unreal(model: Any, out_path: Path, export_rigging: bool) -> bool:
+def _export_fbx_for_unreal(
+    model: Any,
+    out_path: Path,
+    export_rigging: bool,
+    *,
+    tex_cache=None,
+) -> bool:
     """Small seam for tests around the Unreal-compatible FBX exporter."""
     try:
         from src.converters.mesh_converter import FBXExporter  # noqa: PLC0415
@@ -441,10 +471,29 @@ def _export_fbx_for_unreal(model: Any, out_path: Path, export_rigging: bool) -> 
     return FBXExporter().export(
         model,
         str(out_path),
+        tex_cache=tex_cache,
         export_rigging=export_rigging,
         base_skeleton_model=getattr(model, "_gr_fbx_base_skeleton_model", None),
         compatibility_profile="unreal",
     )
+
+
+def _texture_sidecar_inventory(output_path: Path) -> List[Dict[str, Any]]:
+    """Return stable evidence for PNG texture sidecars written beside an FBX."""
+    texture_dir = output_path.parent / "textures"
+    if not texture_dir.is_dir():
+        return []
+    rows: List[Dict[str, Any]] = []
+    for path in sorted(texture_dir.glob("*.png"), key=lambda item: item.name.lower()):
+        data = path.read_bytes()
+        rows.append({
+            "name": path.stem,
+            "path": str(path),
+            "relative_path": path.relative_to(output_path.parent).as_posix(),
+            "bytes": len(data),
+            "sha256": sha256(data).hexdigest(),
+        })
+    return rows
 
 
 class _McpAnimationResourceAdapter:
@@ -915,6 +964,7 @@ async def handle_export_model_for_unreal(arguments: Dict[str, Any]) -> Dict[str,
     export_dir_raw = str(arguments.get("export_dir", "") or "").strip()
     output_name = str(arguments.get("output_name", "") or "").strip()
     export_rigging = bool(arguments.get("export_rigging", True))
+    export_textures = bool(arguments.get("export_textures", True))
     svc = _get_services()
 
     if not resref:
@@ -953,7 +1003,18 @@ async def handle_export_model_for_unreal(arguments: Dict[str, Any]) -> Dict[str,
 
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        if not _export_fbx_for_unreal(model, output_path, export_rigging):
+        texture_cache = None
+        if export_textures:
+            factory = getattr(svc, "texture_cache_factory", None)
+            if not callable(factory):
+                raise RuntimeError("texture export provider is unavailable")
+            texture_cache = factory(game, game_path)
+        if not _export_fbx_for_unreal(
+            model,
+            output_path,
+            export_rigging,
+            tex_cache=texture_cache,
+        ):
             raise RuntimeError(f"exporter returned False for {output_path}")
         if not output_path.exists():
             raise RuntimeError(f"exporter did not create {output_path}")
@@ -961,6 +1022,12 @@ async def handle_export_model_for_unreal(arguments: Dict[str, Any]) -> Dict[str,
         return json_content({"error": f"Unreal export failed: {exc}"})
 
     manifest_path = output_path.with_suffix(".ghostrigger.json")
+    texture_sidecars = _texture_sidecar_inventory(output_path)
+    texture_resolution = (
+        texture_cache.summary()
+        if texture_cache is not None and callable(getattr(texture_cache, "summary", None))
+        else {}
+    )
     animations = [
         str(getattr(animation, "name", "") or "")
         for animation in (getattr(model, "animations", None) or ())
@@ -974,7 +1041,15 @@ async def handle_export_model_for_unreal(arguments: Dict[str, Any]) -> Dict[str,
         "animation_selection": dict(
             getattr(model, "_gr_fbx_animation_selection", None) or {}
         ),
-        "counts": {"animations": len(animations)},
+        "textures": {
+            "requested": export_textures,
+            "sidecars": texture_sidecars,
+            "resolution": texture_resolution,
+        },
+        "counts": {
+            "animations": len(animations),
+            "texture_sidecars": len(texture_sidecars),
+        },
         "source": {
             "game": str(game).upper(),
             "resref": resref,

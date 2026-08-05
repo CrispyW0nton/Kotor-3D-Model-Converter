@@ -124,10 +124,10 @@ def _ordered_dialogue_links(links: Iterable[object]) -> list[object]:
 def _dialogue_link_gff_pairs(dialogue: object, gff: object) -> Iterable[tuple[object, object, str]]:
     """Pair every DLGLink with its typed GFF struct without relying on object hashes.
 
-    PyKotor serializes links in ``list_index`` order and nodes in the order returned
-    by ``all_entries/all_replies(as_sorted=True)``.  Reusing that contract lets
-    GhostStudio extend one currently omitted link field while leaving the writer's
-    graph/index behavior authoritative.
+    PyKotor retains each reachable node's original ``list_index`` when reading an
+    imported DLG, but its graph helpers omit detached raw EntryList/ReplyList
+    records.  Source GFFs with those editor remnants must therefore be paired by
+    original index.  Canonical writer output is compact and remains positional.
     """
 
     from pykotor.resource.formats.gff import GFFList
@@ -145,36 +145,50 @@ def _dialogue_link_gff_pairs(dialogue: object, gff: object) -> Iterable[tuple[ob
         for index, link in enumerate(ordered):
             yield link, structs[index], f"{path}[{index}]"
 
+    def pair_nodes(
+        nodes: Iterable[object],
+        structs: object,
+        path: str,
+    ) -> Iterable[tuple[object, object, str]]:
+        ordered = tuple(nodes)
+        if len(ordered) == len(structs):
+            for index, node in enumerate(ordered):
+                yield node, structs[index], f"{path}[{index}]"
+            return
+
+        seen_indices: set[int] = set()
+        for node in ordered:
+            index = int(getattr(node, "list_index", -1))
+            if index < 0 or index >= len(structs) or index in seen_indices:
+                raise ValueError(
+                    f"DLG/GFF node index mismatch at {path}: "
+                    f"list_index={index}, model={len(ordered)}, gff={len(structs)}"
+                )
+            seen_indices.add(index)
+            yield node, structs[index], f"{path}[{index}]"
+
     root = gff.root
     starters = root.acquire("StartingList", GFFList())
     yield from pair_list(getattr(dialogue, "starters", ()), starters, "StartingList")
 
     entries = tuple(dialogue.all_entries(as_sorted=True))
     entry_structs = root.acquire("EntryList", GFFList())
-    if len(entries) != len(entry_structs):
-        raise ValueError(
-            f"DLG/GFF node count mismatch at EntryList: model={len(entries)}, gff={len(entry_structs)}"
-        )
-    for node_index, (entry, entry_struct) in enumerate(zip(entries, entry_structs, strict=True)):
+    for entry, entry_struct, entry_path in pair_nodes(entries, entry_structs, "EntryList"):
         link_structs = entry_struct.acquire("RepliesList", GFFList())
         yield from pair_list(
             getattr(entry, "links", ()),
             link_structs,
-            f"EntryList[{node_index}].RepliesList",
+            f"{entry_path}.RepliesList",
         )
 
     replies = tuple(dialogue.all_replies(as_sorted=True))
     reply_structs = root.acquire("ReplyList", GFFList())
-    if len(replies) != len(reply_structs):
-        raise ValueError(
-            f"DLG/GFF node count mismatch at ReplyList: model={len(replies)}, gff={len(reply_structs)}"
-        )
-    for node_index, (reply, reply_struct) in enumerate(zip(replies, reply_structs, strict=True)):
+    for reply, reply_struct, reply_path in pair_nodes(replies, reply_structs, "ReplyList"):
         link_structs = reply_struct.acquire("EntriesList", GFFList())
         yield from pair_list(
             getattr(reply, "links", ()),
             link_structs,
-            f"ReplyList[{node_index}].EntriesList",
+            f"{reply_path}.EntriesList",
         )
 
 

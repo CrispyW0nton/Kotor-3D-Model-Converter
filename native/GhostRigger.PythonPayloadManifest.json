@@ -1,7 +1,7 @@
 [
     {
         "project": "GhostRigger.Core.Automation",
-        "python_file_count": 46,
+        "python_file_count": 48,
         "files": [
             "src\\adapters\\scripts\\__init__.py",
             "src\\adapters\\scripts\\unavailable_compiler.py",
@@ -11,6 +11,8 @@
             "src\\ipc\\client.py",
             "src\\ipc\\server.py",
             "src\\ipc\\spatial_auth.py",
+            "src\\ipc\\spatial_pipe.py",
+            "src\\ipc\\spatial_profile_anchor.py",
             "src\\kotormcp\\__init__.py",
             "src\\kotormcp\\__main__.py",
             "src\\kotormcp\\adapters.py",

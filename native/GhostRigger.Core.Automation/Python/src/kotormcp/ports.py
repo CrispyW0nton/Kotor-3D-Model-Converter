@@ -113,6 +113,10 @@ class InstallationPort(ABC):
         """Return the highest-priority matching resource or None."""
 
     @abstractmethod
+    def get_texture_resource(self, resref: str) -> Optional[ResourceEntry]:
+        """Return a texture using Odyssey texture-pack priority, or None."""
+
+    @abstractmethod
     def talktable_string(self, strref: int) -> str:
         """Return the dialog text for a TLK string-reference."""
 

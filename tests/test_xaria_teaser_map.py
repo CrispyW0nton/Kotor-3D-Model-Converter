@@ -47,7 +47,10 @@ from scripts.build_xaria_teaser_map import (
     PRIVATE_XARIA_FACTION_ID,
     PRIVATE_XARIA_TAG,
     PRIVATE_XARIA_TEMPLATE,
+    PRODUCTION_LIP_SHA256,
     PRODUCTION_VOICE_RESREFS,
+    PRODUCTION_VOICE_SHA256,
+    PRODUCTION_VOICE_SOURCE_TO_RUNTIME,
     ROOM_PIECE_ID,
     ROUTE_POINTS,
     SHOWCASE_BEATS,
@@ -548,6 +551,42 @@ def test_xaria_teaser_cameras_use_the_retail_odyssey_encoding() -> None:
     ) == pytest.approx((0.943628319, 0.0, 0.0, -0.331006941), abs=1.0e-6)
 
 
+def test_xaria_combat_cameras_keep_xaria_and_each_victim_in_frame() -> None:
+    cameras = {int(row["camera_id"]): row for row in CAMERA_MARKERS}
+    camera_111 = cameras[111]
+    camera_112 = cameras[112]
+    camera_113 = cameras[113]
+
+    # The first shot was already approved and must remain byte-for-byte stable.
+    assert camera_111["position"] == (9.0, -24.0, 10.065993)
+    assert camera_111["target"] == (5.8, -21.8, 11.0)
+    assert camera_111["field_of_view"] == 43.0
+
+    assert camera_112["position"] == (9.0, -13.0, 9.986575)
+    assert camera_112["target"] == (5.5, -20.0, 11.0)
+    assert camera_112["field_of_view"] == 58.0
+    assert camera_113["position"] == (-2.0, -10.0, 10.048286)
+    assert camera_113["target"] == (4.5, -17.5, 11.0)
+    assert camera_113["field_of_view"] == 58.0
+
+    def assert_actor_fits(camera, actor_xy: tuple[float, float]) -> None:
+        px, py, _pz = camera["position"]
+        tx, ty, _tz = camera["target"]
+        aim = math.atan2(ty - py, tx - px)
+        actor = math.atan2(actor_xy[1] - py, actor_xy[0] - px)
+        delta = abs((actor - aim + math.pi) % (2.0 * math.pi) - math.pi)
+        distance = math.dist((px, py), actor_xy)
+        clearance = math.asin(min(1.0, 0.75 / distance))
+        assert math.degrees(delta + clearance) <= (
+            float(camera["field_of_view"]) / 2.0
+        )
+
+    for actor in ((7.0, -23.0), (5.0, -21.0), (5.0, -17.0)):
+        assert_actor_fits(camera_112, actor)
+    for actor in ((7.0, -23.0), (5.0, -21.0), (3.0, -13.0)):
+        assert_actor_fits(camera_113, actor)
+
+
 def test_xaria_teaser_restores_stock_lightmaps_without_replacing_authored_geometry() -> None:
     """The retail room keeps edited geometry but regains stock LM names and UV2."""
 
@@ -646,6 +685,10 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
         "xt_b2",
         "xt_b3",
         "xt_dead",
+        "xt_c1done",
+        "xt_c2done",
+        "xt_c3done",
+        "xt_camend",
         "xt_post",
         "xt_enddlg",
         "xt_cleanup",
@@ -668,11 +711,11 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     )
     assert (
         'DelayCommand(1.25, ExecuteScript("xt_b2", oXaria, 2))'
-        in PRIVATE_SCRIPT_SOURCES["xt_b1"]
+        in PRIVATE_SCRIPT_SOURCES["xt_b2"]
     )
     assert (
         'DelayCommand(1.25, ExecuteScript("xt_b3", oXaria, 3))'
-        in PRIVATE_SCRIPT_SOURCES["xt_b1"]
+        in PRIVATE_SCRIPT_SOURCES["xt_b3"]
     )
     assert (
         "ChangeToStandardFaction(oXaria, STANDARD_FACTION_FRIENDLY_1)"
@@ -705,7 +748,7 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     assert "nState == 0" in click_source
     assert "nState == 1" in click_source
     assert "nState == 2" in click_source
-    assert PRIVATE_SCHEMA == 12
+    assert PRIVATE_SCHEMA == 14
     state_values = {
         int(value)
         for value in re.findall(
@@ -731,12 +774,13 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     assert 'ExecuteScript("xt_b2"' not in heartbeat_source
     assert 'ExecuteScript("xt_b3"' not in heartbeat_source
     assert PRIVATE_WRAID_FACTION_ID == 5
+    assert teaser_builder.PRIVATE_DIALOGUE_PENDING_LOCAL == 63
     assert "ActionStartConversation" in PRIVATE_SCRIPT_SOURCES["xt_post"]
     assert "ActionStartConversation" not in PRIVATE_SCRIPT_SOURCES["xt_click"]
     assert '"xaria"' in PRIVATE_SCRIPT_SOURCES["xt_post"]
     assert 'ExecuteScript("xt_post", oXaria, -1)' in PRIVATE_SCRIPT_SOURCES["xt_click"]
     assert 'SetGlobalNumber("KPM_XARIA_STATE", 2)' in PRIVATE_SCRIPT_SOURCES["xt_post"]
-    assert 'GetGlobalNumber("KPM_XARIA_STATE") == 3' in PRIVATE_SCRIPT_SOURCES["xt_post"]
+    assert 'nGlobalState == 3' in PRIVATE_SCRIPT_SOURCES["xt_post"]
     assert "ShowPartySelectionGUI(" in PRIVATE_SCRIPT_SOURCES["xt_enddlg"]
     assert '"k_pend_reset", iSlot, 0xFFFFFFFF, FALSE' in PRIVATE_SCRIPT_SOURCES["xt_enddlg"]
     assert 'ExecuteScript("kxar_cleanup"' in PRIVATE_SCRIPT_SOURCES["xt_enddlg"]
@@ -771,11 +815,11 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     )
     assert (
         f"SetLocalNumber(oXaria, {PRIVATE_ACTIVE_BEAT_LOCAL}, 12)"
-        in death_source
+        in PRIVATE_SCRIPT_SOURCES["xt_b2"]
     )
     assert (
         f"SetLocalNumber(oXaria, {PRIVATE_ACTIVE_BEAT_LOCAL}, 13)"
-        in death_source
+        in PRIVATE_SCRIPT_SOURCES["xt_b3"]
     )
     assert (
         f"SetLocalNumber(oXaria, {PRIVATE_ACTIVE_BEAT_LOCAL}, 0)"
@@ -799,12 +843,9 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     assert "DelayCommand(2.60, FinishFirstTarget" in PRIVATE_SCRIPT_SOURCES["xt_b1"]
     assert "DelayCommand(2.80, FinishSecondTarget" in PRIVATE_SCRIPT_SOURCES["xt_b2"]
     assert "DelayCommand(3.10, FinishThirdTarget" in PRIVATE_SCRIPT_SOURCES["xt_b3"]
-    assert death_source.count(
-        "DelayCommand(0.85, SetDialogPlaceableCamera("
-    ) == 3
-    assert death_source.count(
-        'DelayCommand(2.10, ExecuteScript("xt_b'
-    ) == 2
+    assert "SetDialogPlaceableCamera(" not in death_source
+    assert 'ExecuteScript("xt_b2"' not in death_source
+    assert 'ExecuteScript("xt_b3"' not in death_source
     assert "location lOrigin = GetLocation(oXaria)" in PRIVATE_SCRIPT_SOURCES["xt_b1"]
     assert "ApplyMistAtLocation(lOrigin)" in PRIVATE_SCRIPT_SOURCES["xt_b1"]
     assert "DelayCommand(0.20, ApplyMistAtLocation(lArrival))" in PRIVATE_SCRIPT_SOURCES["xt_b1"]
@@ -842,7 +883,10 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     ):
         source = PRIVATE_SCRIPT_SOURCES[resref]
         assert source.count("SetMinOneHP(oTarget, FALSE)") == 1
-        assert source.count("EffectDeath(") == 1
+        assert source.count("EffectDamage(") == 1
+        assert "1000, DAMAGE_TYPE_UNIVERSAL" in source
+        assert source.count("ANIMATION_LOOPING_SPASM") == 1
+        assert source.count("PlayAnimation(") == 1
         assert source.index(wrapper) < source.rindex(kill_call)
     assert "KillCurrentTarget" not in all_sources
     for resref, token in zip(("xt_b1", "xt_b2", "xt_b3"), PRIVATE_POWER_TOKENS):
@@ -854,40 +898,24 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
         assert "AbortSequence" not in fallback
         assert "return;" not in fallback
     assert "GetLocalNumber(oXaria, 26)" not in death_source
-    first_beat_dispatch = PRIVATE_SCRIPT_SOURCES["xt_b1"].split(
-        "if ((nProof & 1) == 0) {",
-        maxsplit=1,
-    )[1].split("} else if", maxsplit=1)[0]
-    assert "SetDialogPlaceableCamera(" not in first_beat_dispatch
+    assert "SetDialogPlaceableCamera(" not in all_sources
     alive_guard = death_source.index("if (TargetIsAlive(oTarget)) {")
     proof_commit = death_source.index("int nProof = GetLocalNumber(oXaria, 25);")
     assert alive_guard < proof_commit
-    assert death_source.count("SetDialogPlaceableCamera(") == 3
-    death_events = (
-        "SetDialogPlaceableCamera(112)",
-        'ExecuteScript("xt_b2"',
-        "SetDialogPlaceableCamera(113)",
-        'ExecuteScript("xt_b3"',
-        "SetDialogPlaceableCamera(114)",
-        'ExecuteScript("k_oei_endconv", oDirector, -1)',
-        'ExecuteScript("xt_post", oXaria, -1)',
-    )
-    assert all(event in death_source for event in death_events)
-    assert [death_source.index(event) for event in death_events] == sorted(
-        death_source.index(event) for event in death_events
-    )
+    assert 'ExecuteScript("k_oei_endconv"' not in death_source
     assert (
-        'DelayCommand(\n'
-        '            3.10,\n'
-        '            ExecuteScript("k_oei_endconv", oDirector, -1)'
+        'DelayCommand(0.90, ExecuteScript("xt_post", oXaria, -1))'
         in death_source
     )
+    camend_source = PRIVATE_SCRIPT_SOURCES["xt_camend"]
+    assert "GetLocalNumber(oXaria, 25) != 7" in camend_source
+    assert camend_source.count("TargetIsAlive(") == 4
     assert (
-        'DelayCommand(\n'
-        '            3.35,\n'
-        '            ExecuteScript("xt_post", oXaria, -1)'
-        in death_source
+        f"SetLocalBoolean(oXaria, "
+        f"{teaser_builder.PRIVATE_CAMERA_HANDOFF_LOCAL}, TRUE)"
+        in camend_source
     )
+    assert camend_source.count('ExecuteScript("xt_post", oXaria, -1)') == 1
     assert "Xaria encounter handoff rejected:" in PRIVATE_SCRIPT_SOURCES["xt_post"]
     assert "xt_retry" not in all_sources
     assert "xt_gate" not in all_sources
@@ -898,62 +926,182 @@ def test_xaria_teaser_hands_cutscene_safe_combat_to_guarded_recruitment() -> Non
     assert 'ExecuteScript("k_oei_endconv"' in PRIVATE_SCRIPT_SOURCES["xt_enddlg"]
 
 
-def test_recruitment_dialogue_starts_once_only_after_camera_114_handoff() -> None:
+def test_recruitment_dialogue_recovers_when_camera_113_onend_is_missed() -> None:
     camera_handoff_local = teaser_builder.PRIVATE_CAMERA_HANDOFF_LOCAL
     death_source = PRIVATE_SCRIPT_SOURCES["xt_dead"]
+    camend_source = PRIVATE_SCRIPT_SOURCES["xt_camend"]
     post_source = PRIVATE_SCRIPT_SOURCES["xt_post"]
     click_source = PRIVATE_SCRIPT_SOURCES["xt_click"]
     all_sources = "\n".join(PRIVATE_SCRIPT_SOURCES.values())
 
     assert camera_handoff_local == 60
-    camera_114 = "SetDialogPlaceableCamera(114)"
     handoff_commit = (
         f"SetLocalBoolean(oXaria, {camera_handoff_local}, TRUE)"
     )
-    end_director = 'ExecuteScript("k_oei_endconv", oDirector, -1)'
     begin_production = 'ExecuteScript("xt_post", oXaria, -1)'
-    assert all(
-        token in death_source
-        for token in (
-            camera_114,
-            handoff_commit,
-            end_director,
-            begin_production,
-        )
-    )
-    assert [
-        death_source.index(token)
-        for token in (
-            camera_114,
-            handoff_commit,
-            end_director,
-            begin_production,
-        )
-    ] == sorted(
-        death_source.index(token)
-        for token in (
-            camera_114,
-            handoff_commit,
-            end_director,
-            begin_production,
-        )
+    assert "SetDialogPlaceableCamera(114)" not in all_sources
+    assert 'ExecuteScript("k_oei_endconv"' not in death_source
+    assert 'ExecuteScript("k_oei_endconv"' not in camend_source
+    assert handoff_commit in camend_source
+    assert begin_production in camend_source
+    assert camend_source.index(handoff_commit) < camend_source.index(
+        begin_production
     )
     assert (
+        'DelayCommand(0.90, ExecuteScript("xt_post", oXaria, -1))'
+        in death_source
+    )
+    assert "GetLocalNumber(oXaria, 25) != 7" in camend_source
+    assert "GetLocalNumber(oXaria, 21) != 0" in camend_source
+    assert (
         f"GetLocalBoolean(oXaria, {camera_handoff_local}) != TRUE"
-        in post_source
+        not in post_source
+    )
+    assert 'GetObjectByTag("XT_Director", 0)' in post_source
+    assert "GetIsInConversation(oDirector)" in post_source
+    assert 'DelayCommand(0.50, ExecuteScript("xt_post", oXaria, -1))' in post_source
+    assert handoff_commit in post_source
+    assert (
+        post_source.index("GetIsInConversation(oDirector)")
+        < post_source.index(handoff_commit)
     )
     assert 'ExecuteScript("xt_post", oXaria, -1)' in click_source
+    assert "nState == 2 && nGlobalState == 3" in click_source
+    assert "nState == 2 && nGlobalState != 3" in click_source
     assert "ActionStartConversation" not in click_source
     assert all_sources.count('"xaria"') == 1
     assert post_source.count('"xaria"') == 1
     assert post_source.count(
         "SetLocalBoolean(oXaria, "
         f"{teaser_builder.PRIVATE_DIALOGUE_STARTED_LOCAL}, TRUE)"
-    ) == 1
+    ) == 0
+    assert "CancelCombat(oPC);" in post_source
+    assert "CancelCombat(oXaria);" in post_source
+    assert "SurrenderToEnemies()" in post_source
+    assert 'ExecuteScript("xt_post", oXaria, -1)' in post_source
+    assert (
+        "PlayAnimation(\n"
+        "            ANIMATION_LOOPING_PAUSE,\n"
+        "            1.0,\n"
+        "            1.0"
+        in post_source
+    )
+    assert (
+        f"SetLocalBoolean(oXaria, "
+        f"{teaser_builder.PRIVATE_DIALOGUE_PENDING_LOCAL}, TRUE)"
+        in post_source
+    )
+    assert 'ExecuteScript("xt_post", oXaria, 1)' in post_source
+    assert "3.00" in post_source
+    assert "if (nGlobalState != 4)" in post_source
+    assert 'SetGlobalNumber("KPM_XARIA_STATE", 2)' in post_source
+    assert (
+        'GetGlobalNumber("KPM_XARIA_STATE") != 4'
+        in PRIVATE_SCRIPT_SOURCES["xt_hb"]
+    )
+    assert "kxar_dlgack" in teaser_builder.PRODUCTION_SCRIPT_RESREFS
 
 
-def test_xaria_teaser_uses_a_nonterminal_long_lived_camera_owner() -> None:
-    """The long camera node must remain a real dialogue branch until teardown."""
+def test_teaser_carries_the_expanded_party_and_reaction_contract() -> None:
+    """The test map must package every post-recruit and companion-reaction edge."""
+
+    assert {
+        "cxar_atton_m",
+        "cxar_atton_f",
+        "cxar_kreia",
+        "cxar_react",
+        "cxar_pfirst",
+        "cxar_pgrove",
+        "cxar_phawk",
+        "cxar_pother",
+        "cxar_d_ready",
+        "cxar_d_busy",
+        "kxar_d_queue",
+        "kxar_talkup",
+        "kxar_rel_good",
+        "kxar_rel_soft",
+    }.issubset(teaser_builder.PRODUCTION_SCRIPT_RESREFS)
+    expanded_meeting_sources = (
+        "xv_warn",
+        "xv_hunger",
+        "xv_threat",
+        "xv_stories",
+        "xv_strife",
+        "xv_demand",
+        "xv_soulfound",
+        "xv_hero",
+        "xv_seeker",
+        "xv_soulmouth",
+        "xv_property",
+        "xv_askquick",
+        "xv_nydak",
+        "xv_magick",
+        "xv_withhold",
+    )
+    assert len(PRODUCTION_VOICE_RESREFS) == 49
+    assert tuple(
+        PRODUCTION_VOICE_SOURCE_TO_RUNTIME[source]
+        for source in expanded_meeting_sources
+    ) == tuple(f"997xaria{index:03d}" for index in range(17, 32))
+    assert set(PRODUCTION_VOICE_SHA256) == set(
+        PRODUCTION_VOICE_SOURCE_TO_RUNTIME
+    )
+    assert set(PRODUCTION_LIP_SHA256) == set(
+        PRODUCTION_VOICE_SOURCE_TO_RUNTIME
+    )
+    assert {
+        "StreamVoice/997/xaria/997xaria017.wav",
+        "StreamVoice/997/xaria/997xaria031.wav",
+        "StreamVoice/997/xaria/997xaria115.wav",
+        "StreamVoice/997/atton/997atton001.wav",
+        "StreamVoice/997/atton/997atton002.wav",
+        "StreamVoice/997/kreia/997kreia001.wav",
+    }.issubset(
+        {item["name"] for item in EXTERNAL_XARIA_STREAMVOICE_FILES}
+    )
+    assert TEASER_VOICE_LOOKUP["speaker_folders"] == (
+        "atton",
+        "kreia",
+        "xaria",
+    )
+
+
+def test_wraid_death_clears_attached_ichor_beams_before_lethal_damage() -> None:
+    """A duration beam must not survive its victim and strand across dialogue."""
+
+    for resref in ("xt_b2", "xt_b3"):
+        source = PRIVATE_SCRIPT_SOURCES[resref]
+        cleanup = "ClearLingeringIchorEffects(oXaria, oTarget);"
+        lethal = "1000, DAMAGE_TYPE_UNIVERSAL"
+        assert "EFFECT_TYPE_BEAM" in source
+        assert "EFFECT_TYPE_POISON" in source
+        assert "GetEffectCreator(eEffect) == oXaria" in source
+        assert cleanup in source
+        assert source.index(cleanup) < source.index(lethal)
+
+
+def test_recruited_state_always_retires_the_private_xaria_actor() -> None:
+    """Cleanup cannot depend on a transient dialogue-local latch."""
+
+    heartbeat = PRIVATE_SCRIPT_SOURCES["xt_hb"]
+    end_dialogue = PRIVATE_SCRIPT_SOURCES["xt_enddlg"]
+    click = PRIVATE_SCRIPT_SOURCES["xt_click"]
+    post = PRIVATE_SCRIPT_SOURCES["xt_post"]
+
+    recruited_branch = heartbeat.split(
+        'GetGlobalNumber("KPM_XARIA_STATE") == 3',
+        maxsplit=1,
+    )[1]
+    assert "GetLocalBoolean(OBJECT_SELF, 62)" not in recruited_branch
+    assert 'ExecuteScript("kxar_cleanup", GetFirstPC(), 0);' in recruited_branch
+    assert "GetLocalBoolean(OBJECT_SELF, 62)" not in end_dialogue
+    assert 'ExecuteScript("kxar_cleanup", oPC, 0)' in end_dialogue
+    assert 'ExecuteScript("kxar_cleanup", oPC, 0);' in click
+    assert 'ExecuteScript("kxar_cleanup", oPC, 0);' in post
+
+
+def test_xaria_teaser_uses_a_naturally_terminating_three_camera_owner() -> None:
+    """Death proofs advance 111->112->113; the final proof ends naturally."""
 
     from pykotor.resource.generics.dlg import read_dlg
 
@@ -963,58 +1111,54 @@ def test_xaria_teaser_uses_a_nonterminal_long_lived_camera_owner() -> None:
     replies = list(dialogue.all_replies(as_sorted=True))
 
     assert dialogue.skippable is False
-    assert str(dialogue.on_end) == ""
+    assert str(dialogue.on_end) == "xt_camend"
+    assert str(dialogue.on_abort) == "xt_camend"
     assert len(dialogue.starters) == 1
-    assert len(entries) == 2
-    assert len(replies) == 1
+    assert len(entries) == 3
+    assert len(replies) == 6
     assert dialogue.starters[0].node is entries[0]
-    assert entries[0].camera_id == 111
-    assert entries[0].camera_angle == 6
-    assert str(entries[0].script1) == "xt_b1"
-    assert entries[0].delay == teaser_builder.PRIVATE_DIALOGUE_DWELL_SECONDS
-    assert entries[0].delay >= 30
-    assert len(entries[0].links) == 1
-    assert entries[0].links[0].node is replies[0]
-    assert entries[0].links[0].is_child is False
-    assert len(replies[0].links) == 1
-    assert replies[0].links[0].node is entries[1]
-    assert replies[0].links[0].is_child is False
-    assert entries[1].camera_id == 114
-    assert entries[1].camera_angle == 6
-    assert entries[1].delay == 1
-    assert not entries[1].links
+    assert [entry.camera_id for entry in entries] == [111, 112, 113]
+    assert [entry.camera_angle for entry in entries] == [6, 6, 6]
+    assert [str(entry.script1) for entry in entries] == [
+        "xt_b1",
+        "xt_b2",
+        "xt_b3",
+    ]
+    assert [entry.delay for entry in entries] == [
+        teaser_builder.PRIVATE_CAMERA_POLL_SECONDS
+    ] * 3
+    for stage, condition in enumerate(
+        ("xt_c1done", "xt_c2done", "xt_c3done")
+    ):
+        advance, hold = entries[stage].links
+        assert str(advance.active1) == condition
+        assert advance.active1_not is False
+        assert str(hold.active1) == condition
+        assert hold.active1_not is True
+        assert len(hold.node.links) == 1
+        assert hold.node.links[0].node is entries[stage]
+        assert hold.node.links[0].is_child is True
+        if stage < 2:
+            assert advance.node.links[0].node is entries[stage + 1]
+            assert advance.node.links[0].is_child is False
+        else:
+            assert not advance.node.links
     assert all(entry.text.stringref == -1 for entry in entries)
     assert all(not entry.text.get(0, 0) for entry in entries)
-    assert replies[0].text.stringref == -1
-    assert not replies[0].text.get(0, 0)
+    assert all(reply.text.stringref == -1 for reply in replies)
+    assert all(not reply.text.get(0, 0) for reply in replies)
     assert all(entry.unskippable for entry in entries)
-    assert replies[0].unskippable
+    assert all(reply.unskippable for reply in replies)
     assert all(not str(entry.vo_resref) for entry in entries)
-    assert not str(replies[0].vo_resref)
+    assert all(not str(reply.vo_resref) for reply in replies)
     assert all(int(entry.sound_exists) == 0 for entry in entries)
-    assert int(replies[0].sound_exists) == 0
+    assert all(int(reply.sound_exists) == 0 for reply in replies)
     assert all(entry.plot_index == -1 for entry in entries)
-    assert replies[0].plot_index == -1
+    assert all(reply.plot_index == -1 for reply in replies)
     assert all(entry.plot_xp_percentage == 0.0 for entry in entries)
-    assert replies[0].plot_xp_percentage == 0.0
-    assert teaser_builder.PRIVATE_SCHEMA == 12
-
-    maximum_timeline = (
-        sum(teaser_builder.PRIVATE_BEAT_FINISH_SECONDS)
-        + 3
-        * (
-            teaser_builder.PRIVATE_DEATH_SETTLE_SECONDS
-            + teaser_builder.PRIVATE_DEATH_RETRY_SECONDS
-            + teaser_builder.PRIVATE_OUTGOING_DEATH_HOLD_SECONDS
-        )
-        + 3 * teaser_builder.PRIVATE_CAMERA_PREROLL_SECONDS
-        + teaser_builder.PRIVATE_FINAL_CAMERA_HOLD_SECONDS
-    )
-    assert maximum_timeline == pytest.approx(
-        teaser_builder.PRIVATE_MAX_COMBAT_TIMELINE_SECONDS
-    )
-    assert maximum_timeline == pytest.approx(18.40)
-    assert maximum_timeline < entries[0].delay
+    assert all(reply.plot_xp_percentage == 0.0 for reply in replies)
+    assert teaser_builder.PRIVATE_SCHEMA == 14
+    assert teaser_builder.PRIVATE_CAMERA_POLL_SECONDS == 1
 
     placements = _authored_gameplay_placements()
     assert len(placements.placeables) == 1
@@ -1026,7 +1170,7 @@ def test_xaria_teaser_uses_a_nonterminal_long_lived_camera_owner() -> None:
     assert 'xaria.on_dialog = ResRef("xt_click")' in builder_source
     assert 'xaria.on_end_dialog = ResRef("xt_enddlg")' in builder_source
     wraid_source = builder_source.split(
-        '("xar_wraid1.utc", "xar_wraid2.utc", "xar_wraid3.utc")',
+        '("xar_nydak1.utc", "xar_nydak2.utc", "xar_nydak3.utc")',
         maxsplit=1,
     )[1].split(
         "# Clone the proven generic trigger",
@@ -1101,7 +1245,7 @@ def test_private_scripts_use_retail_k2_action_argument_order() -> None:
         ("CPTOPSP", [-12, 4]),
         ("CONSTS", ["xt_b1"]),
     )
-    assert action_tail("xt_b1", 8, 3, occurrence=5) == (
+    assert action_tail("xt_b1", 8, 3, occurrence=3) == (
         ("CONSTI", [287]),
         ("CPTOPSP", [-20, 4]),
         ("CONSTS", ["kxar_d_mamb"]),
@@ -1116,9 +1260,12 @@ def test_private_scripts_use_retail_k2_action_argument_order() -> None:
         ("CPTOPSP", [-12, 4]),
         ("CONSTS", ["kxar_d_idrain"]),
     )
-    assert action_tail("xt_dead", 461, 1, occurrence=0) == (("CONSTI", [112]),)
-    assert action_tail("xt_dead", 461, 1, occurrence=1) == (("CONSTI", [113]),)
-    assert action_tail("xt_dead", 461, 1, occurrence=2) == (("CONSTI", [114]),)
+    assert 461 not in action_ids("xt_dead")
+    assert action_tail("xt_camend", 8, 3) == (
+        ("NEGI", []),
+        ("CPTOPSP", [-20, 4]),
+        ("CONSTS", ["xt_post"]),
+    )
     assert action_tail("xt_post", 204, 2) == (
         ("CONSTS", ["xaria"]),
         ("CPTOPSP", [-88, 4]),
@@ -1219,6 +1366,12 @@ def test_xaria_teaser_external_dependency_contract_is_exact_and_nonstandalone() 
         "fx_xdrain1.tga",
         "fx_xmist.tga",
         "fx_xmist1.tga",
+        "kxar_s_idrain.wav",
+        "kxar_s_ilight.wav",
+        "kxar_s_mist.wav",
+        "kxar_s_raise.wav",
+        "kxar_s_veil.wav",
+        "kxar_s_veild.wav",
     }
     assert {
         "p_xariah.mdl",
@@ -1237,19 +1390,20 @@ def test_xaria_teaser_external_dependency_contract_is_exact_and_nonstandalone() 
     assert streamvoice_files == {item["name"] for item in EXTERNAL_XARIA_STREAMVOICE_FILES}
     voice_resrefs = PRODUCTION_VOICE_RESREFS
     assert streamvoice_files == {
-        f"StreamVoice/{VOICE_STREAM_ID}/{VOICE_DIALOGUE_RESREF}/{resref}.wav"
+        teaser_builder._streamvoice_relative_path(resref)
         for resref in voice_resrefs
     }
     assert TEASER_VOICE_LOOKUP == {
         "module_voice_id": VOICE_STREAM_ID,
         "module_folder": VOICE_STREAM_ID,
         "dialogue_resref": VOICE_DIALOGUE_RESREF,
+        "speaker_folders": ("atton", "kreia", "xaria"),
         "source_files": tuple(
-            f"StreamVoice/{VOICE_STREAM_ID}/{VOICE_DIALOGUE_RESREF}/{resref}.wav"
+            teaser_builder._streamvoice_relative_path(resref)
             for resref in voice_resrefs
         ),
         "runtime_files": tuple(
-            f"StreamVoice/{VOICE_STREAM_ID}/{VOICE_DIALOGUE_RESREF}/{resref}.wav"
+            teaser_builder._streamvoice_relative_path(resref)
             for resref in voice_resrefs
         ),
     }

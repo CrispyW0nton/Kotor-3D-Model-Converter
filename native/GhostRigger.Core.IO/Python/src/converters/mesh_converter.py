@@ -1234,7 +1234,8 @@ class FBXExporter:
                export_rigging: bool = True,
                base_skeleton_model: 'Optional[KotorModel]' = None,
                export_manifest: bool = True,
-               compatibility_profile: str = "standard") -> bool:
+               compatibility_profile: str = "standard",
+               force_ascii: bool = False) -> bool:
         """
         Export model to FBX.
 
@@ -1266,6 +1267,10 @@ class FBXExporter:
                               ``3ds_max``. Engine/DCC profiles force the complete
                               ASCII writer and apply explicit unit and animation
                               interchange contracts.
+        force_ascii         : Bypass optional SDK/Assimp writers and use the
+                              built-in FBX 7.4 ASCII writer. Selection export
+                              uses this to guarantee one merged geometry with
+                              polygon material assignments and both UV channels.
         """
         compatibility_profile = self.normalize_compatibility_profile(compatibility_profile)
         exporter_backend = ""
@@ -1278,12 +1283,16 @@ class FBXExporter:
         # static props, where a binary FBX is friendlier to Unity.
         has_skins = any(getattr(node, "is_skin", False) for node in model.all_nodes())
         has_animations = bool(getattr(model, "animations", None))
-        if has_skins or has_animations or compatibility_profile != self.COMPATIBILITY_STANDARD:
+        if force_ascii or has_skins or has_animations or compatibility_profile != self.COMPATIBILITY_STANDARD:
             log.info(
                 "FBX export: %s has %s; using the ASCII FBX writer (profile=%s; the SDK bridge "
                 "does not export skin clusters, animation takes, or compatibility metadata yet).",
                 model.name,
-                "skinned meshes" if has_skins else ("animations" if has_animations else "a compatibility profile"),
+                (
+                    "a forced ASCII selection export"
+                    if force_ascii
+                    else ("skinned meshes" if has_skins else ("animations" if has_animations else "a compatibility profile"))
+                ),
                 compatibility_profile,
             )
             ok = None
@@ -1298,7 +1307,7 @@ class FBXExporter:
             except ImportError:
                 ok = None
 
-        if ok is None and compatibility_profile == self.COMPATIBILITY_STANDARD:
+        if ok is None and compatibility_profile == self.COMPATIBILITY_STANDARD and not force_ascii:
             # Try pyassimp (treated as a hint only – fall through on any failure)
             try:
                 import pyassimp  # noqa: F401
@@ -1400,34 +1409,40 @@ class FBXExporter:
         texture_dir.mkdir(parents=True, exist_ok=True)
         seen: set[str] = set()
         for node in model.mesh_nodes():
-            raw = getattr(node, "texture_clean", "") or getattr(node, "texture", "") or ""
-            tex_name = raw.strip()
-            if not tex_name or tex_name.upper() in ("NULL", "BLACK"):
-                continue
-            key = tex_name.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            try:
-                img = tex_cache.get(tex_name)
-                if img is None:
+            material_nodes = list(getattr(node, "_gr_fbx_material_slots", None) or [node])
+            for material_node in material_nodes:
+                raw = (
+                    getattr(material_node, "texture_clean", "")
+                    or getattr(material_node, "texture", "")
+                    or ""
+                )
+                tex_name = raw.strip()
+                if not tex_name or tex_name.upper() in ("NULL", "BLACK"):
                     continue
-                out_path = texture_dir / f"{tex_name}.png"
-                if not out_path.exists():
-                    img_to_save = img.convert("RGBA") if getattr(img, "mode", "") != "RGBA" else img
-                    transpose = getattr(img_to_save, "transpose", None)
-                    if callable(transpose):
-                        try:
-                            from PIL import Image as _PILImage
+                key = tex_name.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    img = tex_cache.get(tex_name)
+                    if img is None:
+                        continue
+                    out_path = texture_dir / f"{tex_name}.png"
+                    if not out_path.exists():
+                        img_to_save = img.convert("RGBA") if getattr(img, "mode", "") != "RGBA" else img
+                        transpose = getattr(img_to_save, "transpose", None)
+                        if callable(transpose):
+                            try:
+                                from PIL import Image as _PILImage
 
-                            img_to_save = transpose(_PILImage.FLIP_TOP_BOTTOM)
-                        except Exception:
-                            pass
-                    img_to_save.save(str(out_path))
-                rel = os.path.relpath(out_path, fbx_dir).replace(os.sep, "/")
-                written[tex_name] = rel
-            except Exception as exc:
-                log.debug("Could not save FBX texture '%s': %s", tex_name, exc)
+                                img_to_save = transpose(_PILImage.FLIP_TOP_BOTTOM)
+                            except Exception:
+                                pass
+                        img_to_save.save(str(out_path))
+                    rel = os.path.relpath(out_path, fbx_dir).replace(os.sep, "/")
+                    written[tex_name] = rel
+                except Exception as exc:
+                    log.debug("Could not save FBX texture '%s': %s", tex_name, exc)
         if written:
             log.info("Saved %d FBX texture sidecar(s) in %s", len(written), texture_dir)
         return written
@@ -1606,6 +1621,10 @@ class FBXExporter:
 
         # Only export renderable mesh nodes (respects render flag + deform helpers)
         mesh_nodes_list = _renderable_mesh_nodes(model)
+        material_nodes_by_mesh = {
+            node.name: list(getattr(node, "_gr_fbx_material_slots", None) or [node])
+            for node in mesh_nodes_list
+        }
         renderable_mesh_names = {node.name for node in mesh_nodes_list}
         renderable_mesh_name_by_lower = {node.name.lower(): node.name for node in mesh_nodes_list}
 
@@ -1704,7 +1723,7 @@ class FBXExporter:
         # Assign IDs
         node_ids:    Dict[str, int] = {}
         mesh_ids:    Dict[str, int] = {}
-        mat_ids:     Dict[str, int] = {}
+        mat_ids:     Dict[str, List[int]] = {}
         deform_ids:  Dict[str, int] = {}  # skin deformer per mesh
         cluster_ids: Dict[str, Dict[str,int]] = {}  # clusters[mesh_name][bone_name]
         bone_alias_ids: Dict[str, int] = {}
@@ -1791,7 +1810,7 @@ class FBXExporter:
 
         for n in mesh_nodes_list:
             mesh_ids[n.name] = new_id()
-            mat_ids[n.name]  = new_id()
+            mat_ids[n.name] = [new_id() for _slot in material_nodes_by_mesh[n.name]]
             if n.is_skin:
                 deform_ids[n.name] = new_id()
                 cluster_ids[n.name] = {}
@@ -1824,7 +1843,7 @@ class FBXExporter:
         # We compute exact counts from the ID dicts that were just populated.
         _n_models    = len(node_ids)  # skeleton + mesh + synthetic
         _n_geometry  = len(mesh_ids)
-        _n_material  = len(mat_ids)
+        _n_material  = sum(len(ids) for ids in mat_ids.values())
         _n_nodeattr  = len(skel_attr_ids) if 'skel_attr_ids' in dir() else 0  # computed later
         _n_deformer  = len(deform_ids)
         _n_cluster   = sum(len(v) for v in cluster_ids.values())
@@ -1987,13 +2006,29 @@ class FBXExporter:
                 w('\t\t}')
 
             # Material reference layer
+            _material_count = len(material_nodes_by_mesh[n.name])
+            _face_materials = [
+                max(0, min(
+                    int(n.face_mats[index]) if index < len(n.face_mats) else 0,
+                    _material_count - 1,
+                ))
+                for index in range(len(n.faces))
+            ]
             w('\t\tLayerElementMaterial: 0 {')
             w('\t\t\tVersion: 101')
             w('\t\t\tName: ""')
-            w('\t\t\tMappingInformationType: "AllSame"')
+            w(
+                '\t\t\tMappingInformationType: "ByPolygon"'
+                if _material_count > 1
+                else '\t\t\tMappingInformationType: "AllSame"'
+            )
             w('\t\t\tReferenceInformationType: "IndexToDirect"')
-            w('\t\t\tMaterials: *1 {')
-            w('\t\t\t\ta: 0')
+            if _material_count > 1:
+                w(f'\t\t\tMaterials: *{len(_face_materials)} {{')
+                w('\t\t\t\ta: ' + ','.join(str(value) for value in _face_materials))
+            else:
+                w('\t\t\tMaterials: *1 {')
+                w('\t\t\t\ta: 0')
             w('\t\t\t}')
             w('\t\t}')
 
@@ -2045,15 +2080,20 @@ class FBXExporter:
         _tex_vid_ids: Dict[str, int] = {}   # tex_name → Video object ID
         _seen_tex_names: set = set()
         for n in mesh_nodes_list:
-            tname_tex = (n.texture_clean or '').strip()
-            if tname_tex and tname_tex.upper() not in ('NULL', 'BLACK', '') \
-                    and tname_tex not in _seen_tex_names:
+            for material_node in material_nodes_by_mesh[n.name]:
+                tname_tex = (material_node.texture_clean or '').strip()
+                if not (
+                    tname_tex
+                    and tname_tex.upper() not in ('NULL', 'BLACK', '')
+                    and tname_tex not in _seen_tex_names
+                ):
+                    continue
                 _seen_tex_names.add(tname_tex)
                 # FBX wrap enum: 0 = Repeat, 1 = Clamp.  KotOR/TXI stores this
                 # as clamp_s/clamp_t booleans; exporting it keeps Unity/Unreal
                 # from guessing on large tiled menu and room UVs.
-                wrap_u = 1 if bool(getattr(n, 'txi_clamp_s', False)) else 0
-                wrap_v = 1 if bool(getattr(n, 'txi_clamp_t', False)) else 0
+                wrap_u = 1 if bool(getattr(material_node, 'txi_clamp_s', False)) else 0
+                wrap_v = 1 if bool(getattr(material_node, 'txi_clamp_t', False)) else 0
                 tex_obj_id = new_id()
                 vid_id     = new_id()
                 _tex_obj_ids[tname_tex] = tex_obj_id
@@ -2089,21 +2129,21 @@ class FBXExporter:
 
         # Material objects
         for n in mesh_nodes_list:
-            mid = mat_ids[n.name]
-            tname = n.texture_clean or n.name
-            w(f'\tMaterial: {mid}, "Material::{tname}", "" {{')
-            w('\t\tVersion: 102')
-            w(f'\t\tShadingModel: "Phong"')
-            w('\t\tMultiLayer: 0')
-            w('\t\tProperties70:  {')
-            d = n.diffuse
-            w(f'\t\t\tP: "DiffuseColor","ColorRGB","Color","",{d[0]:.4f},{d[1]:.4f},{d[2]:.4f}')
-            s = n.specular
-            w(f'\t\t\tP: "SpecularColor","ColorRGB","Color","",{s[0]:.4f},{s[1]:.4f},{s[2]:.4f}')
-            w(f'\t\t\tP: "Shininess","double","Number","",{n.shininess:.2f}')
-            w(f'\t\t\tP: "Opacity","double","Number","",{n.alpha:.4f}')
-            w('\t\t}')
-            w('\t}')  # end Material
+            for material_node, mid in zip(material_nodes_by_mesh[n.name], mat_ids[n.name]):
+                tname = material_node.texture_clean or material_node.name
+                w(f'\tMaterial: {mid}, "Material::{tname}", "" {{')
+                w('\t\tVersion: 102')
+                w(f'\t\tShadingModel: "Phong"')
+                w('\t\tMultiLayer: 0')
+                w('\t\tProperties70:  {')
+                d = material_node.diffuse
+                w(f'\t\t\tP: "DiffuseColor","ColorRGB","Color","",{d[0]:.4f},{d[1]:.4f},{d[2]:.4f}')
+                s = material_node.specular
+                w(f'\t\t\tP: "SpecularColor","ColorRGB","Color","",{s[0]:.4f},{s[1]:.4f},{s[2]:.4f}')
+                w(f'\t\t\tP: "Shininess","double","Number","",{material_node.shininess:.2f}')
+                w(f'\t\t\tP: "Opacity","double","Number","",{material_node.alpha:.4f}')
+                w('\t\t}')
+                w('\t}')  # end Material
 
         import math as _m
 
@@ -3055,7 +3095,8 @@ class FBXExporter:
 
         # Material → mesh model node
         for n in mesh_nodes_list:
-            w(f'\tC: "OO",{mat_ids[n.name]},{node_ids[n.name]}')
+            for material_id in mat_ids[n.name]:
+                w(f'\tC: "OO",{material_id},{node_ids[n.name]}')
 
         # Skin deformer → geometry
         for n in mesh_nodes_list:
@@ -3072,11 +3113,11 @@ class FBXExporter:
         # Texture → material connections
         # Links each Texture object to its Material via the "DiffuseColor" property slot.
         for n in mesh_nodes_list:
-            tname = (n.texture_clean or '').strip()
-            if tname and tname in _tex_obj_ids and n.name in mat_ids:
-                tex_oid = _tex_obj_ids[tname]
-                mid_conn = mat_ids[n.name]
-                w(f'\tC: "OP",{tex_oid},{mid_conn},"DiffuseColor"')
+            for material_node, material_id in zip(material_nodes_by_mesh[n.name], mat_ids[n.name]):
+                tname = (material_node.texture_clean or '').strip()
+                if tname and tname in _tex_obj_ids:
+                    tex_oid = _tex_obj_ids[tname]
+                    w(f'\tC: "OP",{tex_oid},{material_id},"DiffuseColor"')
         # Video → Texture connections
         for tname, tex_oid in _tex_obj_ids.items():
             vid_id = _tex_vid_ids.get(tname)

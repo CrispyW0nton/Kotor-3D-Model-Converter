@@ -339,15 +339,15 @@ class CustomRiggedCharacterBehaviorService:
         try:
             template: UtcTemplateSummary | None = None
             source = b""
-            actual_hash = ""
+            template_hash = ""
             if template_resref:
                 if catalog is None:
                     raise ValueError("Refresh or resolve the installed UTC template before building.")
                 template = catalog.get(template_resref)
                 source = catalog.read_template_bytes(template_resref)
                 expected_hash = str(profile.get("template_sha256") or "").strip().lower()
-                actual_hash = hashlib.sha256(source).hexdigest()
-                if expected_hash and expected_hash != actual_hash:
+                template_hash = hashlib.sha256(source).hexdigest()
+                if expected_hash and expected_hash != template_hash:
                     raise ValueError(
                         f"Installed template {template_resref}.utc changed since selection. Refresh and review it again."
                     )
@@ -407,8 +407,8 @@ class CustomRiggedCharacterBehaviorService:
                 if not source_path.is_file():
                     raise ValueError(f"{definition['label']} sound file was not found: {source_path}")
                 payload = source_path.read_bytes()
-                actual_hash = hashlib.sha256(payload).hexdigest()
-                if cue.source_sha256 and cue.source_sha256 != actual_hash:
+                audio_hash = hashlib.sha256(payload).hexdigest()
+                if cue.source_sha256 and cue.source_sha256 != audio_hash:
                     raise ValueError(f"{definition['label']} sound changed since it was selected. Choose it again.")
                 audio_resref = _clean_resref(
                     cue.output_resref or creature_sound_resref(project, cue_name),
@@ -421,7 +421,7 @@ class CustomRiggedCharacterBehaviorService:
                     "label": definition["label"],
                     "ssf_slots": list(definition["ssf_slots"]),
                     "resref": audio_resref,
-                    "sha256": actual_hash,
+                    "sha256": audio_hash,
                     "size": len(payload),
                     **wav,
                 })
@@ -457,7 +457,7 @@ class CustomRiggedCharacterBehaviorService:
                     "resref": template.resref,
                     "display_name": template.display_name,
                     "source": template.source,
-                    "sha256": actual_hash,
+                    "sha256": template_hash,
                     "module_only_script_hooks": list(template.module_only_script_hooks),
                 } if template is not None else None),
                 "inherit_template_combat_stats": bool(profile.get("inherit_template_combat_stats", True)),

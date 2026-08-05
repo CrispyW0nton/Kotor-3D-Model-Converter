@@ -6,6 +6,8 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import threading
+import time
 
 import pytest
 
@@ -26,6 +28,10 @@ def _auth_module():
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _no_security(_path: Path, _is_directory: bool) -> None:
+    return None
 
 
 def test_private_artifact_is_exclusive_flushed_and_secured(tmp_path: Path) -> None:
@@ -115,3 +121,109 @@ def test_session_descriptor_rejects_coerced_scalar_types(
         )
 
     assert error.value.code == "invalid-session-descriptor"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows sharing contract")
+def test_session_descriptor_retries_a_transient_open_reader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _auth_module()
+    target = tmp_path / "private" / "ghoststudio-session.json"
+    first = auth.publish_spatial_session_descriptor(
+        target,
+        port=7017,
+        now=lambda: 1_000,
+        ttl_seconds=3_600,
+        security_hook=_no_security,
+    )
+    reader = target.open("rb")
+    assert reader.read(1)
+
+    original_replace = auth.os.replace
+    sharing_failure_observed = threading.Event()
+
+    def _observe_replace(source, destination) -> None:
+        try:
+            original_replace(source, destination)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) in {5, 32}:
+                sharing_failure_observed.set()
+            raise
+
+    monkeypatch.setattr(auth.os, "replace", _observe_replace)
+
+    def _release_reader_after_first_failure() -> None:
+        if sharing_failure_observed.wait(timeout=2.0):
+            reader.close()
+
+    release = threading.Thread(
+        target=_release_reader_after_first_failure,
+        name="release-spatial-descriptor-reader",
+        daemon=True,
+    )
+    release.start()
+    try:
+        replacement = auth.publish_spatial_session_descriptor(
+            target,
+            port=7017,
+            now=lambda: 1_001,
+            ttl_seconds=3_600,
+            security_hook=_no_security,
+        )
+    finally:
+        reader.close()
+        release.join(timeout=2.0)
+
+    assert sharing_failure_observed.is_set()
+    assert replacement.credentials.session_id != first.credentials.session_id
+    assert (
+        auth.load_spatial_session_descriptor(
+            target,
+            now=lambda: 1_002,
+            security_audit=_no_security,
+        )
+        == replacement
+    )
+    assert not list(target.parent.glob(f".{target.name}.*.tmp"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows sharing contract")
+def test_session_descriptor_replacement_failure_is_bounded_and_atomic(
+    tmp_path: Path,
+) -> None:
+    auth = _auth_module()
+    target = tmp_path / "private" / "ghoststudio-session.json"
+    first = auth.publish_spatial_session_descriptor(
+        target,
+        port=7017,
+        now=lambda: 1_000,
+        ttl_seconds=3_600,
+        security_hook=_no_security,
+    )
+
+    started = time.monotonic()
+    with target.open("rb") as reader:
+        assert reader.read(1)
+        with pytest.raises(PermissionError) as failure:
+            auth.publish_spatial_session_descriptor(
+                target,
+                port=7017,
+                now=lambda: 1_001,
+                ttl_seconds=3_600,
+                security_hook=_no_security,
+            )
+    elapsed = time.monotonic() - started
+
+    assert getattr(failure.value, "winerror", None) in {5, 32}
+    assert elapsed >= auth._WINDOWS_REPLACE_RETRY_SECONDS
+    assert elapsed < 2.0
+    assert (
+        auth.load_spatial_session_descriptor(
+            target,
+            now=lambda: 1_002,
+            security_audit=_no_security,
+        )
+        == first
+    )
+    assert not list(target.parent.glob(f".{target.name}.*.tmp"))

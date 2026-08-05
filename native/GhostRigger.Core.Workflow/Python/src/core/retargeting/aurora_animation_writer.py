@@ -1144,7 +1144,7 @@ class AuroraAnimationWriter:
 
         if write_zero_position_controllers:
             warnings.append(
-                "R3.B writes zero Aurora position deltas to preserve PMBAM bind proportions."
+                "R3.B omits animated local translations to preserve PMBAM bind proportions."
             )
         else:
             warnings.append(
@@ -1155,7 +1155,8 @@ class AuroraAnimationWriter:
         )
         if source_quaternion_conversion == "identity":
             warnings.append(
-                "R3.5 uses identity Blender-FBX source quaternion conversion for Mixamo-style source clips."
+                "R3.5 uses identity source quaternion conversion because the source clip is already "
+                "expressed in the target coordinate frame."
             )
         if reference_mode == "clip_frame_zero":
             warnings.append(

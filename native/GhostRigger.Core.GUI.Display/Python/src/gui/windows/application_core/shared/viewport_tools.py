@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import hashlib
 import math
@@ -23,6 +24,156 @@ from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_P
 from src.systems.bas.model_recipe import BAS_SLOT_ORDER
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _SpatialGuiObservation:
+    main_thread_observed: bool
+    window_visible: bool
+    window_minimized: bool
+    viewport_widget: object | None
+    canvas: object | None
+    camera: object | None
+    settings: object | None
+    display_options: object | None
+    viewport_visible: bool
+    grid_state_available: bool
+    grid_visible: bool
+    width: int
+    height: int
+    reason: str | None
+
+    def readiness_payload(self) -> dict:
+        viewport_state_available = (
+            self.canvas is not None
+            and self.camera is not None
+            and self.width > 0
+            and self.height > 0
+        )
+        return {
+            "ready": self.reason is None,
+            "mainThreadObserved": self.main_thread_observed,
+            "windowVisible": self.window_visible,
+            "windowMinimized": self.window_minimized,
+            "viewport": {
+                "stateAvailable": viewport_state_available,
+                "visible": self.viewport_visible,
+                "width": self.width,
+                "height": self.height,
+            },
+            "grid": {
+                "stateAvailable": self.grid_state_available,
+                # A hidden grid remains truthful, available grid state.
+                "visible": self.grid_visible,
+            },
+            "reason": self.reason,
+        }
+
+
+def _safe_qt_bool(
+    target: object,
+    method_name: str,
+    default: bool = False,
+) -> bool:
+    method = getattr(target, method_name, None)
+    if not callable(method):
+        return default
+    try:
+        return bool(method())
+    except RuntimeError:
+        return default
+
+
+def _observe_spatial_gui(window: object) -> _SpatialGuiObservation:
+    try:
+        owner_thread = window.thread()
+        main_thread_observed = (
+            QtCore.QThread.currentThread() == owner_thread
+        )
+    except (AttributeError, RuntimeError):
+        main_thread_observed = False
+    if not main_thread_observed:
+        # QWidget state is GUI-thread-affine. Return only the failed thread
+        # observation; do not inspect visibility, children, or canvas state.
+        return _SpatialGuiObservation(
+            main_thread_observed=False,
+            window_visible=False,
+            window_minimized=False,
+            viewport_widget=None,
+            canvas=None,
+            camera=None,
+            settings=None,
+            display_options=None,
+            viewport_visible=False,
+            grid_state_available=False,
+            grid_visible=False,
+            width=0,
+            height=0,
+            reason="gui-main-thread-unobserved",
+        )
+    window_visible = _safe_qt_bool(window, "isVisible")
+    window_minimized = _safe_qt_bool(window, "isMinimized")
+    viewport_widget = getattr(window, "viewport", None)
+    canvas = getattr(viewport_widget, "canvas", None)
+    camera = getattr(viewport_widget, "camera", None)
+    try:
+        width = int(canvas.width()) if canvas is not None else 0
+        height = int(canvas.height()) if canvas is not None else 0
+    except RuntimeError:
+        width = 0
+        height = 0
+    viewport_state_available = (
+        canvas is not None
+        and camera is not None
+        and width > 0
+        and height > 0
+    )
+    viewport_visible = (
+        _safe_qt_bool(canvas, "isVisible")
+        if canvas is not None
+        else False
+    )
+    settings = getattr(viewport_widget, "measurement_settings", None)
+    display_options = getattr(viewport_widget, "display_options", None)
+    grid_state_available = (
+        settings is not None
+        and display_options is not None
+        and hasattr(settings, "minor_grid_spacing")
+        and hasattr(settings, "major_grid_spacing")
+        and hasattr(display_options, "show_grid")
+    )
+    grid_visible = bool(
+        getattr(display_options, "show_grid", False)
+    ) if grid_state_available else False
+    reason = None
+    if not main_thread_observed:
+        reason = "gui-main-thread-unobserved"
+    elif not window_visible:
+        reason = "window-not-visible"
+    elif window_minimized:
+        reason = "window-minimized"
+    elif not viewport_state_available:
+        reason = "viewport-state-unavailable"
+    elif not viewport_visible:
+        reason = "viewport-not-visible"
+    elif not grid_state_available:
+        reason = "grid-state-unavailable"
+    return _SpatialGuiObservation(
+        main_thread_observed=main_thread_observed,
+        window_visible=window_visible,
+        window_minimized=window_minimized,
+        viewport_widget=viewport_widget,
+        canvas=canvas,
+        camera=camera,
+        settings=settings,
+        display_options=display_options,
+        viewport_visible=viewport_visible,
+        grid_state_available=grid_state_available,
+        grid_visible=grid_visible,
+        width=width,
+        height=height,
+        reason=reason,
+    )
 
 
 class ViewportToolsMixin:
@@ -568,6 +719,10 @@ class ViewportToolsMixin:
             "resources": self._ipc_resource_state_snapshot() if hasattr(self, "_ipc_resource_state_snapshot") else {},
             "docks": dock_visibility,
         }
+    def _ipc_spatial_health(self) -> dict:
+        """Report GUI readiness separately from authenticated endpoint liveness."""
+
+        return _observe_spatial_gui(self).readiness_payload()
     def _ipc_spatial_snapshot(self, payload: object = None) -> dict:
         """Return semantic scene truth plus the currently observed viewport."""
 
@@ -575,6 +730,12 @@ class ViewportToolsMixin:
         from src.math.gpu_math import _mat4_lookat, _mat4_perspective
 
         options = dict(payload) if isinstance(payload, dict) else {}
+        observation = _observe_spatial_gui(self)
+        readiness = observation.readiness_payload()
+        if not readiness["ready"]:
+            raise RuntimeError(
+                f"Ghost Studio GUI is not spatial-ready: {readiness['reason']}"
+            )
         scene_manager = getattr(self, "scene_manager", None)
         scene = getattr(scene_manager, "active_scene", None)
         if scene is None:
@@ -584,13 +745,13 @@ class ViewportToolsMixin:
                 objects=[],
             )
 
-        viewport_widget = getattr(self, "viewport", None)
-        canvas = getattr(viewport_widget, "canvas", None)
-        camera = getattr(viewport_widget, "camera", None)
+        viewport_widget = observation.viewport_widget
+        canvas = observation.canvas
+        camera = observation.camera
         viewport_payload = None
         if canvas is not None and camera is not None:
-            width = max(1, int(canvas.width()))
-            height = max(1, int(canvas.height()))
+            width = observation.width
+            height = observation.height
             eye = tuple(float(v) for v in camera.eye()[:3])
             target = tuple(float(v) for v in tuple(camera.target)[:3])
             near_clip = max(
@@ -646,7 +807,7 @@ class ViewportToolsMixin:
                 "farClip": far_clip,
             }
 
-        settings = getattr(viewport_widget, "measurement_settings", None)
+        settings = observation.settings
         grid_payload = None
         if settings is not None:
             minor_spacing = max(
@@ -657,7 +818,7 @@ class ViewportToolsMixin:
                 minor_spacing,
                 float(getattr(settings, "major_grid_spacing", 100.0) or 100.0),
             )
-            display_options = getattr(viewport_widget, "display_options", None)
+            display_options = observation.display_options
             grid_payload = {
                 "origin": [0.0, 0.0, 0.0],
                 "spacing": [
@@ -679,7 +840,15 @@ class ViewportToolsMixin:
             application_version="2.8",
             viewport=viewport_payload,
             grid=grid_payload,
+            include_bounds=options.get("includeBounds", True),
+            include_hierarchy=options.get("includeHierarchy", True),
+            include_selection=options.get("includeSelection", True),
         )
+        if not snapshot.get("viewports") or "grid" not in snapshot:
+            raise RuntimeError(
+                "Ghost Studio spatial snapshot lacks viewport or grid state"
+            )
+        snapshot["guiReadiness"] = readiness
         if bool(getattr(viewport_widget, "_ortho_mode", False)):
             snapshot["evidence"].append({
                 "kind": "semantic-api",
@@ -690,11 +859,6 @@ class ViewportToolsMixin:
                 "epistemicStatus": "observed",
                 "confidence": 1.0,
             })
-        if options.get("includeSelection") is False:
-            snapshot["selection"] = {"mode": "object", "stableIds": []}
-        if options.get("includeBounds") is False:
-            for entity in snapshot["entities"]:
-                entity.pop("bounds", None)
         return snapshot
     def _ipc_capture_spatial_evidence(self, payload: object = None) -> dict:
         """Capture one PNG and bind it to exact semantic/viewport revisions."""
@@ -773,9 +937,33 @@ class ViewportToolsMixin:
             "snapshot": snapshot,
         }
     def _ipc_spatial_evidence_gaps(self, _payload: object = None) -> dict:
-        from src.core.scene.spatial_snapshot import spatial_evidence_gaps
+        from src.core.scene.spatial_snapshot import (
+            build_scene_spatial_snapshot,
+            spatial_evidence_gaps,
+        )
 
-        return spatial_evidence_gaps(self._ipc_spatial_snapshot({}))
+        observation = _observe_spatial_gui(self)
+        readiness = observation.readiness_payload()
+        if readiness["ready"]:
+            return spatial_evidence_gaps(self._ipc_spatial_snapshot({}))
+
+        # Evidence-gap reporting must remain available precisely when the live
+        # viewport/grid contract is incomplete. Preserve bounded semantic scene
+        # truth, then translate the explicit readiness reason into a gap.
+        scene_manager = getattr(self, "scene_manager", None)
+        scene = getattr(scene_manager, "active_scene", None)
+        if scene is None:
+            scene = SimpleNamespace(
+                id="ghoststudio-empty-scene",
+                units={"system_unit": "cm", "display_unit": "cm"},
+                objects=[],
+            )
+        snapshot = build_scene_spatial_snapshot(
+            scene,
+            application_version="2.8",
+        )
+        snapshot["guiReadiness"] = readiness
+        return spatial_evidence_gaps(snapshot)
     def _clear_model(self):
         if not self._prompt_save_dirty_scene():
             return

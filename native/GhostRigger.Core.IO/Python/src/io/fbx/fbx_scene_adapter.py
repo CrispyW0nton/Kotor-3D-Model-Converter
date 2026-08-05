@@ -302,10 +302,29 @@ def gr_mesh_to_fbx_mesh(fbx: Any, manager: Any, node: ModelNode, *, triangulate:
             uv_layer.GetDirectArray().Add(vector2_cls(float(u), float(v)))
         mesh.GetLayer(0).SetUVs(uv_layer)
 
-    for face in node.faces:
+    if node.uvs_lm:
+        uv_cls = getattr(fbx, "FbxLayerElementUV", getattr(fbx, "KFbxLayerElementUV", None))
+        layer_elem_cls = getattr(fbx, "FbxLayerElement", getattr(fbx, "KFbxLayerElement", None))
+        if mesh.GetLayer(1) is None:
+            mesh.CreateLayer()
+        lightmap_uv_layer = uv_cls.Create(mesh, "LightmapUV")
+        lightmap_uv_layer.SetMappingMode(layer_elem_cls.eByControlPoint)
+        lightmap_uv_layer.SetReferenceMode(layer_elem_cls.eDirect)
+        for u, v in node.uvs_lm:
+            lightmap_uv_layer.GetDirectArray().Add(vector2_cls(float(u), float(v)))
+        mesh.GetLayer(1).SetUVs(lightmap_uv_layer)
+
+    material_slots = list(getattr(node, "_gr_fbx_material_slots", None) or [])
+    material_count = len(material_slots)
+    if not material_count:
+        material_count = max(1, len(getattr(node, "texture_names", None) or []))
+    has_material = bool(material_slots or node.texture or node.texture_names)
+    for face_index, face in enumerate(node.faces):
         if len(face) != 3 and triangulate:
             continue
-        mesh.BeginPolygon(0 if (node.texture or node.texture_names) else -1, -1, False)
+        material_index = int(node.face_mats[face_index]) if face_index < len(node.face_mats) else 0
+        material_index = max(0, min(material_index, material_count - 1))
+        mesh.BeginPolygon(material_index if has_material else -1, -1, False)
         for vertex_index in face:
             mesh.AddPolygon(int(vertex_index))
         mesh.EndPolygon()

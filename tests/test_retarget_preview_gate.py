@@ -31,10 +31,16 @@ from src.core.retargeting.source_animation import (
     quat_to_matrix_xyzw,
 )
 from src.core.retargeting.ue5_to_aurora_r3b_preview import (
+    _anatomical_segment_basis,
     _continuity_aligned_terminal_basis,
+    _mapped_dance_spatial_chains,
     _mapped_exact_segments,
     _mapped_terminal_twist_chains,
+    _stable_anatomical_plane_normal,
+    audit_dance_spatial_chain_transfer,
     apply_verified_pmbam_segment_pose_correction,
+    build_humanoid_rest_basis_conversion,
+    convert_source_clip_basis,
     _terminal_chain_basis,
 )
 
@@ -536,7 +542,9 @@ def test_verified_mixamo_root_motion_moves_target_root_only(monkeypatch: pytest.
     )
     target = _target_model(
         [
-            ("PMBAM", None, (0.0, 0.0, 0.0), None),
+            # Position controllers are relative deltas; a non-zero bind height
+            # must not be copied into the controller and added a second time.
+            ("PMBAM", None, (0.0, 0.0, 5.0), None),
             ("pelvis_g", "PMBAM", (0.0, 0.0, 1.0), None),
         ],
         anims=("pause1",),
@@ -856,6 +864,29 @@ def test_verified_mixamo_stable_policy_disables_terminal_twist_by_default() -> N
     profile.metadata["exact_segment_correction_policy"] = "mixamo_stable_humanoid"
 
     assert _mapped_terminal_twist_chains(profile) == []
+
+
+def test_verified_profile_can_disable_exact_segment_correction_for_performance_motion() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry(
+                "upperarm",
+                "upperarm_r",
+                "rbicep_g",
+                side="right",
+            ),
+            RetargetMappingEntry(
+                "forearm",
+                "lowerarm_r",
+                "Rforearm_g",
+                side="right",
+            ),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_ue5_to_aurora_mapping"
+    profile.metadata["exact_segment_correction_policy"] = "disabled"
+
+    assert _mapped_exact_segments(profile) == []
 
 
 def test_verified_mixamo_segment_correction_uses_target_rest_roll_anchor() -> None:
@@ -1220,6 +1251,366 @@ def test_verified_mixamo_explicit_limb_only_policy_still_skips_torso_pairs() -> 
     assert ("mixamorig:Spine", "mixamorig:Spine2") not in source_pairs
     assert ("mixamorig:RightShoulder", "mixamorig:RightArm") not in source_pairs
     assert ("mixamorig:RightArm", "mixamorig:RightForeArm") in source_pairs
+
+
+def test_performance_lower_body_policy_aligns_legs_without_touching_upper_body() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "spine_01", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "spine_03", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("thigh", "thigh_l", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "calf_l", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "foot_l", "lfoot_g", side="left"),
+            RetargetMappingEntry("toe", "ball_l", "lfootT_g", side="left"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_ue5_to_aurora_mapping"
+    profile.metadata["exact_segment_correction_policy"] = (
+        "performance_lower_body"
+    )
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {
+        (source_parent, source_child)
+        for source_parent, source_child, _target_parent, _target_child in segments
+    }
+
+    assert source_pairs == {
+        ("thigh_l", "calf_l"),
+        ("calf_l", "foot_l"),
+        ("foot_l", "ball_l"),
+    }
+    assert _mapped_terminal_twist_chains(profile) == []
+
+
+def test_performance_anatomical_policy_aligns_limbs_without_terminal_hands() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "spine_01", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "spine_03", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LHandM1_g", side="left"),
+            RetargetMappingEntry("thigh", "thigh_l", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "calf_l", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "foot_l", "lfoot_g", side="left"),
+            RetargetMappingEntry("toe", "ball_l", "lfootT_g", side="left"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_ue5_to_aurora_mapping"
+    profile.metadata["exact_segment_correction_policy"] = "performance_anatomical"
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {
+        (source_parent, source_child)
+        for source_parent, source_child, _target_parent, _target_child in segments
+    }
+
+    assert source_pairs == {
+        ("spine_01", "spine_03"),
+        ("upperarm_l", "lowerarm_l"),
+        ("lowerarm_l", "hand_l"),
+        ("thigh_l", "calf_l"),
+        ("calf_l", "foot_l"),
+        ("foot_l", "ball_l"),
+    }
+    assert ("hand_l", "middle_01_l") not in source_pairs
+    assert _mapped_terminal_twist_chains(profile) == []
+
+
+def test_dance_anatomical_policy_preserves_bind_clavicle_and_avoids_unstable_roll() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "spine_01", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "spine_03", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LHandM1_g", side="left"),
+            RetargetMappingEntry("thigh", "thigh_l", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "calf_l", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "foot_l", "lfoot_g", side="left"),
+            RetargetMappingEntry("toe", "ball_l", "lfootT_g", side="left"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_ue5_to_aurora_mapping"
+    profile.metadata["exact_segment_correction_policy"] = "dance_anatomical"
+
+    source_pairs = {
+        (source_parent, source_child)
+        for source_parent, source_child, _target_parent, _target_child
+        in _mapped_exact_segments(profile)
+    }
+
+    assert ("clavicle_l", "upperarm_l") not in source_pairs
+    assert ("upperarm_l", "lowerarm_l") in source_pairs
+    assert ("lowerarm_l", "hand_l") in source_pairs
+    assert _mapped_terminal_twist_chains(profile) == []
+
+
+def test_dance_anatomical_policy_uses_bind_anchored_segment_swings() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LHandM1_g", side="left"),
+            RetargetMappingEntry("thigh", "thigh_l", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "calf_l", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "foot_l", "lfoot_g", side="left"),
+            RetargetMappingEntry("toe", "ball_l", "lfootT_g", side="left"),
+        ]
+    )
+    profile.metadata["exact_segment_correction_policy"] = "dance_anatomical"
+
+    source_pairs = {
+        (source_parent, source_child)
+        for source_parent, source_child, _target_parent, _target_child
+        in _mapped_exact_segments(profile)
+    }
+    assert ("clavicle_l", "upperarm_l") not in source_pairs
+    assert ("upperarm_l", "lowerarm_l") in source_pairs
+    assert ("lowerarm_l", "hand_l") in source_pairs
+    assert _mapped_dance_spatial_chains(profile) == []
+
+
+def test_explicit_spatial_dance_policy_builds_complete_limb_chains() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LHandM1_g", side="left"),
+            RetargetMappingEntry("thigh", "thigh_l", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "calf_l", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "foot_l", "lfoot_g", side="left"),
+            RetargetMappingEntry("toe", "ball_l", "lfootT_g", side="left"),
+        ]
+    )
+    profile.metadata["exact_segment_correction_policy"] = "dance_spatial_anatomical"
+
+    assert _mapped_dance_spatial_chains(profile) == [
+        (
+            ("clavicle_l", "upperarm_l", "lowerarm_l", "hand_l", "middle_01_l"),
+            ("lcollar_g", "lbicep_g", "Lforearm_g", "Lhand_g", "LHandM1_g"),
+        ),
+        (
+            ("thigh_l", "calf_l", "foot_l", "ball_l"),
+            ("lthigh_g", "lshin_g", "lfoot_g", "lfootT_g"),
+        ),
+    ]
+
+
+def test_clavicle_dance_policy_uses_only_bind_anchored_segment_swings() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "Lhand_g", side="left"),
+        ]
+    )
+    profile.metadata["exact_segment_correction_policy"] = (
+        "dance_clavicle_anatomical"
+    )
+
+    source_pairs = {
+        (source_parent, source_child)
+        for source_parent, source_child, _target_parent, _target_child
+        in _mapped_exact_segments(profile)
+    }
+    assert ("clavicle_l", "upperarm_l") in source_pairs
+    assert ("upperarm_l", "lowerarm_l") in source_pairs
+    assert ("lowerarm_l", "hand_l") in source_pairs
+    assert _mapped_dance_spatial_chains(profile) == []
+
+
+def test_adaptive_humanoid_basis_aligns_mixed_fbx_actor_frame_to_target() -> None:
+    source = _source_clip(
+        [
+            ("root", None),
+            ("pelvis", "root"),
+            ("head", "root"),
+            ("upperarm_l", "root"),
+            ("upperarm_r", "root"),
+        ],
+        [{
+            "root": Transform(),
+            "pelvis": Transform(position=(0.0, 0.0, 0.0)),
+            "head": Transform(position=(0.0, 0.0, 2.0)),
+            # This imported actor's character-right axis is -Y, whereas the
+            # Aurora target below uses +X.  A fixed 180-degree Z conversion
+            # cannot reconcile the two frames.
+            "upperarm_l": Transform(position=(0.0, 1.0, 1.0)),
+            "upperarm_r": Transform(position=(0.0, -1.0, 1.0)),
+        }],
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("pelvis_g", "rootdummy", (0.0, 0.0, 0.0), None),
+            ("head_g", "rootdummy", (0.0, 0.0, 2.0), None),
+            ("lbicep_g", "rootdummy", (-1.0, 0.0, 1.0), None),
+            ("rbicep_g", "rootdummy", (1.0, 0.0, 1.0), None),
+        ]
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("pelvis", "pelvis", "pelvis_g", side="center"),
+            RetargetMappingEntry("head", "head", "head_g", side="center"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_r", "rbicep_g", side="right"),
+        ]
+    )
+
+    conversion = build_humanoid_rest_basis_conversion(
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+    )
+    converted = convert_source_clip_basis(source, conversion)
+    pose = converted.rest_pose.global_transforms
+
+    source_right = np.asarray(pose["upperarm_r"].position) - np.asarray(
+        pose["upperarm_l"].position
+    )
+    source_up = np.asarray(pose["head"].position) - np.asarray(
+        pose["pelvis"].position
+    )
+    source_right /= np.linalg.norm(source_right)
+    source_up /= np.linalg.norm(source_up)
+
+    assert np.allclose(source_right, (1.0, 0.0, 0.0), atol=1e-7)
+    assert np.allclose(source_up, (0.0, 0.0, 1.0), atol=1e-7)
+    assert np.linalg.det(conversion.change_of_basis) == pytest.approx(1.0)
+    assert converted.axis_system == "aurora_aligned_humanoid_rest"
+    assert any("one rigid humanoid rest-frame" in row for row in converted.import_warnings)
+
+
+def test_spatial_chain_plane_stays_continuous_at_nearly_straight_elbow() -> None:
+    previous = np.asarray((0.0, 0.0, 1.0), dtype=np.float64)
+    normal = _stable_anatomical_plane_normal(
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (2.0, 1e-5, 0.0),
+        rotation_hint=(0.0, 0.0, 0.0, 1.0),
+        expected_normal=previous,
+        previous_normal=previous,
+    )
+
+    assert normal is not None
+    assert float(np.dot(normal, previous)) > 0.999
+
+
+def test_anatomical_segment_basis_preserves_direction_and_bend_plane() -> None:
+    basis = _anatomical_segment_basis(
+        np.asarray((0.0, 1.0, 0.0), dtype=np.float64),
+        np.asarray((0.0, 0.0, -1.0), dtype=np.float64),
+    )
+
+    assert basis is not None
+    assert np.allclose(basis.T @ basis, np.eye(3), atol=1e-7)
+    assert np.allclose(basis[:, 0], (0.0, 1.0, 0.0), atol=1e-7)
+    assert np.allclose(basis[:, 2], (0.0, 0.0, -1.0), atol=1e-7)
+
+
+def test_dance_spatial_audit_replays_straight_elbow_plane_continuity() -> None:
+    node_defs = [
+        ("clavicle_l", None),
+        ("upperarm_l", "clavicle_l"),
+        ("lowerarm_l", "upperarm_l"),
+        ("hand_l", "lowerarm_l"),
+        ("middle_01_l", "hand_l"),
+    ]
+    source = _source_clip(
+        node_defs,
+        [
+            {
+                "clavicle_l": Transform(position=(-0.2, 0.0, 0.0)),
+                "upperarm_l": Transform(position=(0.0, 0.0, 0.0)),
+                "lowerarm_l": Transform(position=(1.0, 0.0, 0.0)),
+                "hand_l": Transform(position=(1.8, 0.4, 0.0)),
+                "middle_01_l": Transform(position=(2.1, 0.55, 0.0)),
+            },
+            {
+                "clavicle_l": Transform(position=(-0.2, 0.0, 0.0)),
+                "upperarm_l": Transform(position=(0.0, 0.0, 0.0)),
+                "lowerarm_l": Transform(position=(1.0, 0.0, 0.0)),
+                "hand_l": Transform(position=(2.0, 1e-5, 0.0)),
+                "middle_01_l": Transform(position=(2.3, 2e-5, 0.0)),
+            },
+            {
+                "clavicle_l": Transform(position=(-0.2, 0.0, 0.0)),
+                "upperarm_l": Transform(position=(0.0, 0.0, 0.0)),
+                "lowerarm_l": Transform(position=(0.9, 0.3, 0.0)),
+                "hand_l": Transform(position=(1.5, 0.9, 0.0)),
+                "middle_01_l": Transform(position=(1.75, 1.1, 0.0)),
+            },
+        ],
+        duration=2.0,
+    )
+    target = _target_model(
+            [
+                ("rootdummy", None, (0.0, 0.0, 0.0), None),
+                ("lcollar_g", "rootdummy", (-0.2, 0.0, 0.0), None),
+                ("lbicep_g", "lcollar_g", (0.2, 0.0, 0.0), None),
+            ("lforearm_g", "lbicep_g", (0.8, 0.0, 0.0), None),
+            ("lhand_g", "lforearm_g", (0.65, 0.25, 0.0), None),
+            ("LbFngrB_g", "lhand_g", (0.25, 0.1, 0.0), None),
+        ],
+        anims=("dance",),
+    )
+    profile = _profile(
+            [
+                RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+                RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "lforearm_g", side="left"),
+            RetargetMappingEntry("hand", "hand_l", "lhand_g", side="left"),
+            RetargetMappingEntry("middle_base", "middle_01_l", "LbFngrB_g", side="left"),
+        ],
+        slot="dance",
+    )
+    profile.metadata["exact_segment_correction_policy"] = "dance_spatial_anatomical"
+    animation = Animation(
+        name="dance",
+        length=2.0,
+        nodes=[
+            ModelNode(
+                name=name,
+                controllers=[{
+                    "type": 20,
+                    "times": [0.0, 1.0, 2.0],
+                    "values": [[0.0, 0.0, 0.0, 1.0]] * 3,
+                }],
+            )
+            for name in ("lcollar_g", "lbicep_g", "lforearm_g", "lhand_g")
+        ],
+    )
+
+    apply_verified_pmbam_segment_pose_correction(
+        animation=animation,
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+    )
+    audit = audit_dance_spatial_chain_transfer(
+        animation=animation,
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+    )
+
+    assert audit.passed, audit.errors
+    assert audit.sample_count == 3
+    assert audit.chain_count == 1
+    assert audit.max_segment_direction_error_degrees < 1e-4
+    assert audit.max_bone_basis_error_degrees < 1e-4
 
 
 def test_verified_ue5_segment_policy_keeps_spine_and_clavicle_exact_correction() -> None:

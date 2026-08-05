@@ -165,9 +165,9 @@ def test_dialogue_camera_normalization_and_line_interval_contract() -> None:
 
     assert map_studio_pie_dialogue_line_interval(
         "short",
-        delay_milliseconds=4200,
+        delay_seconds=4,
         audio_duration_seconds=1.25,
-    ) == pytest.approx(4.2)
+    ) == pytest.approx(4.0)
     assert map_studio_pie_dialogue_line_interval(
         "This text fallback is deliberately longer.",
         audio_duration_seconds=8.5,

@@ -4404,7 +4404,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._generic_mesh_hover_before_map_studio: bool | None = None
         self._hover_update_timer = QtCore.QTimer(self)
         self._hover_update_timer.setSingleShot(True)
-        self._hover_update_timer.setInterval(16)
+        self._map_studio_hover_interval_ms = max(
+            16,
+            int(self.viewport.property("_gr_map_studio_hover_interval_ms") or 22),
+        )
+        self._hover_update_timer.setInterval(self._map_studio_hover_interval_ms)
         self._hover_update_timer.timeout.connect(self._flush_queued_map_studio_hover)
         self._texture_paint_enabled = False
         self._texture_paint_drag = None
@@ -5357,7 +5361,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 # directly over geometry.
                 getattr(event, "acceptProposedAction", lambda: None)()
                 self.marker_summary_label.setText(
-                    "Move over a visible room, terrain, or walkmesh surface; release when the surface highlights."
+                    "Move over authored room or terrain geometry and release when it highlights. "
+                    "The white grid and green X-ray WOK lines are guides, not surfaces."
                 )
             return True
         if event_type != QtCore.QEvent.Drop:
@@ -5367,7 +5372,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._terrain_kit_snap_preview = None
             self._clear_map_studio_hover()
             getattr(event, "ignore", lambda: None)()
-            self.marker_summary_label.setText("Placeable drop cancelled: no visible level surface was under the cursor.")
+            self.marker_summary_label.setText(
+                "Placement cancelled: create a Room or Terrain Surface, then release when its geometry highlights. "
+                "The editor grid and green X-ray WOK lines cannot receive objects."
+            )
             return True
         request = {
             **payload,
@@ -7321,7 +7329,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return
         self._hover_refresh_deferred = False
         if not self._hover_update_timer.isActive():
-            self._hover_update_timer.start(16)
+            self._hover_update_timer.start(self._map_studio_hover_interval_ms)
 
     def _flush_queued_map_studio_hover(self) -> None:
         """Refresh exactly the latest queued pointer after navigation/idle."""
@@ -7332,7 +7340,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return
         if bool(getattr(self.viewport, "_nav_dragging", "")):
             self._hover_refresh_deferred = True
-            self._hover_update_timer.start(16)
+            self._hover_update_timer.start(self._map_studio_hover_interval_ms)
             return
         screen = self._queued_hover_screen
         self._queued_hover_screen = None
@@ -7605,7 +7613,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             template = str(values.get("template_resref", "") or "camera")
             snap_state = "on" if values.get("snap_to_walkmesh", True) else "off"
             self.marker_summary_label.setText(
-                f"Placing {template}: click a visible level surface. Walkmesh snap is {snap_state}; Esc cancels."
+                f"Placing {template}: click highlighted room or terrain geometry (not the grid or green X-ray lines). "
+                f"Walkmesh snap is {snap_state}; Esc cancels."
             )
         else:
             self._restore_marker_summary_after_transform_snap()
@@ -8788,12 +8797,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             except TypeError:
                 request()
         if snap is not None:
-            source_wall = int(snap.get("source_edge_index", -1)) + 1
             target = str(snap.get("target_label") or snap.get("target_room_resref") or "doorway")
-            cut_note = " A matching opening will be cut automatically." if bool(snap.get("auto_cut_source", False)) else ""
-            self.marker_summary_label.setText(
-                f"Release to snap wall {source_wall} to {target}; the room will rotate and align as one object.{cut_note}"
-            )
+            if str(snap.get("snap_kind") or "").strip().lower() == "terrain_seam":
+                source_edge = str(snap.get("source_terrain_edge") or "edge")
+                self.marker_summary_label.setText(
+                    f"Release to weld the {source_edge} terrain edge to {target}; visible ground and WOK traversal update together."
+                )
+            else:
+                source_wall = int(snap.get("source_edge_index", -1)) + 1
+                cut_note = " A matching opening will be cut automatically." if bool(snap.get("auto_cut_source", False)) else ""
+                self.marker_summary_label.setText(
+                    f"Release to snap wall {source_wall} to {target}; the room will rotate and align as one object.{cut_note}"
+                )
         else:
             self.marker_summary_label.setText(
                 f"Move {len(selection)} room(s): {delta[0]:+.2f}, {delta[1]:+.2f} m — approach a doorway to magnet-snap."
@@ -10172,9 +10187,40 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         return value
 
     def _configure_map_studio_viewport_quality(self) -> None:
+        from dataclasses import replace as dataclass_replace
+
+        from src.core.modules.map_studio_modeling_tools import (
+            map_studio_viewport_performance_policy,
+        )
+
+        policy = map_studio_viewport_performance_policy()
         self.viewport.setProperty("_gr_suppress_renderer_diagnostics", True)
         self.viewport.setProperty("_gr_map_studio_clean_viewport", True)
         self.viewport.setProperty("_gr_map_studio_hide_embedded_toolbar", True)
+        self.viewport.setProperty("_gr_map_studio_performance_profile", policy.profile_key)
+        self.viewport.setProperty(
+            "_gr_map_studio_interactive_render_scale",
+            float(policy.interactive_render_scale),
+        )
+        self.viewport.setProperty("_gr_map_studio_idle_render_scale", float(policy.idle_render_scale))
+        self.viewport.setProperty("_gr_map_studio_hover_interval_ms", int(policy.hover_interval_ms))
+        renderer_settings = getattr(self.viewport, "_renderer_settings", None)
+        if renderer_settings is not None:
+            self.viewport._renderer_settings = dataclass_replace(
+                renderer_settings,
+                target_fps=min(int(renderer_settings.target_fps), int(policy.target_fps)),
+                wgpu_max_texture_memory_mb=min(
+                    int(renderer_settings.wgpu_max_texture_memory_mb),
+                    int(policy.texture_memory_budget_mb),
+                ),
+                wgpu_max_uploads_per_frame=min(
+                    int(renderer_settings.wgpu_max_uploads_per_frame),
+                    8 if policy.profile_key == "portable" else 12,
+                ),
+            )
+        governor = getattr(self.viewport, "_frame_governor", None)
+        if governor is not None and hasattr(governor, "set_target_fps"):
+            governor.set_target_fps(int(policy.target_fps))
         for renderer in (getattr(self.viewport, "_renderer", None), getattr(self.viewport, "_gpu_renderer", None)):
             if renderer is None:
                 continue
@@ -10197,7 +10243,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         surface = getattr(canvas, "current_surface", lambda: None)()
         if isinstance(surface, QtWidgets.QLabel):
             surface.setText("")
-            surface.setToolTip("Map Studio viewport")
+            surface.setToolTip(
+                f"Map Studio viewport · Adaptive performance: {policy.profile_label}, "
+                f"{policy.target_fps} FPS interaction, full-resolution idle"
+            )
 
     def _sync_clean_viewport_presentation(self) -> None:
         viewport = getattr(self, "viewport", None)

@@ -38,6 +38,25 @@ def _fbx_compatibility_profile_from_filter(selected_filter: str) -> str:
     return "standard"
 
 
+def _selected_scene_objects_for_export(scene_manager, viewport) -> list:
+    """Resolve click or marquee viewport selection to stable scene objects."""
+    scene = getattr(scene_manager, "active_scene", None)
+    objects = list(getattr(scene, "objects", None) or [])
+    objects_by_id = {str(getattr(obj, "id", "") or ""): obj for obj in objects}
+    selected = []
+    seen = set()
+    for node in list(getattr(viewport, "_selected_viewport_nodes", None) or []):
+        object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+        if not object_id or object_id in seen or object_id not in objects_by_id:
+            continue
+        seen.add(object_id)
+        selected.append(objects_by_id[object_id])
+    if selected:
+        return selected
+    getter = getattr(scene_manager, "get_selected_objects", None)
+    return list(getter() or []) if callable(getter) else []
+
+
 # ---------------------------------------------------------------------------
 # Plain "work" functions that perform the actual blocking I/O.
 #
@@ -209,6 +228,37 @@ def _work_export_fbx(
         raise RuntimeError("FBX export failed. Check the export log for details.")
     if progress_callback:
         progress_callback("FBX export complete", 100)
+    return path
+
+
+def _work_export_selected_fbx(
+    scene_objects,
+    path: str,
+    *,
+    tex_cache=None,
+    progress_callback=None,
+    is_cancelled=None,
+):
+    from src.converters.mesh_converter import FBXExporter
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    if progress_callback:
+        progress_callback("Combining selected scene objects into one mesh…", 20)
+    merged = merge_selected_scene_objects(scene_objects, name=Path(path).stem or "selection")
+    if progress_callback:
+        progress_callback("Writing one-mesh FBX geometry and materials…", 50)
+    ok = FBXExporter().export(
+        merged,
+        path,
+        tex_cache=tex_cache,
+        export_rigging=False,
+        compatibility_profile="standard",
+        force_ascii=True,
+    )
+    if not ok:
+        raise RuntimeError("Selected FBX export failed. Check the export log for details.")
+    if progress_callback:
+        progress_callback("Selected FBX export complete", 100)
     return path
 
 
@@ -859,7 +909,10 @@ class ModelIoMixin:
             error_category="export_error",
         )
     def _export_selected_fbx(self):
-        selected = self.scene_manager.get_selected_objects()
+        selected = _selected_scene_objects_for_export(
+            self.scene_manager,
+            getattr(self, "viewport", None),
+        )
         if not selected:
             QtWidgets.QMessageBox.information(self, "Export Selected FBX", "Select a scene object first.")
             return
@@ -879,6 +932,26 @@ class ModelIoMixin:
                 "Unity-, Unreal-, and 3ds Max-compatible FBX export requires one runtime model. "
                 "For a body with attached layers, use Body Attachment System > "
                 "Export Composed Model… so the rig can be normalized as one asset.",
+            )
+            return
+        is_module_selection = any(
+            bool((getattr(item, "metadata", {}) or {}).get("module_group"))
+            for item in selected
+        )
+        if compatibility_profile == "standard" and (len(selected) > 1 or is_module_selection):
+            def _on_complete(result, cancelled=False):
+                if cancelled or result is None:
+                    return
+                self._log(f"Exported selected objects as one FBX mesh -> {Path(path).name}", "success")
+
+            self._run_io_async(
+                f"Combining and exporting selection — {Path(path).name}",
+                _work_export_selected_fbx,
+                selected,
+                path,
+                tex_cache=self._get_tex_cache_for_export(),
+                on_complete=_on_complete,
+                error_category="export_error",
             )
             return
         if len(selected) == 1:

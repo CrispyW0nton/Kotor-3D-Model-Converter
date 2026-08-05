@@ -99,7 +99,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "c065bff3d192c1a54b82c5a450769f555d73ddc6578d29093efa823a9f8b5bb4"
+            "sha256": "92dea51630f6a409d17be3b789eb7b75b228367331757d38d8f20476a9344fc3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -633,7 +633,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_SHADERS",
             "source_path": "src/core/rendering/gpu_shaders.py",
             "packaged_path": "Python/src/core/rendering/gpu_shaders.py",
-            "sha256": "c80aec17dbbd5ec7a43490524c0a241abfaf80908f8c0b6eac9f62598828ec27"
+            "sha256": "2a2f0cd0d3d8e083118634a42e7b1c07b1f2cf7a9aa8945b625f50707092d0d2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_VBO_LAYOUT",
@@ -657,7 +657,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "221b4004860f1ab2b8ac78725a82dfa28612f1abc58b994cd30659b6874dac9b"
+            "sha256": "3e09d899b6a7fca380a1fe3e7bf2a249e69cee8306eec58476fffa0dba0e4cbe"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

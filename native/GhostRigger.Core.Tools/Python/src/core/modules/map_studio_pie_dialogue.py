@@ -364,14 +364,14 @@ def _optional_float(value: Any) -> float | None:
 def map_studio_pie_dialogue_line_interval(
     text: str,
     *,
-    delay_milliseconds: int = -1,
+    delay_seconds: int = -1,
     audio_duration_seconds: float | None = None,
 ) -> float:
     """Return a bounded editor-side approximation of Odyssey line timing.
 
     Fresh executable evidence proves that retail prefers an audio/TLK-derived
     duration, falls back to text length, enforces a minimum, and treats DLG
-    ``Delay`` (milliseconds) as a lower bound.  The exact retail text-rate and
+    ``Delay`` (seconds) as a lower bound.  The exact retail text-rate and
     every ``WaitFlags`` bit remain unknown, so those two constants are kept as
     an explicit preview policy rather than labelled engine facts.
     """
@@ -387,7 +387,7 @@ def map_studio_pie_dialogue_line_interval(
     else:
         base = text_fallback
     try:
-        delay = max(0.0, int(delay_milliseconds) / 1000.0)
+        delay = max(0.0, float(delay_seconds))
     except (TypeError, ValueError, OverflowError):
         delay = 0.0
     return max(base, delay)
@@ -1484,7 +1484,7 @@ class MapStudioPIEDialogueSession:
             node_unskippable=bool(getattr(node, "unskippable", False)) if node is not None else False,
             delay=delay,
             wait_flags=int(getattr(node, "wait_flags", 0) or 0) if node is not None else 0,
-            line_interval_seconds=map_studio_pie_dialogue_line_interval(text, delay_milliseconds=delay),
+            line_interval_seconds=map_studio_pie_dialogue_line_interval(text, delay_seconds=delay),
             conversation_type=conversation_type,
             quest_tag=quest_tag,
             quest_entry=quest_entry,

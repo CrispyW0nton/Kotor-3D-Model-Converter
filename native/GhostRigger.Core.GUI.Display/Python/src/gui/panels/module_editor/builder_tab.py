@@ -50,6 +50,8 @@ class BuilderTab(QtWidgets.QWidget):
     terrainCreateRequested = QtCore.Signal()
     terrainDressingRequested = QtCore.Signal()
     terrainPaintRequested = QtCore.Signal()
+    starterRoomRequested = QtCore.Signal()
+    starterTerrainRequested = QtCore.Signal()
     snapRoomsAtDoorwayRequested = QtCore.Signal()
     snapRoomsToGridRequested = QtCore.Signal()
     buildingToolChanged = QtCore.Signal(str)
@@ -81,6 +83,37 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildSectionTabs = QtWidgets.QTabWidget(self)
         self.buildSectionTabs.setObjectName("mapStudioBuildSectionTabs")
         self.buildSectionTabs.setDocumentMode(True)
+
+        self.startHereGroup = QtWidgets.QGroupBox("Start here: choose the kind of level", self)
+        self.startHereGroup.setObjectName("mapStudioBuilderStartHereGroup")
+        start_here_layout = QtWidgets.QVBoxLayout(self.startHereGroup)
+        start_here_layout.setContentsMargins(8, 5, 8, 6)
+        start_here_layout.setSpacing(4)
+        self.startHereLabel = QtWidgets.QLabel(
+            "The viewport grid is only a guide. Rooms create interior floor, walls, and WOK; "
+            "terrain creates exterior ground and WOK.",
+            self.startHereGroup,
+        )
+        self.startHereLabel.setObjectName("mapStudioBuilderStartHereLabel")
+        self.startHereLabel.setWordWrap(True)
+        start_here_layout.addWidget(self.startHereLabel)
+        start_here_buttons = QtWidgets.QHBoxLayout()
+        self.startInteriorButton = QtWidgets.QPushButton("Interior: Create Room", self.startHereGroup)
+        self.startInteriorButton.setObjectName("mapStudioBuilderStartInteriorButton")
+        self.startInteriorButton.setToolTip(
+            "Create a usable interior room with generated floor, walls, and matching walkmesh."
+        )
+        self.startExteriorButton = QtWidgets.QPushButton("Exterior: Create Terrain", self.startHereGroup)
+        self.startExteriorButton.setObjectName("mapStudioBuilderStartExteriorButton")
+        self.startExteriorButton.setToolTip(
+            "Create usable exterior ground with a matching walkmesh; drag matching terrain edges together to weld them."
+        )
+        self.startInteriorButton.clicked.connect(self._request_starter_room)
+        self.startExteriorButton.clicked.connect(self._request_starter_terrain)
+        start_here_buttons.addWidget(self.startInteriorButton, 1)
+        start_here_buttons.addWidget(self.startExteriorButton, 1)
+        start_here_layout.addLayout(start_here_buttons)
+        layout.addWidget(self.startHereGroup)
 
         self.roomBuildingPage = QtWidgets.QWidget(self.buildSectionTabs)
         self.roomBuildingPage.setObjectName("mapStudioRoomBuildingPage")
@@ -739,13 +772,16 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_box.setObjectName("mapStudioTerrainSculptGroup")
         terrain_layout = QtWidgets.QVBoxLayout(terrain_box)
         self.terrainWorkflowLabel = QtWidgets.QLabel(
-            "Create or select a terrain surface. Sculpt Mode then opens a compact brush shelf above the viewport so the common tools stay beside your terrain."
+            "Create Terrain Surface makes actual exterior ground plus a matching WOK automatically. "
+            "Move matching terrain edges together to weld both the visible ground and WOK seam; Sculpt Mode opens the brush shelf."
         )
         self.terrainWorkflowLabel.setObjectName("mapStudioTerrainWorkflowLabel")
         self.terrainWorkflowLabel.setWordWrap(True)
         self.createTerrainSurfaceButton = QtWidgets.QPushButton("Create Terrain Surface")
         self.createTerrainSurfaceButton.setObjectName("mapStudioCreateTerrainSurfaceButton")
-        self.createTerrainSurfaceButton.setToolTip("Create a walkable terrain heightfield and immediately enable viewport sculpting.")
+        self.createTerrainSurfaceButton.setToolTip(
+            "Create an exportable exterior heightfield and its matching generated walkmesh, then enable viewport sculpting."
+        )
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
         self.terrainBrushComboBox = QtWidgets.QComboBox()
@@ -783,7 +819,8 @@ class BuilderTab(QtWidgets.QWidget):
             "and Alt+right-drag adjusts size horizontally and hardness vertically."
         )
         self.terrainHintLabel = QtWidgets.QLabel(
-            "Tip: shape with the clean surface view, then enable Slope / WOK overlay in the viewport shelf before export."
+            "Tip: shape with the clean surface view, then enable the X-ray terrain WOK diagnostic before export. "
+            "The diagnostic is always drawn on top; it does not mean the WOK is floating."
         )
         self.terrainHintLabel.setObjectName("mapStudioTerrainHintLabel")
         self.terrainHintLabel.setWordWrap(True)
@@ -1509,6 +1546,14 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_script_hook_field_choices()
         self._update_gameplay_spatial_controls()
         self.set_module_entry_point(None)
+
+    def _request_starter_room(self) -> None:
+        self.buildSectionTabs.setCurrentWidget(self.roomBuildingPage)
+        self.starterRoomRequested.emit()
+
+    def _request_starter_terrain(self) -> None:
+        self.buildSectionTabs.setCurrentWidget(self.terrainBuildingPage)
+        self.starterTerrainRequested.emit()
 
     @staticmethod
     def _make_transform_spin(
@@ -2329,7 +2374,7 @@ class BuilderTab(QtWidgets.QWidget):
         if description:
             text += f" {description}"
         if guardrail and brush.get("implemented"):
-            text += " Check Slope / WOK overlay before export."
+            text += " Check the X-ray terrain WOK diagnostic before export."
         self.terrainBrushStatusLabel.setText(text)
         enabled = bool(brush.get("implemented")) and bool(self._current_terrain_data())
         self.applyTerrainBrushButton.setEnabled(enabled)

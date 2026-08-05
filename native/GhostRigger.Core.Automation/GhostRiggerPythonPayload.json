@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Automation",
-    "file_count": 46,
+    "file_count": 48,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_GHOSTSTUDIO_SPATIAL_MCP_SERVER",
             "source_path": "src/ghoststudio_spatial_mcp/server.py",
             "packaged_path": "Python/src/ghoststudio_spatial_mcp/server.py",
-            "sha256": "10469f8ac26b9d9083b71598af75121d5c1e78d51b20088c8ad53f0b5e93e1bd"
+            "sha256": "063bfe32b2027e5b7454a3168d78b27345509fc997a3256e80975e2e01e374b5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IPC_INIT",
@@ -45,13 +45,25 @@
             "resource_name": "PYTHON_PAYLOAD_IPC_SERVER",
             "source_path": "src/ipc/server.py",
             "packaged_path": "Python/src/ipc/server.py",
-            "sha256": "f3cfcd95457facd9fea59c4b8614580f0caf7faadc1966596844380923051542"
+            "sha256": "2d0abc33ff0dc99cae0f4eb5bf7a86322671eb3856a5b85f49655a8fdbbc850e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IPC_SPATIAL_AUTH",
             "source_path": "src/ipc/spatial_auth.py",
             "packaged_path": "Python/src/ipc/spatial_auth.py",
-            "sha256": "34b9fe81c98db2eaf9900e9e33a83156eded4e4f21efeb289b114f146f775cf7"
+            "sha256": "93852f5cbca1fa1c1b4158e46d86cd9d7ba53677e5be7cc999df5f2c20075f23"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IPC_SPATIAL_PIPE",
+            "source_path": "src/ipc/spatial_pipe.py",
+            "packaged_path": "Python/src/ipc/spatial_pipe.py",
+            "sha256": "992babfabcadb9f1b3bd51e62b7babe616a70f1014180afe3b5713180e0827e6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IPC_SPATIAL_PROFILE_ANCHOR",
+            "source_path": "src/ipc/spatial_profile_anchor.py",
+            "packaged_path": "Python/src/ipc/spatial_profile_anchor.py",
+            "sha256": "204cd689451aa59e2d8595ddf223af94f661719ea965b408e2fd8ecd2940958b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_INIT",
@@ -69,7 +81,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_ADAPTERS",
             "source_path": "src/kotormcp/adapters.py",
             "packaged_path": "Python/src/kotormcp/adapters.py",
-            "sha256": "8577c7d6d3e816c424a46e16762166168363f536a1f3e24acce349ba17c0854b"
+            "sha256": "cf98928a147a23d62c5dce311e6d7df6f909dc8270aa6286a36a0079231e41bc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_ADAPTERS_DECOMPILE",
@@ -105,7 +117,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_PORTS",
             "source_path": "src/kotormcp/ports.py",
             "packaged_path": "Python/src/kotormcp/ports.py",
-            "sha256": "ec88badcdef8a9c4c8182eacc48ae586c5f5fbde1b64b104be9d251be15ba4d4"
+            "sha256": "62d5ddddd2587e06db419411061aa7b71976d67ad0881184a53c0f1db57b7238"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_SCHEMAS_INIT",
@@ -183,7 +195,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER",
             "source_path": "src/kotormcp/tools/ghostrigger.py",
             "packaged_path": "Python/src/kotormcp/tools/ghostrigger.py",
-            "sha256": "4637eded5b73b857c9edb51504d654cdb81177fb967232f1b3a2ba0fca8968f6"
+            "sha256": "2c67bdb1f808a324ca110ab5769356c11d5ad94d95057b8517c94c7383b4095f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER_TOOLS",

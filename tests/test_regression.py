@@ -1484,11 +1484,80 @@ def test_debug_visualize_mode_is_env_gated(monkeypatch) -> None:
     assert _lm_composite_mode() == 0
 
 
-def test_gpu_shader_keeps_lightmap_uv_channel_independent() -> None:
+def test_gpu_shader_keeps_native_lightmap_uvs_in_authored_atlas_orientation() -> None:
     from src.core.rendering.gpu_shaders import _VERT_SRC
 
-    assert "v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv_lm.y);" in _VERT_SRC
-    assert "v_uv_lm  = vec2(in_uv_lm.x, 1.0 - in_uv.y);" not in _VERT_SRC
+    assert "v_uv_lm = in_uv_lm;" in _VERT_SRC
+    assert "u_lm_uv_v_flip" not in _VERT_SRC
+    assert "1.0 - in_uv_lm.y" not in _VERT_SRC
+
+
+def test_gpu_renderer_does_not_apply_diffuse_orientation_policy_to_lightmaps() -> None:
+    from pathlib import Path
+
+    source = Path(
+        "native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py"
+    ).read_text(encoding="utf-8")
+
+    assert "u_lm_uv_v_flip" not in source
+    assert "_effective_diffuse_uv_v_flip(node, lm_img)" not in source
+
+
+def test_standard_renderers_exclude_embedded_room_walkmesh_geometry() -> None:
+    from src.core.rendering.mesh_render_data import (
+        _node_is_embedded_walkmesh,
+        _node_is_renderable_mesh,
+    )
+
+    visual = SimpleNamespace(
+        flags=0x0020,
+        is_aabb=False,
+        vertex_space=0,
+        render=True,
+        is_saber=False,
+        vertices=[(0.0, 0.0, 0.0)],
+        faces=[(0, 0, 0)],
+    )
+    by_vertex_space = SimpleNamespace(**{**visual.__dict__, "vertex_space": 2})
+    by_flag = SimpleNamespace(**{**visual.__dict__, "flags": 0x0201})
+    by_type = SimpleNamespace(**{**visual.__dict__, "is_aabb": True})
+
+    assert _node_is_embedded_walkmesh(visual) is False
+    assert _node_is_renderable_mesh(visual) is True
+    for walkmesh in (by_vertex_space, by_flag, by_type):
+        assert _node_is_embedded_walkmesh(walkmesh) is True
+        assert _node_is_renderable_mesh(walkmesh) is False
+
+    source = Path(
+        "native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py"
+    ).read_text(encoding="utf-8")
+    assert "if _node_is_embedded_walkmesh(node):" in source
+
+
+@pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
+def test_k1_m14aa_embedded_walkmeshes_are_not_visual_draw_nodes() -> None:
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.rendering.mesh_render_data import _node_is_renderable_mesh
+
+    expected_faces = {
+        "m14aa_01a": 844,
+        "m14aa_01b": 290,
+        "m14aa_01c": 946,
+        "m14aa_01e": 484,
+        "m14aa_01i": 200,
+    }
+    for resref, face_count in expected_faces.items():
+        mdl, mdx = _raw_model("k1", resref)
+        model = load_model_from_bytes(mdl, mdx)
+        walkmeshes = [
+            node
+            for node in model.all_nodes()
+            if bool(getattr(node, "is_aabb", False))
+        ]
+
+        assert [node.name for node in walkmeshes] == [f"WalkMesh_{resref[-3:]}"]
+        assert len(walkmeshes[0].faces) == face_count
+        assert _node_is_renderable_mesh(walkmeshes[0]) is False
 
 
 def test_gpu_shader_exposes_lightmap_composite_modes() -> None:
@@ -1502,9 +1571,19 @@ def test_gpu_shader_exposes_lightmap_composite_modes() -> None:
     assert "u_lm_composite_mode == 3" in _FRAG_SRC
     assert "uniform float u_lightmap_intensity" in _FRAG_SRC
     assert "uniform int   u_lightmap_mode" in _FRAG_SRC
-    assert "vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0" in _FRAG_SRC
     assert "u_lightmap_mode == 2" in _FRAG_SRC
     assert "baked_light + dynamic_light" not in _FRAG_SRC
+
+
+def test_gpu_shader_reference_lightmap_path_does_not_clip_k1_rooms() -> None:
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    # KotOR.js' PI * lightmap * BRDF_Lambert(diffuse) simplifies to
+    # diffuse * lightmap at the normal intensity.  An additional overbright
+    # multiplier clips pale K1 room textures into the white "ghost mesh".
+    assert _FRAG_SRC.count("vec3 baked_target = lm_samp.rgb;") == 2
+    assert "lm_samp.rgb * 2.5" not in _FRAG_SRC
+    assert "lm_samp.rgb * 2.0 + vec3(0.03)" not in _FRAG_SRC
 
 
 def test_gl_state_trace_record_captures_node_and_state() -> None:
