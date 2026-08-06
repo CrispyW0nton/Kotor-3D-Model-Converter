@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
+import shutil
 import subprocess
+import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 try:
@@ -297,6 +301,62 @@ def _work_export_selected_fbx(
     return path
 
 
+def _work_export_clean_module_obj(
+    scene_objects,
+    path: str,
+    *,
+    tex_cache=None,
+    progress_callback=None,
+    is_cancelled=None,
+):
+    from src.converters.mesh_converter import OBJExporter
+    from src.io.export_control import check_export_cancelled
+    from src.io.clean_module_obj_export import prepare_clean_module_obj_model
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    stage_dir = Path(
+        tempfile.mkdtemp(
+            prefix=f".{target.stem}-export-",
+            dir=str(target.parent),
+        )
+    )
+    staged_obj = stage_dir / target.name
+    try:
+        check_export_cancelled(is_cancelled)
+        if progress_callback:
+            progress_callback("Combining every room in the loaded module…", 15)
+        merged, summary = prepare_clean_module_obj_model(
+            scene_objects,
+            name=target.stem or "module_clean",
+            is_cancelled=is_cancelled,
+        )
+        if progress_callback:
+            progress_callback(
+                "Removing skybox and oversized background geometry…",
+                40,
+            )
+        export_result = OBJExporter().export(
+            merged,
+            str(staged_obj),
+            tex_cache=tex_cache,
+            export_rigging=False,
+            is_cancelled=is_cancelled,
+        )
+        summary = replace(summary, texture_sidecars=export_result.texture_sidecars)
+        check_export_cancelled(is_cancelled)
+        if progress_callback:
+            progress_callback("Publishing clean map files…", 95)
+        for staged_file in sorted(stage_dir.iterdir(), key=lambda item: item.name.casefold()):
+            if staged_file.is_file():
+                os.replace(staged_file, target.parent / staged_file.name)
+        if progress_callback:
+            progress_callback("Clean module OBJ export complete", 100)
+        return path, summary
+    finally:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+
+
 def _work_run_mdlops(cmd, cwd, *, progress_callback=None, is_cancelled=None):
     if progress_callback:
         progress_callback("Running MDLOps\u2026", 30)
@@ -387,11 +447,10 @@ class _IoGuiCallbackBridge(QtCore.QObject):
     @QtCore.Slot()
     def on_canceled(self):
         try:
-            QtCore.QMetaObject.invokeMethod(
-                self._worker,
-                "request_cancel",
-                QtCore.Qt.QueuedConnection,
-            )
+            # The worker thread is occupied by the synchronous export. Setting
+            # its threading.Event directly makes cancellation visible now,
+            # rather than queuing the request behind the work being cancelled.
+            self._worker.request_cancel()
         except RuntimeError:
             pass
 
@@ -1081,6 +1140,102 @@ class ModelIoMixin:
         self._run_io_async(
             f"Combining and exporting full module — {Path(path).name}",
             _work_export_selected_fbx,
+            module_objects,
+            path,
+            tex_cache=self._get_tex_cache_for_export(),
+            on_complete=_on_complete,
+            error_category="export_error",
+        )
+
+    def _export_clean_module_obj(self):
+        module_objects = _module_group_scene_objects_for_export(
+            self.scene_manager,
+            getattr(self, "viewport", None),
+        )
+        if not module_objects:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Clean Full Map as OBJ",
+                "Select any room in a loaded module layout first.\n\n"
+                "Ghost Studio will automatically include every room in that map.",
+            )
+            return
+        module_group = (
+            (getattr(module_objects[0], "metadata", {}) or {}).get("module_group")
+            or {}
+        )
+        module_root = str(module_group.get("module_root") or "module").strip()
+        path, _selected_filter = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export Clean Full Map as OBJ",
+            f"{module_root}_map_no_skybox.obj",
+            "Wavefront OBJ (*.obj);;All files (*.*)",
+        )
+        if not path:
+            return
+
+        def _on_complete(result, cancelled=False):
+            if cancelled or result is None:
+                return
+            output_path, summary = result
+            removed_faces = (
+                summary.removed_skybox_faces
+                + summary.removed_background_faces
+            )
+            texture_sidecars = summary.texture_sidecars
+            self._log(
+                f"Exported clean full-map OBJ ({summary.scene_objects} rooms, "
+                f"{summary.exported_faces:,} faces, {removed_faces:,} backdrop "
+                f"faces removed, {texture_sidecars.saved}/"
+                f"{texture_sidecars.requested} textures written) -> "
+                f"{Path(output_path).name}",
+                "success",
+            )
+            texture_status = (
+                f"Texture files written: {texture_sidecars.saved} of "
+                f"{texture_sidecars.requested}"
+            )
+            unavailable = texture_sidecars.unavailable
+            if unavailable:
+                missing_names = (
+                    *texture_sidecars.missing_names,
+                    *texture_sidecars.failed_names,
+                )
+                preview = ", ".join(missing_names[:6])
+                if len(missing_names) > 6:
+                    preview += f", and {len(missing_names) - 6} more"
+                texture_status += (
+                    f"\nWarning: {unavailable} texture(s) were unavailable"
+                    + (f" ({preview})" if preview else "")
+                    + ". The OBJ and MTL are complete, but those materials "
+                    "will need their texture files supplied separately."
+                )
+            message = (
+                f"Exported the complete map as one OBJ.\n\n"
+                f"Rooms included: {summary.scene_objects}\n"
+                f"Map faces: {summary.exported_faces:,}\n"
+                f"Skybox faces removed: {summary.removed_skybox_faces:,}\n"
+                f"Large background faces removed: "
+                f"{summary.removed_background_faces:,}\n"
+                f"Materials: {summary.materials}\n"
+                f"{texture_status}\n\n"
+                f"OBJ and MTL files were written at:\n"
+                f"{Path(output_path).parent}"
+            )
+            dialog = (
+                QtWidgets.QMessageBox.warning
+                if unavailable
+                else QtWidgets.QMessageBox.information
+            )
+            dialog(
+                self,
+                "Clean Map Export Complete",
+                message,
+            )
+
+        self._run_io_async(
+            f"Preparing clean full-map OBJ — {Path(path).name}",
+            _work_export_clean_module_obj,
             module_objects,
             path,
             tex_cache=self._get_tex_cache_for_export(),

@@ -137,6 +137,17 @@ class WindowChromeMixin:
         self.export_full_module_fbx_action.triggered.connect(
             self._export_full_module_fbx,
         )
+        self.export_clean_module_obj_action = QtGui.QAction(
+            "Export Clean Full Map as OBJ...",
+            self,
+        )
+        self.export_clean_module_obj_action.setStatusTip(
+            "Export every room as one OBJ without the skybox or oversized "
+            "background plane, including materials and textures"
+        )
+        self.export_clean_module_obj_action.triggered.connect(
+            self._export_clean_module_obj,
+        )
         self.export_gltf_action = QtGui.QAction("Export GLB/GLTF...", self)
         self.export_gltf_action.setShortcut("Ctrl+G")
         self.export_gltf_action.triggered.connect(self._export_gltf)
@@ -439,6 +450,7 @@ class WindowChromeMixin:
         file_menu.addAction(self.export_fbx_action)
         file_menu.addAction(self.export_selected_fbx_action)
         file_menu.addAction(self.export_full_module_fbx_action)
+        file_menu.addAction(self.export_clean_module_obj_action)
         file_menu.addAction(self.export_gltf_action)
         file_menu.addSeparator()
         file_menu.addAction(self.export_humanoid_action)

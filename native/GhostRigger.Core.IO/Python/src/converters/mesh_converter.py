@@ -16,6 +16,7 @@ IMPORTANT: keep this quarantined from animation retargeting workflows.
 """
 
 import os, struct, math, logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
@@ -37,8 +38,19 @@ from src.core.geometry.model_data import (
     _quat_mul,
     Animation,
 )
+from src.io.export_control import TextureSidecarResult, check_export_cancelled
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OBJExportResult:
+    """Files and texture-sidecar outcome produced by :class:`OBJExporter`."""
+
+    obj_path: str
+    mtl_path: str
+    texture_sidecars: TextureSidecarResult
+    baked_lightmaps_saved: int = 0
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -734,7 +746,7 @@ class OBJExporter:
             return [_quat_rotate(wo, n) for n in normals]
 
     def export(self, model: KotorModel, obj_path: str, tex_cache=None,
-               export_rigging: bool = True):
+               export_rigging: bool = True, is_cancelled=None) -> OBJExportResult:
         """
         Export model to OBJ + MTL.
 
@@ -756,7 +768,8 @@ class OBJExporter:
         p = Path(obj_path); mp = p.with_suffix('.mtl')
         obj_lines = [f"# GhostRigger-K1-K2 export – {model.name}", f"mtllib {mp.name}", ""]
         mtl_lines = ["# GhostRigger-K1-K2 materials", ""]
-        seen_mats: set = set()
+        material_names_by_key: dict[tuple, str] = {}
+        used_material_names: set[str] = set()
         out_dir = p.parent
 
         # Count skipped nodes for the header comment
@@ -774,6 +787,7 @@ class OBJExporter:
 
         vo = vto = vno = 0
         for node in renderable:
+            check_export_cancelled(is_cancelled)
             # Apply bind-pose world transform so vertices are in model/world space.
             # This is essential for skin nodes: KotOR stores skin vertices in
             # node-local space; without this offset, body-segment nodes like
@@ -788,37 +802,75 @@ class OBJExporter:
             obj_lines.append(f"o {node.name}")
             obj_lines.append(f"# verts={nv} uvs={nuv} normals={nno} faces={len(node.faces)}")
 
-            for x, y, z in world_verts:
+            for vertex_index, (x, y, z) in enumerate(world_verts):
+                if vertex_index % 1024 == 0:
+                    check_export_cancelled(is_cancelled)
                 obj_lines.append(f"v {x:.6f} {y:.6f} {z:.6f}")
 
             # Write UVs – KotOR stores V bottom-up, OBJ convention is same.
             # We flip V here so that the exported file looks correct in Blender
             # (which loads UVs as-is and uses OpenGL convention Y-up).
-            for u,v in node.uvs:
+            for uv_index, (u,v) in enumerate(node.uvs):
+                if uv_index % 1024 == 0:
+                    check_export_cancelled(is_cancelled)
                 obj_lines.append(f"vt {u:.6f} {(1.0 - v):.6f}")
 
-            for x, y, z in world_normals:
+            for normal_index, (x, y, z) in enumerate(world_normals):
+                if normal_index % 1024 == 0:
+                    check_export_cancelled(is_cancelled)
                 obj_lines.append(f"vn {x:.6f} {y:.6f} {z:.6f}")
 
-            # Material – filter out 'null' placeholder textures
-            raw_tex  = getattr(node, 'texture_clean', '') or getattr(node, 'texture', '') or ''
-            tex_name = self._clean_tex(raw_tex)
-            if tex_name.upper() in ('NULL', 'BLACK', ''):
-                tex_name = ''
-            mat_name = tex_name if tex_name else node.name
-            obj_lines.append(f"usemtl {mat_name}")
-            if mat_name not in seen_mats:
-                seen_mats.add(mat_name)
-                r,g,b   = node.diffuse
-                ar,ag,ab = node.ambient
-                sr,sg,sb = node.specular
+            # A merged scene mesh may carry multiple material slots plus one
+            # face-material index per polygon.  Ordinary models retain the
+            # original single-node material behavior through the fallback.
+            material_slots = list(
+                getattr(node, '_gr_fbx_material_slots', None) or [node]
+            )
+            material_names = []
+            for material_index, material_node in enumerate(material_slots):
+                check_export_cancelled(is_cancelled)
+                raw_tex = (
+                    getattr(material_node, 'texture_clean', '')
+                    or getattr(material_node, 'texture', '')
+                    or ''
+                )
+                tex_name = self._clean_tex(raw_tex)
+                if tex_name.upper() in ('NULL', 'BLACK', ''):
+                    tex_name = ''
+                material_key = (
+                    tex_name.casefold(),
+                    tuple(float(value) for value in material_node.diffuse),
+                    tuple(float(value) for value in material_node.ambient),
+                    tuple(float(value) for value in material_node.specular),
+                    float(material_node.shininess),
+                    float(material_node.alpha),
+                )
+                mat_name = material_names_by_key.get(material_key)
+                if mat_name is not None:
+                    material_names.append(mat_name)
+                    continue
+                base_name = tex_name if tex_name else (
+                    getattr(material_node, 'name', '')
+                    or f"{node.name}_material_{material_index + 1}"
+                )
+                mat_name = base_name
+                suffix = 2
+                while mat_name.casefold() in used_material_names:
+                    mat_name = f"{base_name}_{suffix}"
+                    suffix += 1
+                material_names_by_key[material_key] = mat_name
+                used_material_names.add(mat_name.casefold())
+                material_names.append(mat_name)
+                r,g,b = material_node.diffuse
+                ar,ag,ab = material_node.ambient
+                sr,sg,sb = material_node.specular
                 mtl_lines += [
                     f"newmtl {mat_name}",
                     f"Ka {ar:.4f} {ag:.4f} {ab:.4f}",
                     f"Kd {r:.4f} {g:.4f} {b:.4f}",
                     f"Ks {sr:.4f} {sg:.4f} {sb:.4f}",
-                    f"Ns {max(node.shininess, 0.0):.2f}",
-                    f"d  {node.alpha:.4f}",
+                    f"Ns {max(material_node.shininess, 0.0):.2f}",
+                    f"d  {material_node.alpha:.4f}",
                 ]
                 if tex_name:
                     mtl_lines.append(f"map_Kd {tex_name}.tga")
@@ -844,9 +896,20 @@ class OBJExporter:
             face_uvs_data = getattr(node, 'face_uvs', []) or []
             _has_face_uvs = bool(face_uvs_data) and len(face_uvs_data) == len(node.faces)
 
+            face_materials = list(getattr(node, 'face_mats', None) or [])
+            active_material = None
             for fi, (v1, v2, v3) in enumerate(node.faces):
+                if fi % 512 == 0:
+                    check_export_cancelled(is_cancelled)
                 if max(v1, v2, v3) >= nv:
                     continue   # skip degenerate faces with out-of-range indices
+
+                material_index = int(face_materials[fi]) if fi < len(face_materials) else 0
+                material_index = max(0, min(material_index, len(material_names) - 1))
+                mat_name = material_names[material_index]
+                if mat_name != active_material:
+                    obj_lines.append(f"usemtl {mat_name}")
+                    active_material = mat_name
 
                 # Determine UV indices: use face_uvs tvert indices when present,
                 # otherwise fall back to vertex indices (binary MDL convention).
@@ -888,15 +951,19 @@ class OBJExporter:
             vto += nuv
             vno += nno
 
+        check_export_cancelled(is_cancelled)
         Path(obj_path).write_text('\n'.join(obj_lines), encoding='utf-8')
         mp.write_text('\n'.join(mtl_lines), encoding='utf-8')
         log.info(f"Exported OBJ → {obj_path}  "
                  f"({vo} verts, {len(renderable)}/{len(all_mesh)} mesh nodes exported)")
 
-        # Copy/save texture files alongside the OBJ when tex_cache is available
-        if tex_cache is not None:
-            self._export_textures_to_dir(model, out_dir, tex_cache)
-        self._export_baked_lightmaps_to_dir(model, out_dir)
+        texture_sidecars = self._export_textures_to_dir(
+            model,
+            out_dir,
+            tex_cache,
+            is_cancelled=is_cancelled,
+        )
+        baked_lightmaps_saved = self._export_baked_lightmaps_to_dir(model, out_dir)
 
         # Export rigging + animations into a dedicated subfolder
         if export_rigging:
@@ -904,49 +971,88 @@ class OBJExporter:
             if rig_count > 0:
                 log.info(f"Rigging data exported: {rig_count} file(s) → {out_dir / 'rigging'}")
 
+        return OBJExportResult(
+            obj_path=str(p),
+            mtl_path=str(mp),
+            texture_sidecars=texture_sidecars,
+            baked_lightmaps_saved=baked_lightmaps_saved,
+        )
+
     @staticmethod
-    def _export_textures_to_dir(model: KotorModel, out_dir: Path, tex_cache) -> int:
+    def _export_textures_to_dir(
+        model: KotorModel,
+        out_dir: Path,
+        tex_cache,
+        *,
+        is_cancelled=None,
+    ) -> TextureSidecarResult:
         """
         Save all textures referenced by *model* as TGA files into *out_dir*.
-        Returns the count of textures saved.  Non-fatal: logs warnings on failure.
+
+        Cache misses and non-fatal write failures are returned explicitly so
+        callers never have to claim sidecars that were not produced.
         """
-        saved = 0
+        requested: list[str] = []
+        saved_files: list[str] = []
+        missing: list[str] = []
+        failed: list[str] = []
         seen: set = set()
         for node in model.mesh_nodes():
-            raw = getattr(node, 'texture_clean', '') or getattr(node, 'texture', '') or ''
-            tex_name = raw.strip()
-            if not tex_name or tex_name.upper() in ('NULL', 'BLACK', ''):
-                continue
-            if tex_name.lower() in seen:
-                continue
-            seen.add(tex_name.lower())
-            try:
-                img = tex_cache.get(tex_name)
-                if img is None:
+            check_export_cancelled(is_cancelled)
+            material_slots = list(
+                getattr(node, '_gr_fbx_material_slots', None) or [node]
+            )
+            for material_node in material_slots:
+                check_export_cancelled(is_cancelled)
+                raw = (
+                    getattr(material_node, 'texture_clean', '')
+                    or getattr(material_node, 'texture', '')
+                    or ''
+                )
+                tex_name = raw.strip()
+                if not tex_name or tex_name.upper() in ('NULL', 'BLACK', ''):
                     continue
-                out_path = out_dir / f"{tex_name}.tga"
-                if not out_path.exists():
-                    img_rgb = img.convert('RGB') if img.mode not in ('RGB', 'RGBA') else img
-                    # T2554: decoded KOTOR textures are in game/D3D row order
-                    # (the viewport compensates in-shader with 1-v).  The OBJ
-                    # exporter writes DCC-convention vt (1-v), so the sidecar
-                    # image must be row-flipped for Blender/Maya — same parity
-                    # rule as the FBX sidecar path below and the game-import
-                    # direction (T2552).  Without this the texture reads
-                    # coherently-but-misplaced (V-mirrored atlas islands).
-                    try:
-                        from PIL import Image as _PILImage
-                        img_rgb = img_rgb.transpose(_PILImage.FLIP_TOP_BOTTOM)
-                    except Exception:
-                        pass
-                    img_rgb.save(str(out_path))
-                    log.debug(f"Saved texture: {out_path.name}")
-                    saved += 1
-            except Exception as e:
-                log.debug(f"Could not save texture '{tex_name}': {e}")
-        if saved:
-            log.info(f"Saved {saved} texture(s) alongside export in {out_dir}")
-        return saved
+                if tex_name.lower() in seen:
+                    continue
+                seen.add(tex_name.lower())
+                requested.append(tex_name)
+                if tex_cache is None:
+                    missing.append(tex_name)
+                    continue
+                try:
+                    img = tex_cache.get(tex_name)
+                    if img is None:
+                        missing.append(tex_name)
+                        continue
+                    out_path = out_dir / f"{tex_name}.tga"
+                    if not out_path.exists():
+                        img_rgb = img.convert('RGB') if img.mode not in ('RGB', 'RGBA') else img
+                        # T2554: decoded KOTOR textures are in game/D3D row order
+                        # (the viewport compensates in-shader with 1-v).  The OBJ
+                        # exporter writes DCC-convention vt (1-v), so the sidecar
+                        # image must be row-flipped for Blender/Maya — same parity
+                        # rule as the FBX sidecar path below and the game-import
+                        # direction (T2552).  Without this the texture reads
+                        # coherently-but-misplaced (V-mirrored atlas islands).
+                        try:
+                            from PIL import Image as _PILImage
+                            img_rgb = img_rgb.transpose(_PILImage.FLIP_TOP_BOTTOM)
+                        except Exception:
+                            pass
+                        img_rgb.save(str(out_path))
+                        log.debug(f"Saved texture: {out_path.name}")
+                    saved_files.append(out_path.name)
+                except Exception as e:
+                    failed.append(tex_name)
+                    log.debug(f"Could not save texture '{tex_name}': {e}")
+        if saved_files:
+            log.info(f"Saved {len(saved_files)} texture(s) alongside export in {out_dir}")
+        return TextureSidecarResult(
+            requested_names=tuple(requested),
+            saved_files=tuple(saved_files),
+            missing_names=tuple(missing),
+            failed_names=tuple(failed),
+        )
 
     @staticmethod
     def _export_baked_lightmaps_to_dir(model: KotorModel, out_dir: Path) -> int:

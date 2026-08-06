@@ -153,7 +153,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # Facial Performance Head adds the source-agnostic facial clip, the
     # geometry-backed range audit, head-art anatomy/transplant services, and
     # the two-file ARKit input adapter to the Core.Workflow payload.
-    assert len(payload_files) == 1422
+    # Clean full-map OBJ export adds the package-local geometry filter plus
+    # shared cancellation and texture-sidecar result contracts to Core.IO.
+    assert len(payload_files) == 1424
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

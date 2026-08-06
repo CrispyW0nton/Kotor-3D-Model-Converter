@@ -44,6 +44,18 @@ Selecting any room resolves every scene object in the same module group and
 routes all nine courtyard rooms through the one-mesh worker, so artists no
 longer need to marquee-select a large layout or risk exporting only one room.
 
+Added `File > Export Clean Full Map as OBJ...` as the artist-facing version of
+the courtyard cleanup workflow. Selecting any room automatically includes the
+entire loaded module group, removes skybox-material faces and conservatively
+identifies the oversized flat background plane, compacts the remaining map into
+one mesh, and writes a Blender-ready OBJ with its MTL and decoded TGA textures.
+The completion dialog reports the included rooms, exported faces, removed
+backdrop faces, and material count so users can confirm what was produced.
+The final workflow also refuses to label an export complete when a grouped room
+failed to load, preserves distinct material properties when two slots share one
+diffuse texture, reports exactly how many texture sidecars were written, and
+stages output until a thread-safe cancellation check permits publication.
+
 Affected files:
 
 - `native/GhostRigger.Core.Rendering/Python/src/core/rendering/gpu_shaders.py`
@@ -51,8 +63,12 @@ Affected files:
 - `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
 - `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_exporter.py`
 - `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_scene_adapter.py`
+- `native/GhostRigger.Core.IO/Python/src/io/clean_module_obj_export.py`
+- `native/GhostRigger.Core.IO/Python/src/io/export_control.py`
 - `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
 - `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/workers.py`
 - native payload manifests for Rendering, IO, and GUI Display
 - focused renderer/export regressions in `tests/test_regression.py` and
   `tests/test_export_job.py`
@@ -91,6 +107,28 @@ Verification:
   2325 x 2325 x 1005 bounds. Blender 4.5 loaded the equivalent merged geometry
   as one object; a proof render confirmed the full courtyard and enclave layout
   after hiding only the enclosing skybox/background faces from the proof camera.
+- The new clean-OBJ worker processed all nine `m14aa` rooms from the installed
+  K1 data: 38,945 source faces became 38,783 map faces after removing 160
+  skybox faces and the two triangles forming the oversized background plane.
+  It wrote one OBJ, one MTL, and 20 decoded texture sidecars.
+- Blender 4.5 directly imported that worker output as one object with 116,349
+  vertices, 38,783 faces, 20 materials, no sky materials, and a maximum face
+  area of 402.552; the former multi-million-unit background triangles were no
+  longer present.
+- Rebuilt the owning Debug payloads and Native Core Host, then exercised the
+  command in the real root `GhostStudio.exe`: loading `m14aa_01c` populated all
+  nine rooms, the File menu exposed `Export Clean Full Map as OBJ...`, and the
+  completion dialog reported 38,783 map faces, 160 skybox faces removed, two
+  background faces removed, and 20 materials. Blender 4.5 then directly loaded
+  that UI-created OBJ with the same one-object counts and no sky materials.
+- Repeated the real Debug workflow after review fixes. The final dialog reported
+  all nine rooms, 38,783 map faces, 160 skybox faces, two background faces, 20
+  materials, and 20 of 20 texture files written. Blender 4.5 imported that exact
+  UI-created file as one object with 116,349 vertices, 38,783 faces, 20
+  materials, no sky materials, and a maximum face area of 402.552.
+- Cancellation, unloaded-room, duplicate-texture-material, missing-sidecar, and
+  staged-publication regressions passed. The cancellation case left no OBJ,
+  MTL, TGA, or temporary export directory at the destination.
 - Focused lightmap and selection-export regressions passed; individual Debug
   Rendering, IO, and GUI Display payload projects built successfully.
 

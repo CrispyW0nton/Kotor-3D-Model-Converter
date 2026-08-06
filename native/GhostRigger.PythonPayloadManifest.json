@@ -403,7 +403,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 46,
+        "python_file_count": 48,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -434,6 +434,8 @@
             "src\\formats\\gff_types.py",
             "src\\formats\\gff_writer.py",
             "src\\io\\__init__.py",
+            "src\\io\\clean_module_obj_export.py",
+            "src\\io\\export_control.py",
             "src\\io\\fbx\\__init__.py",
             "src\\io\\fbx\\fbx_diagnostics.py",
             "src\\io\\fbx\\fbx_exporter.py",

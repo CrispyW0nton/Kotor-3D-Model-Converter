@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 46,
+    "file_count": 48,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "29f4fd1c9dee414ce10d6adf2df333deec0bf4ac3b4d891e1b0eb1fdf57b82ce"
+            "sha256": "0608d40b4695f767d316e19b2438eaeca150dd031ffc17ad1209f930e2fc9530"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
@@ -180,6 +180,18 @@
             "sha256": "4bc7e1082d58a2480086041af6bf852e8f4d7f7a6637ec1588ad6d15c726ccaa"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_IO_CLEAN_MODULE_OBJ_EXPORT",
+            "source_path": "src/io/clean_module_obj_export.py",
+            "packaged_path": "Python/src/io/clean_module_obj_export.py",
+            "sha256": "0cb5b873360379380029b780f20ad1d8ad8cf56506b57d7b6f73c830fd398e35"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_EXPORT_CONTROL",
+            "source_path": "src/io/export_control.py",
+            "packaged_path": "Python/src/io/export_control.py",
+            "sha256": "b1e4b88e2736d80d2a33a2d671d123929f4d638a1d9987d4181ff5017a2581a0"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_INIT",
             "source_path": "src/io/fbx/__init__.py",
             "packaged_path": "Python/src/io/fbx/__init__.py",
@@ -195,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_EXPORTER",
             "source_path": "src/io/fbx/fbx_exporter.py",
             "packaged_path": "Python/src/io/fbx/fbx_exporter.py",
-            "sha256": "6d18356f234b0e57c138df42a2487f119d889aa4a6dcc1bc744c92468f7104c2"
+            "sha256": "6eb8bfdaa90ec4db2ba478e93f661848b6379de80f202c9d796f13585f8a1a34"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_IMPORTER",

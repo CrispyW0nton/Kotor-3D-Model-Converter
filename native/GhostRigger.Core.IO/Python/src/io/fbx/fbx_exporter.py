@@ -9,6 +9,7 @@ from typing import Any
 
 from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 from src.core.scene.kmax_scene import KMaxScene
+from src.io.export_control import check_export_cancelled
 from src.math.transform_math import rotate_vector
 
 from .fbx_scene_adapter import (
@@ -177,7 +178,12 @@ def _models_from_payload(payload: Any, options: dict[str, Any]) -> list[tuple[Ko
     raise FbxExportError("FBX export expects a KotorModel, KMaxScene, or selected scene objects with runtime models.")
 
 
-def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection") -> KotorModel:
+def merge_selected_scene_objects(
+    scene_objects: Any,
+    *,
+    name: str = "selection",
+    is_cancelled=None,
+) -> KotorModel:
     """Bake selected static scene objects into one FBX-ready mesh.
 
     Vertices are expanded per polygon corner so meshes with independent
@@ -194,6 +200,7 @@ def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection")
     first_model: KotorModel | None = None
 
     for item in items:
+        check_export_cancelled(is_cancelled)
         if isinstance(item, KotorModel):
             model = item
             transform = None
@@ -212,6 +219,7 @@ def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection")
         scene_scale = _vec3(getattr(transform, "scale", None), (1.0, 1.0, 1.0))
 
         for node in iter_renderable_mesh_nodes(model):
+            check_export_cancelled(is_cancelled)
             if int(getattr(node, "vertex_space", 0) or 0) == 2:
                 continue
             node_slots = _material_slots_for_node(node)
@@ -231,6 +239,8 @@ def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection")
             )
 
             for face_index, face in enumerate(node.faces):
+                if face_index % 256 == 0:
+                    check_export_cancelled(is_cancelled)
                 if len(face) != 3 or any(int(index) < 0 or int(index) >= len(node.vertices) for index in face):
                     continue
                 output_face = []
@@ -271,6 +281,7 @@ def merge_selected_scene_objects(scene_objects: Any, *, name: str = "selection")
                 source_material = max(0, min(source_material, len(node_slots) - 1))
                 merged.face_mats.append(node_material_indices[source_material])
 
+    check_export_cancelled(is_cancelled)
     if first_model is None or not merged.faces:
         raise FbxExportError("Selected scene objects contain no runtime mesh geometry to merge.")
 

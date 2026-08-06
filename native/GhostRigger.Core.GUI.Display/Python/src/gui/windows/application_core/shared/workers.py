@@ -6,6 +6,7 @@ import copy
 import json
 import logging
 import os
+import threading
 import traceback
 from pathlib import Path
 from typing import Optional
@@ -74,18 +75,18 @@ class BackgroundIOWorker(QtCore.QObject):
         self._fn = fn
         self._args: tuple = tuple(args or ())
         self._kwargs: dict = dict(kwargs or {})
-        self._cancelled = False
+        self._cancel_event = threading.Event()
 
     def is_cancelled(self) -> bool:
         """Cooperative cancellation flag (read on the worker thread)."""
 
-        return self._cancelled
+        return self._cancel_event.is_set()
 
     @QtCore.Slot()
     def request_cancel(self) -> None:
         """Request cancellation (called on the GUI thread via signal/slot)."""
 
-        self._cancelled = True
+        self._cancel_event.set()
 
     def report_progress(self, message: str, percent: int) -> None:
         """Emit a progress update. Safe to call from the worker thread."""
@@ -101,11 +102,14 @@ class BackgroundIOWorker(QtCore.QObject):
                 kwargs.setdefault("progress_callback", self.report_progress)
                 kwargs.setdefault("is_cancelled", self.is_cancelled)
             result = self._fn(*self._args, **kwargs)
-            if self._cancelled:
+            if self.is_cancelled():
                 self.finished.emit(None)
             else:
                 self.finished.emit(result)
         except Exception as exc:  # noqa: BLE001 - report any failure to the GUI thread
+            if self.is_cancelled():
+                self.finished.emit(None)
+                return
             tb = traceback.format_exc()
             message = tb.strip().splitlines()[-1] if tb.strip() else "Operation failed"
             self.error.emit(message, tb, exc)

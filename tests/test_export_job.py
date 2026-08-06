@@ -637,3 +637,433 @@ def test_export_full_module_routes_all_group_objects_to_one_mesh_worker(
     assert args[2] == module_objects
     assert args[3] == str(output)
     assert kwargs["tex_cache"] == "texture-cache"
+
+
+def test_clean_module_obj_filter_removes_skybox_and_oversized_background() -> None:
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.io.clean_module_obj_export import prepare_clean_module_obj_model
+
+    def _model(name: str, texture: str, vertices) -> KotorModel:
+        mesh = ModelNode(
+            name=f"{name}_mesh",
+            flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+            vertices=list(vertices),
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+            uvs_lm=[(0.1, 0.1), (0.9, 0.1), (0.1, 0.9)],
+            faces=[(0, 1, 2)],
+            face_mats=[0],
+            texture=texture,
+            texture_names=[texture],
+            tex_count=1,
+        )
+        return KotorModel(name=name, classification="tile", root_node=mesh)
+
+    models = (
+        _model(
+            "courtyard",
+            "lda_grass07",
+            ((0.0, 0.0, 1.0), (10.0, 0.0, 1.0), (0.0, 10.0, 1.0)),
+        ),
+        _model(
+            "sky",
+            "lda_sky0001",
+            ((0.0, 0.0, 20.0), (10.0, 0.0, 20.0), (0.0, 10.0, 20.0)),
+        ),
+        _model(
+            "background",
+            "lda_grass07",
+            ((-1000.0, -1000.0, -5.0), (1000.0, -1000.0, -5.0), (-1000.0, 1000.0, -5.0)),
+        ),
+    )
+    scene_objects = [
+        SimpleNamespace(
+            name=model.name,
+            metadata={"_runtime_model": model},
+            transform=SimpleNamespace(
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+        for model in models
+    ]
+
+    cleaned, summary = prepare_clean_module_obj_model(
+        scene_objects,
+        name="m14aa_clean",
+    )
+
+    mesh = cleaned.root_node
+    assert mesh is not None
+    assert mesh.faces == [(0, 1, 2)]
+    assert mesh.vertices == list(models[0].root_node.vertices)
+    assert mesh.uvs == list(models[0].root_node.uvs)
+    assert mesh.uvs_lm == list(models[0].root_node.uvs_lm)
+    assert [slot.texture for slot in mesh._gr_fbx_material_slots] == ["lda_grass07"]
+    assert mesh.face_mats == [0]
+    assert summary.source_faces == 3
+    assert summary.exported_faces == 1
+    assert summary.removed_skybox_faces == 1
+    assert summary.removed_background_faces == 1
+
+
+def test_clean_module_obj_rejects_group_with_unloaded_room() -> None:
+    from src.io.clean_module_obj_export import prepare_clean_module_obj_model
+
+    loaded_room = SimpleNamespace(
+        name="m14aa_01a",
+        metadata={
+            "_runtime_model": _selected_export_triangle_model("m14aa_01a", "stone")
+        },
+        transform=SimpleNamespace(
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0),
+            scale=(1.0, 1.0, 1.0),
+        ),
+    )
+    unloaded_room = SimpleNamespace(
+        name="m14aa_01b",
+        metadata={"_runtime_model": None},
+    )
+
+    with pytest.raises(ValueError, match=r"m14aa_01b"):
+        prepare_clean_module_obj_model(
+            [loaded_room, unloaded_room],
+            name="m14aa_clean",
+        )
+
+
+def test_obj_exporter_preserves_merged_face_material_slots(tmp_path: Path) -> None:
+    from src.converters.mesh_converter import OBJExporter
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    scene_objects = [
+        SimpleNamespace(
+            name=texture,
+            metadata={
+                "_runtime_model": _selected_export_triangle_model(
+                    texture,
+                    texture,
+                )
+            },
+            transform=SimpleNamespace(
+                position=(float(index) * 2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+        for index, texture in enumerate(("lda_grass07", "lda_stone02"))
+    ]
+    merged = merge_selected_scene_objects(scene_objects, name="clean_module")
+    output = tmp_path / "clean_module.obj"
+
+    OBJExporter().export(merged, str(output), export_rigging=False)
+
+    obj_text = output.read_text(encoding="utf-8")
+    mtl_text = output.with_suffix(".mtl").read_text(encoding="utf-8")
+    assert "usemtl lda_grass07" in obj_text
+    assert "usemtl lda_stone02" in obj_text
+    assert obj_text.count("usemtl ") == 2
+    assert "newmtl lda_grass07" in mtl_text
+    assert "newmtl lda_stone02" in mtl_text
+    assert "map_Kd lda_grass07.tga" in mtl_text
+    assert "map_Kd lda_stone02.tga" in mtl_text
+
+
+def test_obj_exporter_keeps_distinct_materials_that_share_one_texture(
+    tmp_path: Path,
+) -> None:
+    from src.converters.mesh_converter import OBJExporter
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    opaque = _selected_export_triangle_model("opaque", "shared_stone")
+    opaque.root_node.diffuse = (0.8, 0.7, 0.6)
+    opaque.root_node.alpha = 1.0
+    translucent = _selected_export_triangle_model("translucent", "shared_stone")
+    translucent.root_node.diffuse = (0.2, 0.3, 0.4)
+    translucent.root_node.alpha = 0.5
+    scene_objects = [
+        SimpleNamespace(
+            metadata={"_runtime_model": model},
+            transform=SimpleNamespace(
+                position=(float(index) * 2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+        for index, model in enumerate((opaque, translucent))
+    ]
+    output = tmp_path / "shared_texture.obj"
+
+    OBJExporter().export(
+        merge_selected_scene_objects(scene_objects, name="shared_texture"),
+        str(output),
+        export_rigging=False,
+    )
+
+    obj_text = output.read_text(encoding="utf-8")
+    mtl_text = output.with_suffix(".mtl").read_text(encoding="utf-8")
+    assert "usemtl shared_stone\n" in obj_text
+    assert "usemtl shared_stone_2\n" in obj_text
+    assert "newmtl shared_stone\n" in mtl_text
+    assert "newmtl shared_stone_2\n" in mtl_text
+    assert mtl_text.count("map_Kd shared_stone.tga") == 2
+    assert "d  1.0000" in mtl_text
+    assert "d  0.5000" in mtl_text
+
+
+def test_obj_exporter_reports_cache_misses_and_saved_multi_slot_textures(
+    tmp_path: Path,
+) -> None:
+    from src.converters.mesh_converter import OBJExporter
+    from src.io.fbx.fbx_exporter import merge_selected_scene_objects
+
+    scene_objects = [
+        SimpleNamespace(
+            metadata={
+                "_runtime_model": _selected_export_triangle_model(texture, texture)
+            },
+            transform=SimpleNamespace(
+                position=(float(index) * 2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+        for index, texture in enumerate(("lda_grass07", "lda_stone02"))
+    ]
+    merged = merge_selected_scene_objects(scene_objects, name="sidecars")
+
+    missing_result = OBJExporter().export(
+        merged,
+        str(tmp_path / "missing.obj"),
+        tex_cache=SimpleNamespace(get=lambda _name: None),
+        export_rigging=False,
+    )
+    assert missing_result.texture_sidecars.requested == 2
+    assert missing_result.texture_sidecars.saved == 0
+    assert missing_result.texture_sidecars.missing_names == (
+        "lda_grass07",
+        "lda_stone02",
+    )
+
+    class _Image:
+        mode = "RGB"
+
+        def transpose(self, _operation):
+            return self
+
+        def save(self, path):
+            Path(path).write_bytes(b"tga")
+
+    saved_result = OBJExporter().export(
+        merged,
+        str(tmp_path / "saved.obj"),
+        tex_cache=SimpleNamespace(get=lambda _name: _Image()),
+        export_rigging=False,
+    )
+    assert saved_result.texture_sidecars.requested == 2
+    assert saved_result.texture_sidecars.saved == 2
+    assert saved_result.texture_sidecars.missing_names == ()
+    assert set(saved_result.texture_sidecars.saved_files) == {
+        "lda_grass07.tga",
+        "lda_stone02.tga",
+    }
+
+
+def test_clean_module_obj_cancellation_does_not_publish_staged_files(
+    tmp_path: Path,
+) -> None:
+    import threading
+
+    from src.gui.windows.application_core.shared.model_io import (
+        _work_export_clean_module_obj,
+    )
+    from src.io.export_control import ExportCancelledError
+
+    cancelled = threading.Event()
+    model = _selected_export_triangle_model("courtyard", "lda_grass07")
+    scene_objects = [
+        SimpleNamespace(
+            name="courtyard",
+            metadata={"_runtime_model": model},
+            transform=SimpleNamespace(
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+    ]
+
+    class _Image:
+        mode = "RGB"
+
+        def transpose(self, _operation):
+            return self
+
+        def save(self, path):
+            Path(path).write_bytes(b"partial staged texture")
+
+    def _get_texture(_name):
+        cancelled.set()
+        return _Image()
+
+    output = tmp_path / "cancelled.obj"
+    with pytest.raises(ExportCancelledError):
+        _work_export_clean_module_obj(
+            scene_objects,
+            str(output),
+            tex_cache=SimpleNamespace(get=_get_texture),
+            is_cancelled=cancelled.is_set,
+        )
+
+    assert not output.exists()
+    assert not output.with_suffix(".mtl").exists()
+    assert not (tmp_path / "lda_grass07.tga").exists()
+    assert not list(tmp_path.glob(".cancelled-export-*"))
+
+
+def test_background_io_worker_cancel_is_immediately_thread_visible() -> None:
+    from src.gui.windows.application_core.application_core_lib.shared.workers import (
+        BackgroundIOWorker,
+    )
+
+    worker = BackgroundIOWorker(lambda: None)
+    assert worker.is_cancelled() is False
+
+    worker.request_cancel()
+
+    assert worker.is_cancelled() is True
+
+
+def test_clean_module_obj_worker_publishes_sidecars_and_summary(
+    tmp_path: Path,
+) -> None:
+    from src.gui.windows.application_core.shared.model_io import (
+        _work_export_clean_module_obj,
+    )
+
+    model = _selected_export_triangle_model("courtyard", "lda_grass07")
+    scene_objects = [
+        SimpleNamespace(
+            name="courtyard",
+            metadata={"_runtime_model": model},
+            transform=SimpleNamespace(
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+                scale=(1.0, 1.0, 1.0),
+            ),
+        )
+    ]
+
+    class _Image:
+        mode = "RGB"
+
+        def transpose(self, _operation):
+            return self
+
+        def save(self, path):
+            Path(path).write_bytes(b"tga")
+
+    output = tmp_path / "published.obj"
+    output_path, summary = _work_export_clean_module_obj(
+        scene_objects,
+        str(output),
+        tex_cache=SimpleNamespace(get=lambda _name: _Image()),
+    )
+
+    assert output_path == str(output)
+    assert output.exists()
+    assert output.with_suffix(".mtl").exists()
+    assert (tmp_path / "lda_grass07.tga").exists()
+    assert summary.texture_sidecars.requested == 1
+    assert summary.texture_sidecars.saved_files == ("lda_grass07.tga",)
+    assert summary.texture_sidecars.unavailable == 0
+
+
+def test_export_clean_module_obj_routes_group_to_clean_worker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from src.gui.windows.application_core.shared import model_io
+
+    module_objects = [
+        SimpleNamespace(
+            id=f"room-{suffix}",
+            name=f"m14aa_01{suffix}",
+            metadata={
+                "module_group": {"module_root": "m14aa_01"},
+                "_runtime_model": SimpleNamespace(name=f"m14aa_01{suffix}"),
+            },
+        )
+        for suffix in "abcdefghi"
+    ]
+    output = tmp_path / "m14aa_01_clean.obj"
+    captured: dict[str, object] = {}
+    dialogs: list[tuple[str, str]] = []
+
+    class _Harness(model_io.ModelIoMixin):
+        scene_manager = SimpleNamespace(
+            active_scene=SimpleNamespace(objects=module_objects),
+            get_selected_objects=lambda: [module_objects[2]],
+        )
+        viewport = SimpleNamespace(
+            _selected_viewport_nodes=[
+                SimpleNamespace(_gr_scene_object_id=module_objects[2].id),
+            ]
+        )
+
+        def _get_tex_cache_for_export(self):
+            return "texture-cache"
+
+        def _run_io_async(self, *args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+
+        def _log(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        model_io.QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output), "Wavefront OBJ (*.obj)"),
+    )
+    monkeypatch.setattr(
+        model_io.QtWidgets.QMessageBox,
+        "warning",
+        lambda _parent, title, message: dialogs.append((title, message)),
+    )
+
+    _Harness()._export_clean_module_obj()
+
+    args = captured["args"]
+    kwargs = captured["kwargs"]
+    assert args[1] is model_io._work_export_clean_module_obj
+    assert args[2] == module_objects
+    assert args[3] == str(output)
+    assert kwargs["tex_cache"] == "texture-cache"
+
+    from src.io.clean_module_obj_export import CleanModuleObjSummary
+    from src.io.export_control import TextureSidecarResult
+
+    kwargs["on_complete"](
+        (
+            str(output),
+            CleanModuleObjSummary(
+                scene_objects=9,
+                source_faces=100,
+                exported_faces=90,
+                removed_skybox_faces=8,
+                removed_background_faces=2,
+                materials=2,
+                texture_sidecars=TextureSidecarResult(
+                    requested_names=("missing_texture",),
+                    missing_names=("missing_texture",),
+                ),
+            ),
+        ),
+        cancelled=False,
+    )
+    assert dialogs
+    assert "Texture files written: 0 of 1" in dialogs[0][1]
+    assert "missing_texture" in dialogs[0][1]
